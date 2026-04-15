@@ -583,9 +583,13 @@ def should_send_accounts_receivable(record: NormalizedRecord, tiny_config: dict[
 
 
 def compact_document_number(config: dict[str, Any], record: NormalizedRecord) -> str:
-    prefix = clean_text(str(config.get("numero_documento_prefix") or "PLANILHA"))
-    date_part = record.data.replace("-", "")
-    return f"{prefix}-{date_part}-{record.linha_origem}"
+    """Gera numero de documento com no maximo 9 caracteres (limite da API Tiny).
+    Formato: DDMMAA + linha com 3 digitos = 9 chars.
+    Exemplo: 150426002 = dia 15, mes 04, ano 26, linha 2.
+    """
+    year, month, day = record.data.split("-")
+    line = str(record.linha_origem % 1000).zfill(3)
+    return f"{day}{month}{year[-2:]}{line}"
 
 
 def build_history(record: NormalizedRecord) -> str:

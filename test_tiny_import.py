@@ -270,17 +270,27 @@ class TestRecordKey(unittest.TestCase):
 
 
 class TestCompactDocumentNumber(unittest.TestCase):
-    def test_formato(self):
-        cfg = _make_tiny_config(numero_documento_prefix="PLAN")
-        rec = _make_record(data="2026-04-13", linha_origem=5)
-        resultado = compact_document_number(cfg, rec)
-        self.assertEqual(resultado, "PLAN-20260413-5")
-
-    def test_prefixo_padrao(self):
+    def test_formato_9_chars(self):
         cfg = _make_tiny_config()
-        rec = _make_record(data="2026-04-13", linha_origem=2)
+        rec = _make_record(data="2026-04-15", linha_origem=2)
         resultado = compact_document_number(cfg, rec)
-        self.assertTrue(resultado.startswith("PLANILHA-"))
+        self.assertEqual(resultado, "150426002")
+        self.assertLessEqual(len(resultado), 9, "Tiny exige no maximo 9 caracteres")
+
+    def test_linha_grande_truncada_em_3_digitos(self):
+        cfg = _make_tiny_config()
+        rec = _make_record(data="2026-04-15", linha_origem=1005)
+        resultado = compact_document_number(cfg, rec)
+        # 1005 % 1000 = 5 → "005"
+        self.assertEqual(resultado, "150426005")
+        self.assertLessEqual(len(resultado), 9)
+
+    def test_sempre_9_chars(self):
+        cfg = _make_tiny_config()
+        for linha in [1, 10, 99, 100, 999]:
+            rec = _make_record(data="2026-04-15", linha_origem=linha)
+            resultado = compact_document_number(cfg, rec)
+            self.assertEqual(len(resultado), 9, f"linha={linha}: esperado 9 chars, got '{resultado}'")
 
 
 # ---------------------------------------------------------------------------
