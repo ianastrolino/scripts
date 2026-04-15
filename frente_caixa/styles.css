@@ -13,6 +13,9 @@
   --accent-strong: #00675f;
   --focus: #1b74e4;
   --radius: 6px;
+  --accent: #d32f2f; /* Vermelho Astro */
+  --accent-strong: #b71c1c;
+  --focus: #1b74e4;
 }
 
 * {
@@ -77,11 +80,9 @@ button:disabled {
 }
 
 .brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: #ffffff;
+  height: 48px;
+  width: auto;
+  object-fit: contain;
 }
 
 .brand strong,

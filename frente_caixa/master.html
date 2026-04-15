@@ -11,8 +11,8 @@
       --line: #c8d2d6;
       --ink: #182023;
       --muted: #5e6d73;
-      --accent: #007f73;
-      --accent-strong: #00675f;
+      --accent: #d32f2f; /* Vermelho Astro */
+      --accent-strong: #b71c1c;
       --radius: 6px;
       --tiny: #d8f1df;
     }
@@ -107,9 +107,12 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <strong>Astrovistorias</strong>
-      <span>Painel Master</span>
+    <div class="brand" style="display:flex; align-items:center; gap:10px;">
+      <img src="logo.png" alt="Astro" style="height: 32px; object-fit: contain;">
+      <div style="line-height:1.1">
+        <strong style="display:block; font-size:16px;">Astrovistorias</strong>
+        <span style="font-size:12px; color:var(--muted)">Painel Master</span>
+      </div>
     </div>
     <div class="top-actions">
       <span class="user-info" id="userInfo"></span>
