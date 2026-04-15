@@ -576,6 +576,25 @@ def api_suggest_clients(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostic-payment")
+@unit_access_required
+def api_diagnostic_payment(unit: str):
+    """Retorna as formas de recebimento cadastradas no Tiny para diagnostico."""
+    try:
+        config = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        importer = TinyImporter(config, state_dir)
+        # Tenta buscar do Tiny
+        res = importer.client.request("GET", "formas-recebimento")
+        return _json({
+            "success": True,
+            "tiny_response": res,
+            "current_config": config["tiny"].get("forma_recebimento_ids")
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/map-client", methods=["POST"])
 @unit_access_required
 def api_map_client(unit: str):
