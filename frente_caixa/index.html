@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Frente de Caixa</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img
+          class="brand-mark"
+          alt=""
+          src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAApElEQVR4nO3YQQqAIBBA0e5/aXcCgsS4qRpCffB/8FaD3MiQzQIAAAAAAAAAAAAAAAAAAACAjfW8mXlO3ns6VZtE3H1R2gGvQp3vEnBbbH0HjFDbIDdOdMJ0dQMkxw0h7RVoHoLT06e+BKzV3QJxwqSmfwnY0wYTwH6oU6YQPr8Q8TGsGucfK4t4tbwS1nZB3nFAi6YyqfX6AQAAAAAAAAAAAAAAAAAAgC+7A+5lDkBnkcXRAAAAAElFTkSuQmCC"
+        >
+        <div>
+          <strong>Frente de Caixa</strong>
+          <span id="unidadeLabel">Fechamento diario e pre-envio Tiny</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <label class="file-action">
+          Importar planilhas
+          <input id="fileInput" type="file" accept=".xls,.html,.htm" multiple>
+        </label>
+        <button id="loadSampleBtn" type="button">Carregar exemplo</button>
+        <button id="clearBtn" type="button">Limpar lote</button>
+        <button id="exportBtn" type="button">Exportar conferencia</button>
+        <a id="logoutLink" href="/logout" style="display:none;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--muted);padding:8px 14px;text-decoration:none;font-size:14px;line-height:1.4;">Sair</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="summary-strip" aria-label="Resumo do lote">
+        <div class="metric">
+          <span>Data do caixa</span>
+          <strong id="cashDate">--/--/----</strong>
+        </div>
+        <div class="metric">
+          <span>Arquivos</span>
+          <strong id="sourceFile">Nenhum arquivo</strong>
+        </div>
+        <div class="metric">
+          <span>Total planilha</span>
+          <strong id="totalSheet">R$ 0,00</strong>
+        </div>
+        <div class="metric good">
+          <span>FA para Tiny</span>
+          <strong id="totalFa">R$ 0,00</strong>
+        </div>
+        <div class="metric notice">
+          <span>AV para caixa</span>
+          <strong id="totalAv">R$ 0,00</strong>
+        </div>
+        <div class="metric warn">
+          <span>Pendencias</span>
+          <strong id="pendingCount">0</strong>
+        </div>
+      </section>
+
+      <section class="cash-grid" aria-label="Fechamento do caixa">
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Entradas</h2>
+            <span class="tag edit">azul editavel</span>
+          </div>
+          <div class="money-lines" id="cashInputs">
+            <label>
+              <span>Dinheiro</span>
+              <input class="money-input" data-cash="dinheiro" value="100,00">
+            </label>
+            <label>
+              <span>Debito</span>
+              <input class="money-input" data-cash="debito" value="100,00">
+            </label>
+            <label>
+              <span>Credito</span>
+              <input class="money-input" data-cash="credito" value="120,00">
+            </label>
+            <label>
+              <span>Pix / Transferencia</span>
+              <input class="money-input" data-cash="pix" value="850,00">
+            </label>
+            <div class="total-line">
+              <span>Total entradas</span>
+              <strong id="cashInputTotal">R$ 0,00</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>A vista</h2>
+            <span class="tag calc">calculado</span>
+          </div>
+          <div class="money-lines">
+            <div><span>Dinheiro</span><strong id="avDinheiro">R$ 0,00</strong></div>
+            <div><span>Debito</span><strong id="avDebito">R$ 0,00</strong></div>
+            <div><span>Credito</span><strong id="avCredito">R$ 0,00</strong></div>
+            <div><span>Pix</span><strong id="avPix">R$ 0,00</strong></div>
+            <div><span>A definir</span><strong id="avPendente">R$ 0,00</strong></div>
+            <div class="total-line"><span>Total AV</span><strong id="avTotalPanel">R$ 0,00</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>A faturar</h2>
+            <span class="tag tiny">Tiny</span>
+          </div>
+          <div class="money-lines">
+            <div><span>Lancamentos FA</span><strong id="faCountPanel">0</strong></div>
+            <div><span>Total FA</span><strong id="faTotalPanel">R$ 0,00</strong></div>
+            <div><span>Vencimento</span><strong id="faDueDate">--/--/----</strong></div>
+            <div><span>Clientes pendentes</span><strong id="missingClientsPanel">0</strong></div>
+            <div class="total-line"><span>Status</span><strong id="tinyReady">Pendente</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Resumo</h2>
+            <span class="tag calc">calculado</span>
+          </div>
+          <div class="money-lines">
+            <div><span>Bruto planilha</span><strong id="grossTotal">R$ 0,00</strong></div>
+            <label>
+              <span>Retorno cliente</span>
+              <input class="money-input" id="returnAmount" value="750,00">
+            </label>
+            <div><span>Liquido esperado</span><strong id="netTotal">R$ 0,00</strong></div>
+            <div><span>Diferenca entradas</span><strong id="cashDiff">R$ 0,00</strong></div>
+            <div class="total-line"><span>Fechamento</span><strong id="closingStatus">Conferir</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="main-grid" aria-label="Conferencia dos lancamentos">
+        <article class="table-panel">
+          <div class="panel-heading table-tools">
+            <div>
+              <h2>Conferencia diaria</h2>
+              <p id="tableSubtitle">Importe a planilha ou carregue o exemplo.</p>
+            </div>
+            <div class="filters" role="group" aria-label="Filtros">
+              <button class="filter active" data-filter="todos" type="button">Todos</button>
+              <button class="filter" data-filter="FA" type="button">FA</button>
+              <button class="filter" data-filter="AV" type="button">AV</button>
+              <button class="filter" data-filter="pendencias" type="button">Pendencias</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Cliente</th>
+                  <th>Origem</th>
+                  <th>Placa</th>
+                  <th>Servico</th>
+                  <th>FP</th>
+                  <th>Pagamento AV</th>
+                  <th>Valor</th>
+                  <th>Tiny</th>
+                </tr>
+              </thead>
+              <tbody id="recordsBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <aside class="side-panel" aria-label="Acoes">
+          <section class="action-box">
+            <h2>Envio Tiny</h2>
+            <p>FA e AV com pagamento definido sao enviados ao contas a receber do Tiny.</p>
+            <button id="validateBtn" type="button">Validar lote</button>
+            <button id="mapClientesBtn" class="btn-warn" type="button" hidden>Mapear clientes FA</button>
+            <button id="previewBtn" class="btn-secondary" type="button" disabled>Simular envio</button>
+            <button id="sendBtn" type="button" disabled>Enviar para Tiny</button>
+          </section>
+
+          <section class="action-box">
+            <h2>Pendencias</h2>
+            <ul id="issuesList"></ul>
+          </section>
+
+          <section class="action-box">
+            <h2>Padroes ativos</h2>
+            <dl>
+              <dt>FA</dt>
+              <dd>Contas a receber, vencimento no ultimo dia do mes.</dd>
+              <dt>AV</dt>
+              <dd>Define o pagamento (dinheiro/debito/credito/pix) e envia ao Tiny com vencimento no dia do servico.</dd>
+              <dt>Cliente particular</dt>
+              <dd>Tratado no caixa, sem faturamento Tiny.</dd>
+            </dl>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <!-- Modal de mapeamento de clientes FA -->
+    <div id="mapClientesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="mapClientesTitle">
+      <div class="modal-card" style="max-width:560px">
+        <div class="modal-header">
+          <div>
+            <h2 id="mapClientesTitle">Mapear cliente</h2>
+            <p class="modal-subtitle" id="mapProgress"></p>
+          </div>
+          <button id="mapClientesClose" class="btn-ghost" type="button" aria-label="Fechar">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div id="mapClienteAtual" class="map-cliente-nome"></div>
+          <div id="mapBuscarBox" class="map-buscar-box hidden">
+            <input id="mapBuscarInput" type="text" placeholder="Digite o nome para buscar no Tiny...">
+            <button id="mapBuscarBtn" type="button">Buscar</button>
+          </div>
+          <div id="mapCandidatos"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="mapNaoExisteBtn" class="btn-secondary" type="button">Nao existe no Tiny</button>
+          <button id="mapBuscarOutroBtn" class="btn-secondary" type="button">Buscar outro nome</button>
+          <button id="mapPularBtn" class="btn-secondary" type="button">Pular por agora</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de confirmacao de envio -->
+    <div id="confirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <h2 id="confirmModalTitle">Confirmar envio ao Tiny</h2>
+            <p class="modal-subtitle">Revise os lancamentos abaixo antes de confirmar.</p>
+          </div>
+          <button id="confirmModalClose" class="btn-ghost" type="button" aria-label="Fechar">&#x2715;</button>
+        </div>
+        <div class="modal-body" id="confirmModalBody">
+          <div class="modal-summary" id="confirmSummary"></div>
+          <div class="table-wrap">
+            <table class="preview-table" id="confirmTable">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>FP</th>
+                  <th>Pagamento</th>
+                  <th>Valor</th>
+                  <th>Vencimento</th>
+                  <th>Forma Recebimento</th>
+                  <th>N&#xba; Documento</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="confirmBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="confirmExportPdf" class="btn-secondary" type="button">&#128438; Exportar PDF</button>
+          <button id="confirmExportCsv" class="btn-secondary" type="button">&#128196; Exportar CSV</button>
+          <button id="confirmModalCancel" class="btn-secondary" type="button">Cancelar</button>
+          <button id="confirmSendBtn" type="button">Confirmar e Enviar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de simulacao de envio -->
+    <div id="previewModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="previewModalTitle">Simulacao de envio ao Tiny</h2>
+          <button id="previewModalClose" class="btn-ghost" type="button" aria-label="Fechar">&#x2715;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-summary" id="previewSummary"></div>
+          <div class="table-wrap">
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>FP</th>
+                  <th>Pagamento</th>
+                  <th>Valor</th>
+                  <th>Vencimento</th>
+                  <th>Forma Recebimento</th>
+                  <th>N&#xba; Documento</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="previewBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="previewModalCloseBtn" class="btn-secondary" type="button">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,976 @@
+<div>
+	<table cellspacing="1" cellpadding="2" rules="all" border="0" id="ctl00_ContentPlaceHolder1_gvDados" style="border-width:0px;width:100%;">
+		<tr class="headerContaMensal">
+			<th scope="col">&nbsp;</th><th scope="col">
+                                            <span class="headerContaMensal">Nrº</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Data</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Modelo</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Ano Fab.</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Cor</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Chassi</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Placa</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Cliente</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Serviço</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Perito</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Digitador</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">FP</span>
+                                        </th><th scope="col">
+                                            <span class="headerContaMensal">Preço Sug.</span>
+                                        </th><th class="headerContaMensal" scope="col">Preço</th><th scope="col">
+                                            <span class="headerContaMensal">Grv</span>
+                                        </th>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl02_lblContadorRegistro">1</span>
+                                        </td><td>
+                                            <span>
+                                                3959984</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl02_lblModeloMarca">I/PORSCHE 911 CARRERA</span>
+                                        </td><td>
+                                            <span>
+                                                2021</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl02_lblCor">VERMELHA</span>
+                                        </td><td>
+                                            <span>
+                                                WP0AA299XMS206113</span>
+                                        </td><td>
+                                            <span>
+                                                FBA1I22</span>
+                                        </td><td>
+                                            <span>
+                                                MARIN IMPORT
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO DE VERIFICAÇÃ
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl02_lblPrecoSugerido">R$ 350,00</span>
+                                        </td><td>R$ 200,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 200,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl03_lblContadorRegistro">2</span>
+                                        </td><td>
+                                            <span>
+                                                3959448</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl03_lblModeloMarca">VW NIVUS HL TSI</span>
+                                        </td><td>
+                                            <span>
+                                                2023</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl03_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                9BWCH6CH5RP014643</span>
+                                        </td><td>
+                                            <span>
+                                                CVI7H06</span>
+                                        </td><td>
+                                            <span>
+                                                EUROPAMOTORS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl03_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 350,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl05_lblContadorRegistro">3</span>
+                                        </td><td>
+                                            <span>
+                                                3959462</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl05_lblModeloMarca">I/PEUGEOT 208 STYLE MT</span>
+                                        </td><td>
+                                            <span>
+                                                2023</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl05_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                8ADUEFC23PG568454</span>
+                                        </td><td>
+                                            <span>
+                                                ROU0A07</span>
+                                        </td><td>
+                                            <span>
+                                                EUROPAMOTORS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl05_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 350,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl06_lblContadorRegistro">4</span>
+                                        </td><td>
+                                            <span>
+                                                3960022</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl06_lblModeloMarca">M.BENZ C180FF</span>
+                                        </td><td>
+                                            <span>
+                                                2019</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl06_lblCor">PRETA</span>
+                                        </td><td>
+                                            <span>
+                                                9BMWF4AW7KM015396</span>
+                                        </td><td>
+                                            <span>
+                                                FWX6J43</span>
+                                        </td><td>
+                                            <span>
+                                                EUROPAMOTORS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl06_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 350,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl07_lblContadorRegistro">5</span>
+                                        </td><td>
+                                            <span>
+                                                3960845</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl07_lblModeloMarca">I/M.BENZ AMG CLA35 4M</span>
+                                        </td><td>
+                                            <span>
+                                                2024</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl07_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                W1K5J5BW6SN485533</span>
+                                        </td><td>
+                                            <span>
+                                                TIX2A50</span>
+                                        </td><td>
+                                            <span>
+                                                EUROPAMOTORS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl07_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 120,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 1.170,00</td><td colspan="1">&nbsp;</td><td>R$ 750,00</td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl08_lblContadorRegistro">6</span>
+                                        </td><td>
+                                            <span>
+                                                3960361</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl08_lblModeloMarca">I/AUDI RS6 AV 4.0TFSI P</span>
+                                        </td><td>
+                                            <span>
+                                                2017</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl08_lblCor">PRETA</span>
+                                        </td><td>
+                                            <span>
+                                                WUA82C4G8JN902537</span>
+                                        </td><td>
+                                            <span>
+                                                FMI7F06</span>
+                                        </td><td>
+                                            <span>
+                                                2B MOTORS 
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR VERI
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                FERNANDO JHONATAN DE
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                FERNANDO JHONATAN DE
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl08_lblPrecoSugerido">R$ 150,00</span>
+                                        </td><td>R$ 150,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 150,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl10_lblContadorRegistro">7</span>
+                                        </td><td>
+                                            <span>
+                                                3959959</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl10_lblModeloMarca">JEEP COMPASS LIMITED S</span>
+                                        </td><td>
+                                            <span>
+                                                2020</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl10_lblCor">BRANCA</span>
+                                        </td><td>
+                                            <span>
+                                                9886751C6MKK42920</span>
+                                        </td><td>
+                                            <span>
+                                                FDS7J83</span>
+                                        </td><td>
+                                            <span>
+                                                PARK MOTORS   
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                FERNANDO JHONATAN DE
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                FERNANDO JHONATAN DE
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl10_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 100,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 100,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl12_lblContadorRegistro">8</span>
+                                        </td><td>
+                                            <span>
+                                                3959487</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl12_lblModeloMarca">MMC/PAJERO TR4 FLEX HP</span>
+                                        </td><td>
+                                            <span>
+                                                2010</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl12_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                93XFRH77WACA46936</span>
+                                        </td><td>
+                                            <span>
+                                                EMT8I08</span>
+                                        </td><td>
+                                            <span>
+                                                PARTICULAR MOEMA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR VERI
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                EDMILSON APARECIDO N
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                EDMILSON APARECIDO N
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl12_lblPrecoSugerido">R$ 150,00</span>
+                                        </td><td>R$ 400,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl14_lblContadorRegistro">9</span>
+                                        </td><td>
+                                            <span>
+                                                3959413</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl14_lblModeloMarca">NISSAN KICKS SL CVT</span>
+                                        </td><td>
+                                            <span>
+                                                2018</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl14_lblCor">PRETA</span>
+                                        </td><td>
+                                            <span>
+                                                94DFCAP15KB120232</span>
+                                        </td><td>
+                                            <span>
+                                                BEY3434</span>
+                                        </td><td>
+                                            <span>
+                                                PARTICULAR MOEMA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                VALDEMIR DOS SANTOS 
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                VALDEMIR DOS SANTOS 
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl14_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 300,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl15_lblContadorRegistro">10</span>
+                                        </td><td>
+                                            <span>
+                                                3960798</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl15_lblModeloMarca">I/VW JETTA VARIANT</span>
+                                        </td><td>
+                                            <span>
+                                                2009</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl15_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                3VWKE61K99M342387</span>
+                                        </td><td>
+                                            <span>
+                                                FEH1717</span>
+                                        </td><td>
+                                            <span>
+                                                PARTICULAR MOEMA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR VERI
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                EDMILSON APARECIDO N
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                VALDEMIR DOS SANTOS 
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl15_lblPrecoSugerido">R$ 150,00</span>
+                                        </td><td>R$ 400,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 1.100,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl16_lblContadorRegistro">11</span>
+                                        </td><td>
+                                            <span>
+                                                3961243</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl16_lblModeloMarca">I/AUDI A4 2.0TFSI</span>
+                                        </td><td>
+                                            <span>
+                                                2022</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl16_lblCor">PRETA</span>
+                                        </td><td>
+                                            <span>
+                                                WAUGFCF45PA030251</span>
+                                        </td><td>
+                                            <span>
+                                                GHN1F73</span>
+                                        </td><td>
+                                            <span>
+                                                CAR CHASE
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                CAUTELAR COM ANALIS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl16_lblPrecoSugerido">R$ 290,00</span>
+                                        </td><td>R$ 150,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl18_lblContadorRegistro">12</span>
+                                        </td><td>
+                                            <span>
+                                                3961201</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl18_lblModeloMarca">BMW/320I M SPORT FLEX</span>
+                                        </td><td>
+                                            <span>
+                                                2023</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl18_lblCor">CINZA</span>
+                                        </td><td>
+                                            <span>
+                                                98M30FV02R4024394</span>
+                                        </td><td>
+                                            <span>
+                                                BWB9C63</span>
+                                        </td><td>
+                                            <span>
+                                                CAR CHASE
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                CAUTELAR COM ANALIS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl18_lblPrecoSugerido">R$ 290,00</span>
+                                        </td><td>R$ 150,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl19_lblContadorRegistro">13</span>
+                                        </td><td>
+                                            <span>
+                                                3961209</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl19_lblModeloMarca">I/M.BENZ AMGGTS</span>
+                                        </td><td>
+                                            <span>
+                                                2015</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl19_lblCor">PRATA</span>
+                                        </td><td>
+                                            <span>
+                                                WDDYJ7JW1GA005746</span>
+                                        </td><td>
+                                            <span>
+                                                FRW8G87</span>
+                                        </td><td>
+                                            <span>
+                                                CAR CHASE
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                CAUTELAR COM ANALIS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                 LUCAS FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl19_lblPrecoSugerido">R$ 290,00</span>
+                                        </td><td>R$ 150,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 450,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl20_lblContadorRegistro">14</span>
+                                        </td><td>
+                                            <span>
+                                                3960101</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl20_lblModeloMarca">I/VW FUSCA AA</span>
+                                        </td><td>
+                                            <span>
+                                                2014</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl20_lblCor">PRATA</span>
+                                        </td><td>
+                                            <span>
+                                                3VWV96167EM643738</span>
+                                        </td><td>
+                                            <span>
+                                                FOY0240</span>
+                                        </td><td>
+                                            <span>
+                                                ZUFFEN MOTORS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO DE VERIFICAÇÃ
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                EDMILSON APARECIDO N
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                VALDEMIR DOS SANTOS 
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                AV
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl20_lblPrecoSugerido">R$ 350,00</span>
+                                        </td><td>R$ 200,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 200,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl22_lblContadorRegistro">15</span>
+                                        </td><td>
+                                            <span>
+                                                3960777</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl22_lblModeloMarca">I/FORD MUSTANG GT</span>
+                                        </td><td>
+                                            <span>
+                                                2017</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl22_lblCor">VERMELHA</span>
+                                        </td><td>
+                                            <span>
+                                                1FA6P8CF7J5115936</span>
+                                        </td><td>
+                                            <span>
+                                                PKW727O</span>
+                                        </td><td>
+                                            <span>
+                                                CMR VEICULOS LTDA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                CAUTELAR COM ANALIS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl22_lblPrecoSugerido">R$ 290,00</span>
+                                        </td><td>R$ 170,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr style="background-color:#F0F0F0;">
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl24_lblContadorRegistro">16</span>
+                                        </td><td>
+                                            <span>
+                                                3960888</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl24_lblModeloMarca">I/MINI COOPER S</span>
+                                        </td><td>
+                                            <span>
+                                                2014</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl24_lblCor">VERMELHA</span>
+                                        </td><td>
+                                            <span>
+                                                WMWXM7108F2A83037</span>
+                                        </td><td>
+                                            <span>
+                                                FEJ3I50</span>
+                                        </td><td>
+                                            <span>
+                                                CMR VEICULOS LTDA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LAUDO CAUTELAR
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl24_lblPrecoSugerido">R$ 250,00</span>
+                                        </td><td>R$ 120,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl25_lblContadorRegistro">17</span>
+                                        </td><td>
+                                            <span>
+                                                3961357</span>
+                                        </td><td>
+                                            <span>
+                                                13/04/2026</span>
+                                        </td><td>
+                                            <span id="ctl00_ContentPlaceHolder1_gvDados_ctl25_lblModeloMarca">FORD/MUSTANG GT</span>
+                                        </td><td>
+                                            <span>
+                                                2017</span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl25_lblCor">VERMELHA</span>
+                                        </td><td>
+                                            <span>
+                                                1FA6P8CF7J5115936</span>
+                                        </td><td>
+                                            <span>
+                                                PKW7270</span>
+                                        </td><td>
+                                            <span>
+                                                CMR VEICULOS LTDA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                CAUTELAR COM ANALIS
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span style="white-space: nowrap;">
+                                                LUCIANO FERREIRA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                FA
+                                            </span>
+                                        </td><td>
+                                            <span>
+                                                <span id="ctl00_ContentPlaceHolder1_gvDados_ctl25_lblPrecoSugerido">R$ 290,00</span>
+                                        </td><td>R$ 170,00</td><td>
+                                            <span>
+                                                </span>
+                                        </td>
+		</tr><tr>
+			<td class="subtotalContaMensal" colspan="15">SUBTOTAL: </td><td class="subtotalContaMensal">R$ 460,00</td><td colspan="1">&nbsp;</td><td>R$ 0,00</td>
+		</tr><tr style="font-weight:bold;">
+			<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>RETORNO CLIENTE: <br>- R$ 750,00<br>TOTAL: <br>R$ 3.080,00<br><b>LAUDOS: 17</b></td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+		</tr>
+	</table>
+</div><table><tr><td><table><caption>SERVIÇO(S)</caption><tr><td><div>
+	<table cellspacing="1" cellpadding="2" rules="all" border="0" id="ctl00_ContentPlaceHolder1_gvServico" style="border-width:0px;">
+		<tr>
+			<th align="left" scope="col">Serviço</th><th align="left" scope="col">Qtde.</th><th align="left" scope="col">Valor</th>
+		</tr><tr>
+			<td style="width:300px;">CAUTELAR COM ANAL</td><td style="width:100px;">5</td><td>R$ 790,00</td>
+		</tr><tr>
+			<td style="width:300px;">LAUDO CAUTELAR</td><td style="width:100px;">7</td><td>R$ 1.690,00</td>
+		</tr><tr>
+			<td style="width:300px;">LAUDO CAUTELAR VE</td><td style="width:100px;">3</td><td>R$ 950,00</td>
+		</tr><tr>
+			<td style="width:300px;">LAUDO DE VERIFICA</td><td style="width:100px;">2</td><td>R$ 400,00</td>
+		</tr>
+	</table>
+</div></td></tr></table> </td> <td></td>  <td><table><caption>FATURAMENTO(S)</caption><tr><td><div>
+	<table cellspacing="1" cellpadding="2" rules="all" border="0" id="ctl00_ContentPlaceHolder1_gvFaturamento" style="border-width:0px;">
+		<tr>
+			<th align="left" scope="col">Forma de Pagto.</th><th align="left" scope="col">Valor</th>
+		</tr><tr>
+			<td style="width:300px;">À VISTA (AV)</td><td>R$ 2.350,00</td>
+		</tr><tr>
+			<td style="width:300px;">À FATURAR (FA)</td><td>R$ 1.480,00</td>
+		</tr>
+	</table>
+</div></td></tr></table> </td> </tr></table><br/> <br/><table><tr><td><table><caption>VISTORIADORE(S)</caption><tr><td><div>
+	<table cellspacing="1" cellpadding="2" rules="all" border="0" id="ctl00_ContentPlaceHolder1_gvPerito" style="border-width:0px;">
+		<tr>
+			<th align="left" scope="col">Nome</th><th align="left" scope="col">Qtde.</th>
+		</tr><tr>
+			<td style="width:300px;"> LUCAS FERREIRA</td><td>4</td>
+		</tr><tr>
+			<td style="width:300px;">EDMILSON APARECIDO NOGUEIRA</td><td>3</td>
+		</tr><tr>
+			<td style="width:300px;">FERNANDO JHONATAN DE MELO SILVA</td><td>2</td>
+		</tr><tr>
+			<td style="width:300px;">LUCIANO FERREIRA</td><td>7</td>
+		</tr><tr>
+			<td style="width:300px;">VALDEMIR DOS SANTOS JUNIOR</td><td>1</td>
+		</tr>
+	</table>
+</div></td></tr></table> </td>  <td></td> <td></td>  <td><table><caption>DIGITADORE(S)</caption><tr><td><div>
+	<table cellspacing="1" cellpadding="2" rules="all" border="0" id="ctl00_ContentPlaceHolder1_gvDigitador" style="border-width:0px;">
+		<tr>
+			<th align="left" scope="col">Nome</th><th align="left" scope="col">Qtde.</th>
+		</tr><tr>
+			<td style="width:300px;"> LUCAS FERREIRA</td><td>4</td>
+		</tr><tr>
+			<td style="width:300px;">EDMILSON APARECIDO NOGUEIRA</td><td>1</td>
+		</tr><tr>
+			<td style="width:300px;">FERNANDO JHONATAN DE MELO SILVA</td><td>2</td>
+		</tr><tr>
+			<td style="width:300px;">LUCIANO FERREIRA</td><td>7</td>
+		</tr><tr>
+			<td style="width:300px;">VALDEMIR DOS SANTOS JUNIOR</td><td>3</td>
+		</tr>
+	</table>
+</div></td></tr></table> </td> </tr></table>

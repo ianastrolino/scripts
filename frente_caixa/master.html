@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astrovistorias — Painel Master</title>
+  <style>
+    :root {
+      --bg: #f4f7f8;
+      --surface: #ffffff;
+      --line: #c8d2d6;
+      --ink: #182023;
+      --muted: #5e6d73;
+      --accent: #007f73;
+      --accent-strong: #00675f;
+      --radius: 6px;
+      --tiny: #d8f1df;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+    }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand strong { font-size: 18px; }
+    .brand span   { font-size: 13px; color: var(--muted); display: block; }
+    .top-actions  { display: flex; gap: 10px; align-items: center; }
+    .user-info    { font-size: 13px; color: var(--muted); }
+    a.btn-logout {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--muted);
+      padding: 8px 14px;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    a.btn-logout:hover { color: var(--ink); border-color: #999; }
+    .workspace {
+      padding: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .unit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .unit-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-decoration: none;
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .unit-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 2px 10px rgba(0,127,115,0.12);
+    }
+    .unit-name {
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .unit-id {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .unit-arrow {
+      margin-top: 4px;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .loading {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 32px 0;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <strong>Astrovistorias</strong>
+      <span>Painel Master</span>
+    </div>
+    <div class="top-actions">
+      <span class="user-info" id="userInfo"></span>
+      <a href="/logout" class="btn-logout">Sair</a>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <h1>Unidades</h1>
+    <p class="subtitle">Selecione uma unidade para abrir a Frente de Caixa.</p>
+    <div class="unit-grid" id="unitGrid">
+      <p class="loading">Carregando unidades...</p>
+    </div>
+  </main>
+
+  <script>
+    async function loadUnits() {
+      const grid = document.getElementById("unitGrid");
+      try {
+        const res  = await fetch("/master/api/units");
+        const data = await res.json();
+        if (!data.units || data.units.length === 0) {
+          grid.innerHTML = "<p class=\"loading\">Nenhuma unidade configurada.</p>";
+          return;
+        }
+        grid.innerHTML = data.units.map(u => `
+          <a href="/u/${u.id}/" class="unit-card">
+            <div class="unit-name">${u.nome}</div>
+            <div class="unit-id">ID: ${u.id}</div>
+            <div class="unit-arrow">Abrir Frente de Caixa &rarr;</div>
+          </a>
+        `).join("");
+      } catch (err) {
+        grid.innerHTML = "<p class=\"loading\">Erro ao carregar unidades.</p>";
+      }
+    }
+
+    async function loadUserInfo() {
+      try {
+        // Qualquer unidade serve para pegar info do usuario logado
+        const res  = await fetch("/master/api/units");
+        const data = await res.json();
+        // Pega o nome do session via /u/<primeira unidade>/api/info
+        if (data.units && data.units.length > 0) {
+          const first = data.units[0];
+          const infoRes  = await fetch(`/u/${first.id}/api/info`);
+          const infoData = await infoRes.json();
+          if (infoData.usuario) {
+            document.getElementById("userInfo").textContent = infoData.usuario;
+          }
+        }
+      } catch (_) {}
+    }
+
+    loadUnits();
+    loadUserInfo();
+  </script>
+</body>
+</html>

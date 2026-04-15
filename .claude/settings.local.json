@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude --version)",
+      "Bash(claude config *)",
+      "Bash(ls -1 /home/astro/projeto/scripts/logs/*.json)",
+      "Bash(python3 tiny_import.py --check-env)",
+      "Bash(python3 tiny_import.py --list-formas-recebimento)",
+      "Bash(python3 tiny_import.py --list-clientes --env-file .env.moema)",
+      "Bash(python3 tiny_import.py --list-clientes --env-file .env.barueri)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

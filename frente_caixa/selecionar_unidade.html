@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Frente de Caixa — Selecionar Unidade</title>
+    <style>
+      :root {
+        --accent: #007f73;
+        --accent-strong: #00675f;
+        --bg: #f4f7f8;
+        --surface: #ffffff;
+        --line: #c8d2d6;
+        --ink: #182023;
+        --muted: #5e6d73;
+        --radius: 8px;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        font-family: Arial, Helvetica, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 32px;
+        padding: 24px;
+      }
+
+      .logo-area {
+        text-align: center;
+      }
+
+      .logo-area strong {
+        display: block;
+        font-size: 26px;
+        color: var(--ink);
+      }
+
+      .logo-area span {
+        display: block;
+        color: var(--muted);
+        font-size: 15px;
+        margin-top: 4px;
+      }
+
+      .units {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .unit-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        width: 220px;
+        padding: 32px 24px;
+        background: var(--surface);
+        border: 2px solid var(--line);
+        border-radius: 12px;
+        cursor: pointer;
+        text-decoration: none;
+        color: var(--ink);
+        transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+      }
+
+      .unit-card:hover {
+        border-color: var(--accent);
+        box-shadow: 0 4px 20px rgba(0, 127, 115, 0.15);
+        transform: translateY(-2px);
+      }
+
+      .unit-card:active {
+        transform: translateY(0);
+      }
+
+      .unit-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #d8f1df;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+      }
+
+      .unit-card strong {
+        font-size: 20px;
+        text-align: center;
+      }
+
+      .unit-card span {
+        font-size: 13px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .unit-card .badge {
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid var(--line);
+      }
+
+      .footer-note {
+        font-size: 13px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ccc;
+        margin-right: 4px;
+      }
+
+      .status-dot.online { background: #3bbf6e; }
+    </style>
+  </head>
+  <body>
+    <div class="logo-area">
+      <strong>Frente de Caixa</strong>
+      <span>Selecione a unidade para acessar</span>
+    </div>
+
+    <div class="units" id="units">
+      <!-- preenchido pelo script -->
+    </div>
+
+    <p class="footer-note" id="footerNote">Verificando servidores...</p>
+
+    <script>
+      const unidades = [
+        { nome: "Moema",   porta: 8081, icone: "🏢" },
+        { nome: "Barueri", porta: 8082, icone: "🏭" },
+      ];
+
+      const container = document.getElementById("units");
+      const footer    = document.getElementById("footerNote");
+
+      async function checkStatus(porta) {
+        try {
+          const r = await fetch(`http://localhost:${porta}/api/info`, { signal: AbortSignal.timeout(2000) });
+          if (r.ok) { const d = await r.json(); return d.unidade || "online"; }
+        } catch (_) {}
+        return null;
+      }
+
+      async function render() {
+        const checks = await Promise.all(unidades.map((u) => checkStatus(u.porta)));
+
+        container.innerHTML = "";
+        let onlineCount = 0;
+
+        unidades.forEach((u, i) => {
+          const online = checks[i] !== null;
+          if (online) onlineCount++;
+
+          const card = document.createElement("a");
+          card.className = "unit-card";
+          card.href = online ? `http://localhost:${u.porta}` : "#";
+          if (!online) card.style.opacity = "0.5";
+          if (!online) card.style.cursor  = "not-allowed";
+          card.innerHTML = `
+            <div class="unit-icon">${u.icone}</div>
+            <strong>${u.nome}</strong>
+            <span>Frente de Caixa<br>Fechamento diario</span>
+            <span class="badge">
+              <span class="status-dot ${online ? "online" : ""}"></span>
+              ${online ? "Online — porta " + u.porta : "Servidor offline"}
+            </span>
+          `;
+          if (online) {
+            card.addEventListener("click", (e) => {
+              e.preventDefault();
+              window.location.href = `http://localhost:${u.porta}`;
+            });
+          }
+          container.appendChild(card);
+        });
+
+        footer.textContent = onlineCount === 0
+          ? "Nenhum servidor encontrado. Execute o .bat da unidade desejada."
+          : `${onlineCount} servidor(es) online. Clique na unidade para acessar.`;
+      }
+
+      render();
+      // Atualiza o status a cada 15 segundos
+      setInterval(render, 15000);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""
+server.py — Flask multi-unit server para Frente de Caixa Astrovistorias.
+Deploy no Railway com as variaveis de ambiente: SECRET_KEY, USERS_CONFIG,
+UNITS_CONFIG e DATA_DIR (volume persistente).
+
+USERS_CONFIG (JSON):
+  {
+    "usuario@astrovistorias.com.br": {
+      "password_hash": "<saida de criar_usuario.py>",
+      "unit": "moema",
+      "master": false,
+      "name": "Nome do Usuario"
+    }
+  }
+
+UNITS_CONFIG (JSON):
+  {
+    "moema": {
+      "nome": "Moema",
+      "client_id": "...",
+      "client_secret": "...",
+      "refresh_token": "...",
+      "redirect_uri": "https://app.railway.app/u/moema/callback",
+      "forma_recebimento_ids": {"FA": 802165201, "dinheiro": 556498207, ...},
+      "cliente_ids": {"MARIN IMPORT": 566890464, ...},
+      "categoria_id": null,
+      "vencimento_dias": 0,
+      "vencimento_tipo": "ultimo_dia_mes",
+      "include_forma_recebimento": true,
+      "auto_create_contacts": false,
+      "require_payment_mapping": false,
+      "default_tipo_pessoa": "J",
+      "numero_documento_prefix": "PLANILHA",
+      "aliases": {
+        "servico": {"LAUDO DE VERIFICACA": "LAUDO DE VERIFICACAO"},
+        "fp": {},
+        "cliente": {}
+      }
+    }
+  }
+"""
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import json
+import os
+import secrets
+import sys
+from dataclasses import asdict
+from functools import wraps
+from pathlib import Path
+from typing import Any
+
+from flask import Flask, Response, redirect, request, send_from_directory, session, url_for
+
+# ── Importa logica de negocio do tiny_import.py ────────────────────────────────
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
+from tiny_import import (
+    DEFAULT_CONFIG,
+    NormalizedRecord,
+    TinyImporter,
+    build_history,
+    clean_text,
+    compact_document_number,
+    due_date_for_record,
+    load_state,
+    lookup_config_id,
+    merge_config,
+    money_as_float,
+    record_key,
+    save_state,
+    similarity_score,
+)
+
+# ── Flask ──────────────────────────────────────────────────────────────────────
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.environ.get("RAILWAY_ENVIRONMENT")),
+    PERMANENT_SESSION_LIFETIME=43200,  # 12 horas
+)
+
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
+UI_DIR   = _HERE / "frente_caixa"
+
+# ── Carregamento de config ─────────────────────────────────────────────────────
+def _load_users() -> dict[str, Any]:
+    raw = os.environ.get("USERS_CONFIG", "{}")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+
+def _load_units() -> dict[str, Any]:
+    raw = os.environ.get("UNITS_CONFIG", "{}")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+
+# Carrega uma vez no startup (variaveis de ambiente nao mudam em runtime)
+USERS: dict[str, Any] = _load_users()
+UNITS: dict[str, Any] = _load_units()
+
+# ── Auth helpers ───────────────────────────────────────────────────────────────
+def _hash_password(password: str) -> str:
+    """Gera hash com salt. Use criar_usuario.py para gerar hashes."""
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+    return f"{salt}:{dk.hex()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, dk_hex = stored.split(":", 1)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
+        return secrets.compare_digest(dk.hex(), dk_hex)
+    except Exception:
+        return False
+
+
+def _current_user() -> dict[str, Any] | None:
+    email = session.get("email")
+    return USERS.get(email) if email else None
+
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not _current_user():
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def unit_access_required(f):
+    """Verifica login + acesso a unidade (master ve tudo)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = _current_user()
+        if not user:
+            return redirect(url_for("login_page"))
+        unit = kwargs.get("unit")
+        if not user.get("master") and user.get("unit") != unit:
+            return Response("Acesso negado", status=403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# ── Helpers de unidade ────────────────────────────────────────────────────────
+def _unit_state_dir(unit: str) -> Path:
+    d = DATA_DIR / unit
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _load_extra_cliente_ids(unit: str) -> dict[str, int]:
+    """Carrega mapeamentos de clientes salvos via modal (persistidos em JSON)."""
+    p = _unit_state_dir(unit) / "cliente_ids.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_extra_cliente_ids(unit: str, ids: dict[str, int]) -> None:
+    p = _unit_state_dir(unit) / "cliente_ids.json"
+    p.write_text(json.dumps(ids, ensure_ascii=False, indent=2))
+
+
+def _build_unit_config(unit: str) -> dict[str, Any]:
+    """Monta config completo para a unidade a partir de UNITS_CONFIG."""
+    ud = UNITS.get(unit, {})
+    tiny: dict[str, Any] = {}
+
+    for field in (
+        "client_id", "client_secret", "refresh_token", "redirect_uri",
+        "forma_recebimento_ids", "cliente_ids", "categoria_id",
+        "vencimento_dias", "vencimento_tipo", "numero_documento_prefix",
+        "auto_create_contacts", "require_payment_mapping",
+        "include_forma_recebimento", "default_tipo_pessoa",
+    ):
+        if (v := ud.get(field)) is not None:
+            tiny[field] = v
+
+    if "aliases" in ud:
+        tiny["aliases"] = ud["aliases"]
+
+    # Sobrescreve com IDs salvos via modal de mapeamento
+    extra = _load_extra_cliente_ids(unit)
+    if extra:
+        merged_ids: dict[str, Any] = dict(tiny.get("cliente_ids", {}))
+        merged_ids.update(extra)
+        tiny["cliente_ids"] = merged_ids
+
+    return merge_config(DEFAULT_CONFIG, {
+        "state_dir": str(_unit_state_dir(unit)),
+        "tiny": tiny,
+    })
+
+
+def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
+    """Semeie o refresh_token de UNITS_CONFIG no arquivo de tokens se ainda nao existir."""
+    p = _unit_state_dir(unit) / "tiny_tokens.json"
+    if p.exists():
+        return
+    rt = config["tiny"].get("refresh_token", "")
+    if rt:
+        p.write_text(json.dumps({
+            "access_token": "",
+            "refresh_token": rt,
+            "expires_at": 0,
+        }))
+
+
+# ── Resposta JSON helper ───────────────────────────────────────────────────────
+def _json(data: Any, status: int = 200) -> Response:
+    return app.response_class(
+        response=json.dumps(data, ensure_ascii=False),
+        status=status,
+        mimetype="application/json",
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: autenticacao
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        pw    = request.form.get("password") or ""
+
+        if not email.endswith("@astrovistorias.com.br"):
+            return redirect(url_for("login_page") + "?erro=dominio")
+
+        user = USERS.get(email)
+        if user and _verify_password(pw, user["password_hash"]):
+            session.permanent = True
+            session["email"] = email
+            session["name"]  = user.get("name", email)
+            return redirect(url_for("index"))
+
+        return redirect(url_for("login_page") + "?erro=credenciais")
+
+    return send_from_directory(UI_DIR, "login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+
+@app.route("/")
+@login_required
+def index():
+    user = _current_user()
+    if user.get("master"):
+        return redirect(url_for("master_page"))
+    unit = user.get("unit")
+    if unit:
+        return redirect(f"/u/{unit}/")
+    return redirect(url_for("login_page"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: dashboard master
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/master")
+@login_required
+def master_page():
+    user = _current_user()
+    if not user.get("master"):
+        unit = user.get("unit")
+        return redirect(f"/u/{unit}/") if unit else redirect(url_for("login_page"))
+    return send_from_directory(UI_DIR, "master.html")
+
+
+@app.route("/master/api/units")
+@login_required
+def master_api_units():
+    user = _current_user()
+    if not user.get("master"):
+        return _json({"error": "Acesso negado"}, 403)
+    units_info = [
+        {"id": uid, "nome": ud.get("nome", uid)}
+        for uid, ud in UNITS.items()
+    ]
+    return _json({"units": units_info})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: arquivos estaticos da frente de caixa
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/")
+@unit_access_required
+def unit_index(unit: str):
+    return send_from_directory(UI_DIR, "index.html")
+
+
+@app.route("/u/<unit>/<path:filename>")
+@unit_access_required
+def unit_static(unit: str, filename: str):
+    return send_from_directory(UI_DIR, filename)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: API da unidade
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/api/info")
+@unit_access_required
+def api_info(unit: str):
+    ud = UNITS.get(unit, {})
+    user = _current_user()
+    return _json({
+        "unidade": ud.get("nome", unit),
+        "usuario": session.get("name", ""),
+        "email": session.get("email", ""),
+        "master": bool(user and user.get("master")),
+    })
+
+
+# Mapeamento de IDs de forma de recebimento → nome legivel
+_FORMA_NAMES: dict[int, str] = {
+    556498207: "Dinheiro",
+    556498209: "Cartao de credito",
+    556498211: "Cartao de debito",
+    556498213: "Boleto",
+    556498217: "Deposito",
+    598163085: "Dinheiro",
+    598163087: "Cartao de credito",
+    598163089: "Cartao de debito",
+    598163095: "Deposito",
+    702313264: "A faturar",
+    802165201: "A faturar",
+    802165265: "Cortesia",
+    803887338: "Retorno",
+}
+
+
+@app.route("/u/<unit>/api/preview", methods=["POST"])
+@unit_access_required
+def api_preview(unit: str):
+    try:
+        data       = request.get_json(force=True)
+        config     = _build_unit_config(unit)
+        state_dir  = _unit_state_dir(unit)
+        tiny_config = config["tiny"]
+        forma_ids   = tiny_config.get("forma_recebimento_ids", {})
+
+        state_path = state_dir / "imported.json"
+        imported   = load_state(state_path).get("imported", {})
+
+        previews = []
+        for r in data.get("records", []):
+            chave   = r.get("id", "?")
+            av_pag  = r.get("avPagamento", "")
+            fp      = r.get("fp", "")
+            pay_key = av_pag if av_pag else fp
+            pay_id  = lookup_config_id(forma_ids, pay_key)
+
+            rec = NormalizedRecord(
+                data=r["data"], modelo=r.get("modelo", ""),
+                placa=r.get("placa", ""), cliente=r.get("cliente", ""),
+                servico=r.get("servico", ""), fp=fp,
+                preco=str(r.get("preco", "0")),
+                origem_arquivo=r.get("origemArquivo", "manual_ui"),
+                linha_origem=r.get("linhaOrigem", 0),
+                chave_deduplicacao=chave, av_pagamento=av_pag,
+            )
+
+            due     = rec.data if av_pag else due_date_for_record(rec, tiny_config)
+            num_doc = compact_document_number(tiny_config, rec)
+            forma_display = (
+                f"{_FORMA_NAMES.get(pay_id, str(pay_id))} (ID {pay_id})"
+                if pay_id else "nao mapeado"
+            )
+
+            payload: dict[str, Any] = {
+                "data": rec.data,
+                "dataVencimento": due,
+                "dataCompetencia": rec.data[:7],
+                "valor": money_as_float(rec.preco),
+                "contato": {"nome": rec.cliente},
+                "numeroDocumento": num_doc,
+                "historico": build_history(rec),
+                "ocorrencia": "U",
+            }
+            if pay_id and tiny_config.get("include_forma_recebimento"):
+                payload["formaRecebimento"] = {"id": pay_id}
+            if cat := tiny_config.get("categoria_id"):
+                payload["categoria"] = {"id": int(cat)}
+
+            previews.append({
+                "chave": chave, "cliente": rec.cliente,
+                "fp": fp, "avPagamento": av_pag,
+                "valor": money_as_float(rec.preco),
+                "dataVencimento": due,
+                "formaRecebimento": forma_display,
+                "numeroDocumento": num_doc,
+                "jaEnviado": chave in imported,
+                "payload": payload,
+            })
+
+        novos = sum(1 for p in previews if not p["jaEnviado"])
+        dups  = sum(1 for p in previews if p["jaEnviado"])
+        return _json({
+            "success": True, "previews": previews,
+            "resumo": {"novos": novos, "duplicatas": dups, "total": len(previews)},
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/send", methods=["POST"])
+@unit_access_required
+def api_send(unit: str):
+    try:
+        data      = request.get_json(force=True)
+        config    = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        _seed_tokens(unit, config)
+
+        state_path = state_dir / "imported.json"
+        st         = load_state(state_path)
+        imported   = st.setdefault("imported", {})
+        importer   = TinyImporter(config, state_dir)
+        results: dict[str, list] = {"enviados": [], "pulados": [], "falhas": []}
+
+        for r in data.get("records", []):
+            rec = NormalizedRecord(
+                data=r["data"], modelo=r["modelo"],
+                placa=r["placa"], cliente=r["cliente"],
+                servico=r["servico"], fp=r["fp"],
+                preco=str(r["preco"]),
+                origem_arquivo=r.get("origemArquivo", "manual_ui"),
+                linha_origem=r.get("linhaOrigem", 0),
+                chave_deduplicacao=r.get("id", "missing_key"),
+                av_pagamento=r.get("avPagamento", ""),
+            )
+            if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
+                rec.chave_deduplicacao = record_key(asdict(rec))
+
+            if rec.chave_deduplicacao in imported:
+                results["pulados"].append({"chave": rec.chave_deduplicacao, "motivo": "ja importado"})
+                continue
+
+            try:
+                resp = importer.create_accounts_receivable(rec)
+                imported[rec.chave_deduplicacao] = {
+                    "arquivo": rec.origem_arquivo,
+                    "linha": rec.linha_origem,
+                    "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                    "resposta": resp,
+                }
+                save_state(state_path, st)
+                results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
+            except Exception as exc:
+                results["falhas"].append({
+                    "chave": rec.chave_deduplicacao,
+                    "cliente": rec.cliente,
+                    "erro": str(exc),
+                })
+
+        return _json({
+            "success": True, "summary": results,
+            "message": f"Processamento concluido. Enviados: {len(results['enviados'])}",
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/suggest-clients", methods=["POST"])
+@unit_access_required
+def api_suggest_clients(unit: str):
+    try:
+        data = request.get_json(force=True)
+        nome = clean_text(data.get("nome", ""))
+        if not nome:
+            raise ValueError("nome obrigatorio")
+
+        config    = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        _seed_tokens(unit, config)
+
+        importer = TinyImporter(config, state_dir)
+        result   = importer.client.request("GET", "contatos", params={"nome": nome, "limit": 20})
+        candidates = []
+
+        for item in result.get("itens", []):
+            item_nome     = item.get("nome", "")
+            item_fantasia = item.get("fantasia", "") or ""
+            score = max(
+                similarity_score(nome, item_nome),
+                similarity_score(nome, item_fantasia) if item_fantasia else 0.0,
+            )
+            candidates.append({
+                "id": item.get("id"),
+                "nome": item_nome,
+                "fantasia": item_fantasia,
+                "score": round(score, 2),
+            })
+
+        if len(candidates) < 3:
+            result2 = importer.client.request("GET", "contatos", params={"limit": 100})
+            seen = {c["id"] for c in candidates}
+            for item in result2.get("itens", []):
+                if item.get("id") in seen:
+                    continue
+                item_nome     = item.get("nome", "")
+                item_fantasia = item.get("fantasia", "") or ""
+                score = max(
+                    similarity_score(nome, item_nome),
+                    similarity_score(nome, item_fantasia) if item_fantasia else 0.0,
+                )
+                if score >= 0.2:
+                    candidates.append({
+                        "id": item.get("id"),
+                        "nome": item_nome,
+                        "fantasia": item_fantasia,
+                        "score": round(score, 2),
+                    })
+
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        return _json({"success": True, "candidates": candidates[:6]})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/map-client", methods=["POST"])
+@unit_access_required
+def api_map_client(unit: str):
+    try:
+        data         = request.get_json(force=True)
+        cliente_nome = clean_text(data.get("clienteNome", ""))
+        tiny_id      = data.get("tinyId")
+        if not cliente_nome or not tiny_id:
+            raise ValueError("clienteNome e tinyId obrigatorios")
+
+        ids = _load_extra_cliente_ids(unit)
+        ids[cliente_nome] = int(tiny_id)
+        _save_extra_cliente_ids(unit, ids)
+        return _json({"success": True, "saved": True})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Ponto de entrada
+# ══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)

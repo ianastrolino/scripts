@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astrovistorias — Acesso</title>
+  <style>
+    :root {
+      --bg: #f4f7f8;
+      --surface: #ffffff;
+      --line: #c8d2d6;
+      --ink: #182023;
+      --muted: #5e6d73;
+      --accent: #007f73;
+      --accent-strong: #00675f;
+      --radius: 6px;
+      --bad: #ffd7d2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+      color: var(--ink);
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 36px 32px;
+    }
+    .brand {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .brand strong {
+      display: block;
+      font-size: 22px;
+      letter-spacing: -0.3px;
+    }
+    .brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+    }
+    input:focus {
+      border-color: var(--accent);
+    }
+    .field {
+      margin-bottom: 16px;
+    }
+    .btn-login {
+      width: 100%;
+      height: 42px;
+      margin-top: 8px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn-login:hover { background: var(--accent-strong); }
+    .error-box {
+      display: none;
+      background: var(--bad);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      color: #6b0000;
+    }
+    .hint {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <strong>Astrovistorias</strong>
+      <span>Frente de Caixa — Acesso</span>
+    </div>
+    <div class="error-box" id="errorBox"></div>
+    <form method="post" action="/login" autocomplete="on">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          placeholder="voce@astrovistorias.com.br"
+          autocomplete="username"
+          required
+        />
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+      <button type="submit" class="btn-login">Entrar</button>
+    </form>
+    <p class="hint">Acesso restrito a colaboradores @astrovistorias.com.br</p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const erro = params.get("erro");
+    const box  = document.getElementById("errorBox");
+    if (erro === "dominio") {
+      box.textContent = "Acesso permitido apenas para e-mails @astrovistorias.com.br.";
+      box.style.display = "block";
+    } else if (erro === "credenciais") {
+      box.textContent = "E-mail ou senha invalidos. Verifique e tente novamente.";
+      box.style.display = "block";
+    }
+    // Foca no primeiro campo vazio
+    const emailEl = document.getElementById("email");
+    const pwEl    = document.getElementById("password");
+    if (!emailEl.value) emailEl.focus();
+    else pwEl.focus();
+  </script>
+</body>
+</html>

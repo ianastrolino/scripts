@@ -1,0 +1,34 @@
+__pycache__/
+*.pyc
+
+# Arquivos .env locais (segredos nao sobem para o repo)
+.env
+.env.local
+.env.*
+!.env.example
+
+config.json
+
+# Dados de estado, tokens e logs (ficam no volume Railway ou local, fora do repo)
+state/
+state_*/
+data/
+logs/
+logs_*/
+
+# Arquivos de entrada/saida locais
+entrada/*
+!entrada/.gitkeep
+saida/*
+!saida/.gitkeep
+processados/*
+!processados/.gitkeep
+entrada_*/
+saida_*/
+processados_*/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
