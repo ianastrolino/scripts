@@ -326,11 +326,12 @@ def unit_static(unit: str, filename: str):
 @unit_access_required
 def api_auth_start(unit: str):
     """Inicia o fluxo OAuth para a unidade."""
-    config = _build_unit_config(unit)
-    tiny = config["tiny"]
+    # Detecta automaticamente a URL de redirecionamento baseada no host atual
+    redirect_uri = f"https://{request.host}/u/{unit}/callback"
+    
     params = {
         "client_id": tiny["client_id"],
-        "redirect_uri": tiny["redirect_uri"],
+        "redirect_uri": redirect_uri,
         "scope": tiny["oauth_scope"],
         "response_type": "code",
     }
@@ -348,10 +349,13 @@ def api_auth_callback(unit: str):
     config = _build_unit_config(unit)
     state_dir = _unit_state_dir(unit)
     importer = TinyImporter(config, state_dir)
+    
+    # Detecta a mesma URL dinâmica para a troca do code
+    redirect_uri = f"https://{request.host}/u/{unit}/callback"
 
     try:
         # Troca o code pelos tokens e salva no tiny_tokens.json (no Volume /data)
-        importer.client.exchange_authorization_code(code, config["tiny"]["redirect_uri"])
+        importer.client.exchange_authorization_code(code, redirect_uri)
         return f"<h1>Autenticacao concluida!</h1><p>Unidade {unit} autorizada com sucesso. Pode fechar esta aba e voltar ao app.</p>"
     except Exception as exc:
         return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
