@@ -342,8 +342,8 @@ class TestBuildAccountsReceivablePayload(unittest.TestCase):
         full_config = merge_config(DEFAULT_CONFIG, {"tiny": tiny_cfg})
         return TinyImporter(full_config, state_dir)
 
-    def test_forma_recebimento_e_objeto_com_id(self):
-        """formaRecebimento deve ser {"id": int}, não apenas o inteiro."""
+    def test_forma_recebimento_e_inteiro(self):
+        """formaRecebimento deve ser int direto (Tiny nao aceita objeto stdClass aqui)."""
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp)
             tiny_cfg = _make_tiny_config(
@@ -352,15 +352,14 @@ class TestBuildAccountsReceivablePayload(unittest.TestCase):
                 include_forma_recebimento=True,
             )
             importer = self._make_importer(tiny_cfg, state_dir)
-            # Mock do client para não bater na API real
             importer.client = MagicMock()
             rec = _make_record(fp="FA", av_pagamento="")
             payload = importer.build_accounts_receivable_payload(rec)
 
             self.assertIn("formaRecebimento", payload)
-            self.assertIsInstance(payload["formaRecebimento"], dict,
-                                   "formaRecebimento deve ser um dict, não um inteiro!")
-            self.assertEqual(payload["formaRecebimento"]["id"], 802165201)
+            self.assertIsInstance(payload["formaRecebimento"], int,
+                                   "formaRecebimento deve ser int, nao dict!")
+            self.assertEqual(payload["formaRecebimento"], 802165201)
 
     def test_contato_usa_id_configurado(self):
         """contato deve ser {"id": <id do config>}, não {"nome": ...}."""
@@ -406,7 +405,7 @@ class TestBuildAccountsReceivablePayload(unittest.TestCase):
                              "AV: vencimento deve ser a mesma data do serviço")
 
     def test_av_pagamento_mapeado_como_forma_recebimento(self):
-        """Para AV, a forma de recebimento é o av_pagamento (dinheiro/debito/credito/pix)."""
+        """Para AV, formaRecebimento é o ID inteiro do pagamento (dinheiro/debito/credito/pix)."""
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp)
             tiny_cfg = _make_tiny_config(
@@ -424,7 +423,9 @@ class TestBuildAccountsReceivablePayload(unittest.TestCase):
                     av_pagamento=fp_key,
                 )
                 payload = importer.build_accounts_receivable_payload(rec)
-                self.assertEqual(payload["formaRecebimento"]["id"], expected_id,
+                self.assertIsInstance(payload["formaRecebimento"], int,
+                                      f"formaRecebimento deve ser int para '{fp_key}'")
+                self.assertEqual(payload["formaRecebimento"], expected_id,
                                  f"Mapeamento falhou para '{fp_key}'")
 
     def test_sem_forma_recebimento_quando_nao_mapeado(self):
@@ -548,9 +549,8 @@ class TestTinyClientTokenRefresh(unittest.TestCase):
             self.assertEqual(len(captured_payloads), 1)
             payload = captured_payloads[0]
             self.assertIn("formaRecebimento", payload)
-            self.assertIsInstance(payload["formaRecebimento"], dict)
-            self.assertIn("id", payload["formaRecebimento"])
-            self.assertEqual(payload["formaRecebimento"]["id"], 802165201)
+            self.assertIsInstance(payload["formaRecebimento"], int)
+            self.assertEqual(payload["formaRecebimento"], 802165201)
 
 
 # ---------------------------------------------------------------------------

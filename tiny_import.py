@@ -859,7 +859,7 @@ class TinyImporter:
             payload["categoria"] = {"id": int(categoria_id)}
 
         if self.config.get("include_forma_recebimento") and payment_id:
-            payload["formaRecebimento"] = {"id": payment_id}
+            payload["formaRecebimento"] = payment_id  # Tiny espera int, nao objeto
         return payload
 
     def create_accounts_receivable(self, record: NormalizedRecord) -> dict[str, Any]:
@@ -908,7 +908,7 @@ def write_payload_preview(records: list[NormalizedRecord], output_dir: Path, sou
             payload_base["categoria"] = {"id": int(categoria_id)}
         forma_recebimento_id = lookup_config_id(tiny_config.get("forma_recebimento_ids", {}), record.fp)
         if tiny_config.get("include_forma_recebimento") and forma_recebimento_id and enviar_contas_receber:
-            payload_base["formaRecebimento"] = {"id": forma_recebimento_id}
+            payload_base["formaRecebimento"] = forma_recebimento_id
 
         preview.append(
             {
@@ -1493,7 +1493,7 @@ def run_server(args: argparse.Namespace) -> int:
                         "ocorrencia": "U",
                     }
                     if payment_id and tiny_config.get("include_forma_recebimento"):
-                        payload["formaRecebimento"] = {"id": payment_id}
+                        payload["formaRecebimento"] = payment_id  # Tiny espera int
                     categoria_id = tiny_config.get("categoria_id")
                     if categoria_id:
                         payload["categoria"] = {"id": int(categoria_id)}

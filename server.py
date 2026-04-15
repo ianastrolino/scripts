@@ -442,7 +442,7 @@ def api_preview(unit: str):
                 "ocorrencia": "U",
             }
             if pay_id and tiny_config.get("include_forma_recebimento"):
-                payload["formaRecebimento"] = {"id": pay_id}
+                payload["formaRecebimento"] = pay_id  # Tiny espera int, nao objeto
             if cat := tiny_config.get("categoria_id"):
                 payload["categoria"] = {"id": int(cat)}
 
