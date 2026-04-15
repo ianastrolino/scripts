@@ -48,6 +48,7 @@ import json
 import os
 import secrets
 import sys
+import urllib.parse
 from dataclasses import asdict
 from functools import wraps
 from pathlib import Path
@@ -318,8 +319,42 @@ def unit_static(unit: str, filename: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Rotas: API da unidade
+# Rotas: API da unidade e OAuth
 # ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/auth")
+@unit_access_required
+def api_auth_start(unit: str):
+    """Inicia o fluxo OAuth para a unidade."""
+    config = _build_unit_config(unit)
+    tiny = config["tiny"]
+    params = {
+        "client_id": tiny["client_id"],
+        "redirect_uri": tiny["redirect_uri"],
+        "scope": tiny["oauth_scope"],
+        "response_type": "code",
+    }
+    url = f"{tiny['auth_url']}?{urllib.parse.urlencode(params)}"
+    return redirect(url)
+
+
+@app.route("/u/<unit>/callback")
+def api_auth_callback(unit: str):
+    """Recebe o code do Tiny e troca pelo refresh_token."""
+    code = request.args.get("code")
+    if not code:
+        return Response("Code ausente", status=400)
+
+    config = _build_unit_config(unit)
+    state_dir = _unit_state_dir(unit)
+    importer = TinyImporter(config, state_dir)
+
+    try:
+        # Troca o code pelos tokens e salva no tiny_tokens.json (no Volume /data)
+        importer.client.exchange_authorization_code(code, config["tiny"]["redirect_uri"])
+        return f"<h1>Autenticacao concluida!</h1><p>Unidade {unit} autorizada com sucesso. Pode fechar esta aba e voltar ao app.</p>"
+    except Exception as exc:
+        return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
 
 @app.route("/u/<unit>/api/info")
 @unit_access_required
