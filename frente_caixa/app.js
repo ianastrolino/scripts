@@ -290,8 +290,17 @@ function renderTable() {
     button.addEventListener("click", (event) => {
       const record = state.records.find((item) => item.id === event.target.dataset.mapClient);
       if (record) {
-        record.tinyClienteId = `manual-${normalizeKey(record.cliente)}`;
-        render();
+        // Abre o modal de mapeamento iniciando pelo cliente deste registro
+        mapState.queue = [
+          record.cliente,
+          ...new Set(
+            state.records
+              .filter((r) => r.fp === "FA" && !r.tinyClienteId && r.cliente !== record.cliente)
+              .map((r) => r.cliente)
+          ),
+        ];
+        document.querySelector("#mapClientesModal").classList.remove("hidden");
+        mapNext();
       }
     });
   });
@@ -507,14 +516,30 @@ els.confirmSendBtn.addEventListener("click", async () => {
 
       let msg = `Enviados com sucesso: ${s.enviados.length}`;
       if (s.pulados.length) msg += `\nPulados (ja existiam): ${s.pulados.length}`;
-      if (s.falhas.length) msg += `\nFalhas: ${s.falhas.length}`;
+      if (s.falhas.length) {
+        msg += `\nFalhas: ${s.falhas.length}`;
+        const detalhes = s.falhas.map((f) => `  • ${f.cliente}: ${f.erro}`).join("\n");
+        msg += `\n\nDetalhes das falhas:\n${detalhes}`;
+        // Detecta erro de token e oferece link de reautorizacao
+        const tokenError = s.falhas.some((f) =>
+          f.erro && (f.erro.includes("token") || f.erro.includes("Token") || f.erro.includes("401"))
+        );
+        if (tokenError) {
+          msg += `\n\n⚠️ Erro de autenticacao detectado.\nVocê pode reautorizar em: ${window.location.origin}${apiBase}/auth`;
+        }
+      }
       alert(msg);
 
       if (s.falhas.length === 0 && confirm("Deseja limpar o lote atual?")) {
         clearBatch();
       }
     } else {
-      alert(`Erro no servidor: ${result.error}`);
+      const errMsg = result.error || "";
+      const tokenErr = errMsg.includes("token") || errMsg.includes("Token") || errMsg.includes("401");
+      const suffix = tokenErr
+        ? `\n\n⚠️ Token invalido ou expirado. Reautorize em:\n${window.location.origin}${apiBase}/auth`
+        : "";
+      alert(`Erro no servidor: ${errMsg}${suffix}`);
     }
   } catch (err) {
     alert(`Erro de conexao: ${err.message}`);
@@ -674,7 +699,11 @@ async function mapBuscar(nome) {
     if (!data.success) throw new Error(data.error);
     renderCandidatos(data.candidates);
   } catch (err) {
-    container.innerHTML = `<p class="map-empty">Erro ao buscar: ${err.message}</p>`;
+    const isTokenErr = err.message && (err.message.includes("token") || err.message.includes("Token") || err.message.includes("401"));
+    const authLink = isTokenErr
+      ? ` <a href="${apiBase}/auth" target="_blank" style="color:#c0392b;font-weight:bold">Clique aqui para autorizar o Tiny</a>`
+      : "";
+    container.innerHTML = `<p class="map-empty">Erro ao buscar: ${err.message}${authLink}</p>`;
   }
 }
 

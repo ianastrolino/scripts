@@ -327,6 +327,8 @@ def unit_static(unit: str, filename: str):
 def api_auth_start(unit: str):
     """Inicia o fluxo OAuth para a unidade."""
     # Detecta automaticamente a URL de redirecionamento baseada no host atual
+    config = _build_unit_config(unit)
+    tiny = config["tiny"]
     redirect_uri = f"https://{request.host}/u/{unit}/callback"
     
     params = {

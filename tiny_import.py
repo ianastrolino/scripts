@@ -776,15 +776,22 @@ class TinyImporter:
             self.contact_cache[key] = mapped
             return mapped
 
-        result = self.client.request("GET", "contatos", params={"nome": name, "situacao": "B", "limit": 100})
-        contact_id = self._find_exact(result.get("itens", []), "nome", name)
+        # Busca sem filtro de situacao para nao perder contatos com status diferente de "B"
+        result = self.client.request("GET", "contatos", params={"nome": name, "limit": 100})
+        items = result.get("itens", [])
+        contact_id = self._find_exact(items, "nome", name)
+        # Tenta tambem pelo nome fantasia
+        if not contact_id:
+            contact_id = self._find_exact(items, "fantasia", name)
         if contact_id:
             self.contact_cache[key] = contact_id
             return contact_id
 
         if not self.config.get("auto_create_contacts"):
             raise TinyApiError(
-                f"Cliente nao encontrado no Tiny: {name!r}. Cadastre ou habilite auto_create_contacts."
+                f"Cliente nao encontrado no Tiny: {name!r}. "
+                "Use o modal 'Mapear Clientes' para vincular ao ID correto, "
+                "ou habilite auto_create_contacts."
             )
 
         created = self.client.request(
@@ -848,7 +855,7 @@ class TinyImporter:
             payload["categoria"] = {"id": int(categoria_id)}
 
         if self.config.get("include_forma_recebimento") and payment_id:
-            payload["formaRecebimento"] = payment_id
+            payload["formaRecebimento"] = {"id": payment_id}
         return payload
 
     def create_accounts_receivable(self, record: NormalizedRecord) -> dict[str, Any]:
@@ -897,7 +904,7 @@ def write_payload_preview(records: list[NormalizedRecord], output_dir: Path, sou
             payload_base["categoria"] = {"id": int(categoria_id)}
         forma_recebimento_id = lookup_config_id(tiny_config.get("forma_recebimento_ids", {}), record.fp)
         if tiny_config.get("include_forma_recebimento") and forma_recebimento_id and enviar_contas_receber:
-            payload_base["formaRecebimento"] = forma_recebimento_id
+            payload_base["formaRecebimento"] = {"id": forma_recebimento_id}
 
         preview.append(
             {
