@@ -886,8 +886,28 @@ class TinyImporter:
             payload["formaRecebimento"] = payment_id  # Tiny espera int, nao objeto
         return payload
 
+    def check_existing_by_numero_documento(self, num_doc: str) -> bool:
+        """Verifica se ja existe uma conta a receber no Tiny com esse numeroDocumento.
+        Retorna True se encontrado, False se nao existe ou se a busca falhar.
+        """
+        try:
+            result = self.client.request(
+                "GET", "contas-receber",
+                params={"numeroDocumento": num_doc, "limit": 1},
+            )
+            return bool(result.get("itens"))
+        except TinyApiError:
+            # Se a busca falhar, tenta criar normalmente e deixa o POST
+            # retornar o 400 caso seja duplicata
+            return False
+
     def create_accounts_receivable(self, record: NormalizedRecord) -> dict[str, Any]:
         payload = self.build_accounts_receivable_payload(record)
+        num_doc = payload["numeroDocumento"]
+        if self.check_existing_by_numero_documento(num_doc):
+            raise TinyApiError(
+                f"Número do documento {num_doc!r} já cadastrado no sistema"
+            )
         return self.client.request("POST", "contas-receber", json_body=payload)
 
     @staticmethod

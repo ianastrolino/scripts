@@ -507,7 +507,14 @@ def api_send(unit: str):
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
 
+            # Camada 1: pré-check local — pula se já foi enviado nesta sessão/importação
+            if rec.chave_deduplicacao in imported:
+                results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja importado"})
+                continue
+
             try:
+                # create_accounts_receivable já faz GET /contas-receber antes do POST
+                # (camada 2: verifica no Tiny se já existe pelo numeroDocumento)
                 resp = importer.create_accounts_receivable(rec)
                 imported[rec.chave_deduplicacao] = {
                     "arquivo": rec.origem_arquivo,
