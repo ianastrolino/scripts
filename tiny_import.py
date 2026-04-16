@@ -95,6 +95,11 @@ def _is_doc_already_registered(exc: Exception) -> bool:
     return "já cadastrado no sistema" in str(exc) or "ja cadastrado no sistema" in str(exc)
 
 
+def is_av_paid(av_pagamento: str) -> bool:
+    """Retorna True apenas se o registro AV tem forma de pagamento definida (nao 'pendente')."""
+    return bool(av_pagamento) and av_pagamento.lower() not in ("pendente", "pending", "")
+
+
 def resolve_categoria_id(config: dict[str, Any], servico: str) -> int | None:
     """Resolve o ID de categoria com base no servico, com fallback para categoria_id global."""
     categoria_ids: dict[str, Any] = config.get("categoria_ids") or {}
@@ -856,10 +861,11 @@ class TinyImporter:
         client_id = self.resolve_contact(record.cliente)
         # AV: usa a forma real de pagamento definida na frente de caixa (dinheiro/debito/credito/pix)
         # FA: usa o codigo FP do registro (ex: "FA" → "A faturar")
-        payment_key = record.av_pagamento if record.av_pagamento else record.fp
+        av = is_av_paid(record.av_pagamento)
+        payment_key = record.av_pagamento if av else record.fp
         payment_id = self.resolve_payment(payment_key)
         # AV: ja recebido na data do servico; FA: sempre ultimo dia do mes
-        due = record.data if record.av_pagamento else last_day_of_month(record.data)
+        due = record.data if av else last_day_of_month(record.data)
 
         payload: dict[str, Any] = {
             "data": record.data,

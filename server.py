@@ -68,6 +68,7 @@ from tiny_import import (
     build_history,
     clean_text,
     compact_document_number,
+    is_av_paid,
     last_day_of_month,
     load_state,
     lookup_config_id,
@@ -417,11 +418,10 @@ def api_preview(unit: str):
 
         previews = []
         for r in data.get("records", []):
-            chave   = r.get("id", "?")
-            av_pag  = r.get("avPagamento", "")
-            fp      = r.get("fp", "")
-            pay_key = av_pag if av_pag else fp
-            pay_id  = lookup_config_id(forma_ids, pay_key)
+            chave  = r.get("id", "?")
+            av_pag = r.get("avPagamento", "")
+            fp     = r.get("fp", "")
+            av     = is_av_paid(av_pag)
 
             rec = NormalizedRecord(
                 data=r["data"], modelo=r.get("modelo", ""),
@@ -433,7 +433,9 @@ def api_preview(unit: str):
                 chave_deduplicacao=chave, av_pagamento=av_pag,
             )
 
-            due     = rec.data if av_pag else last_day_of_month(rec.data)
+            pay_key = av_pag if av else fp
+            pay_id  = lookup_config_id(forma_ids, pay_key)
+            due     = rec.data if av else last_day_of_month(rec.data)
             num_doc = compact_document_number(tiny_config, rec)
             forma_display = (
                 f"{_FORMA_NAMES.get(pay_id, str(pay_id))} (ID {pay_id})"
@@ -451,7 +453,7 @@ def api_preview(unit: str):
                 "ocorrencia": "U",
             }
             if pay_id and tiny_config.get("include_forma_recebimento"):
-                payload["formaRecebimento"] = pay_id  # Tiny espera int, nao objeto
+                payload["formaRecebimento"] = pay_id
             if cat := resolve_categoria_id(tiny_config, rec.servico):
                 payload["categoria"] = {"id": cat}
 
