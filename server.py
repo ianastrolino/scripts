@@ -542,6 +542,25 @@ def api_send(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/clear-imported", methods=["POST"])
+@unit_access_required
+def api_clear_imported(unit: str):
+    """Limpa o estado local de importacao (imported.json) para permitir reenvio."""
+    try:
+        state_dir  = _unit_state_dir(unit)
+        state_path = state_dir / "imported.json"
+        if state_path.exists():
+            st = load_state(state_path)
+            count = len(st.get("imported", {}))
+            st["imported"] = {}
+            save_state(state_path, st)
+        else:
+            count = 0
+        return _json({"success": True, "message": f"Estado limpo. {count} registro(s) removidos."})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/suggest-clients", methods=["POST"])
 @unit_access_required
 def api_suggest_clients(unit: str):

@@ -610,13 +610,13 @@ def should_send_accounts_receivable(record: NormalizedRecord, tiny_config: dict[
 
 
 def compact_document_number(config: dict[str, Any], record: NormalizedRecord) -> str:
-    """Gera numero de documento com no maximo 9 caracteres (limite da API Tiny).
-    Formato: DDMMAA + linha com 3 digitos = 9 chars.
-    Exemplo: 150426002 = dia 15, mes 04, ano 26, linha 2.
+    """Gera numero de documento de 9 digitos baseado no conteudo do registro.
+    Usa hash do chave_deduplicacao para garantir unicidade por conteudo,
+    independente do arquivo de origem ou posicao na planilha.
+    Isso evita colisoes entre arquivos diferentes importados na mesma data.
     """
-    year, month, day = record.data.split("-")
-    line = str(record.linha_origem % 1000).zfill(3)
-    return f"{day}{month}{year[-2:]}{line}"
+    h = int(hashlib.md5(record.chave_deduplicacao.encode()).hexdigest(), 16)
+    return str(h % 999_999_999).zfill(9)[:9]
 
 
 def build_history(record: NormalizedRecord) -> str:
@@ -1393,6 +1393,8 @@ def run_server(args: argparse.Namespace) -> int:
                 self._handle_api_map_client()
             elif self.path == "/api/auto-map-clients":
                 self._handle_api_auto_map_clients()
+            elif self.path == "/api/clear-imported":
+                self._handle_api_clear_imported()
             else:
                 self.send_error(404, "Endpoint nao encontrado")
 
@@ -1720,6 +1722,30 @@ def run_server(args: argparse.Namespace) -> int:
                     "success": True,
                     "mapped": mapped,
                     "needs_review": needs_review,
+                }).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode())
+
+        def _handle_api_clear_imported(self):
+            """Limpa o estado local de importacao (imported.json)."""
+            try:
+                state_path = state_dir / "imported.json"
+                if state_path.exists():
+                    st = load_state(state_path)
+                    count = len(st.get("imported", {}))
+                    st["imported"] = {}
+                    save_state(state_path, st)
+                else:
+                    count = 0
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "message": f"Estado limpo. {count} registro(s) removidos.",
                 }).encode())
             except Exception as e:
                 self.send_response(500)

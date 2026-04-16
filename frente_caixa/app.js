@@ -551,6 +551,17 @@ els.confirmSendBtn.addEventListener("click", async () => {
   }
 });
 
+document.querySelector("#clearImportedBtn").addEventListener("click", async () => {
+  if (!confirm("Limpar o historico local de envios?\n\nIsso permite reenviar registros que ja foram enviados anteriormente (por exemplo, apos excluir manualmente do Tiny).\n\nNao remove nada do Tiny, apenas reinicia o controle local.")) return;
+  try {
+    const r = await fetch(`${apiBase}/api/clear-imported`, { method: "POST" });
+    const d = await r.json();
+    alert(d.success ? d.message : `Erro: ${d.error}`);
+  } catch (e) {
+    alert(`Erro de conexao: ${e.message}`);
+  }
+});
+
 document.querySelectorAll(".filter").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".filter").forEach((item) => item.classList.remove("active"));
