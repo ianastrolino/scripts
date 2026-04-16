@@ -40,6 +40,22 @@ const knownTinyClients = new Map();
 const _pathMatch = window.location.pathname.match(/^(\/u\/[^/]+)/);
 const apiBase = _pathMatch ? _pathMatch[1] : "";
 
+/**
+ * Wrapper de fetch para rotas da API.
+ * Trata sessao expirada (401 + session_expired) redirecionando para login
+ * em vez de exibir erro de parse de JSON.
+ */
+async function apiFetch(path, options = {}) {
+  const response = await fetch(path, options);
+  const data = await response.json();
+  if (data.session_expired) {
+    alert("Sua sessao expirou. Voce sera redirecionado para o login.");
+    window.location.href = "/login";
+    throw new Error("session_expired");
+  }
+  return data;
+}
+
 const els = {
   fileInput: document.querySelector("#fileInput"),
   loadSampleBtn: document.querySelector("#loadSampleBtn"),
@@ -465,12 +481,11 @@ els.sendBtn.addEventListener("click", async () => {
   els.sendBtn.textContent = "Carregando...";
 
   try {
-    const response = await fetch(`${apiBase}/api/preview`, {
+    const result = await apiFetch(`${apiBase}/api/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: state.sourceFiles[0] || "manual_ui", records: toSend }),
     });
-    const result = await response.json();
     if (!result.success) { alert(`Erro: ${result.error}`); return; }
 
     _pendingToSend = toSend;
@@ -504,12 +519,11 @@ els.confirmSendBtn.addEventListener("click", async () => {
   els.confirmSendBtn.textContent = "Enviando...";
 
   try {
-    const response = await fetch(`${apiBase}/api/send`, {
+    const result = await apiFetch(`${apiBase}/api/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: state.sourceFiles[0] || "manual_ui", records: _pendingToSend }),
     });
-    const result = await response.json();
 
     if (result.success) {
       const s = result.summary;
@@ -554,11 +568,10 @@ els.confirmSendBtn.addEventListener("click", async () => {
 document.querySelector("#clearImportedBtn").addEventListener("click", async () => {
   if (!confirm("Limpar o historico local de envios?\n\nIsso permite reenviar registros que ja foram enviados anteriormente (por exemplo, apos excluir manualmente do Tiny).\n\nNao remove nada do Tiny, apenas reinicia o controle local.")) return;
   try {
-    const r = await fetch(`${apiBase}/api/clear-imported`, { method: "POST" });
-    const d = await r.json();
+    const d = await apiFetch(`${apiBase}/api/clear-imported`, { method: "POST" });
     alert(d.success ? d.message : `Erro: ${d.error}`);
   } catch (e) {
-    alert(`Erro de conexao: ${e.message}`);
+    if (e.message !== "session_expired") alert(`Erro de conexao: ${e.message}`);
   }
 });
 
@@ -592,6 +605,7 @@ function renderPreviewRows(previews, tbodyEl, summaryEl) {
       <td>${formatDateBr(p.dataVencimento)}</td>
       <td>${p.formaRecebimento}</td>
       <td style="font-size:12px;color:var(--muted)">${p.numeroDocumento}</td>
+      <td style="font-size:11px;color:var(--muted)">${p.servico || "—"}</td>
       <td>${p.jaEnviado ? '<span class="status pending">Ja enviado</span>' : '<span class="status ok">Novo</span>'}</td>
     </tr>
   `).join("");
@@ -640,18 +654,17 @@ els.previewBtn.addEventListener("click", async () => {
   els.previewBtn.textContent = "Simulando...";
 
   try {
-    const response = await fetch(`${apiBase}/api/preview`, {
+    const result = await apiFetch(`${apiBase}/api/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source: state.sourceFiles[0] || "manual_ui", records: toPreview }),
     });
-    const result = await response.json();
     if (!result.success) { alert(`Erro: ${result.error}`); return; }
 
     renderPreviewRows(result.previews, els.previewBody, els.previewSummary);
     openPreviewModal();
   } catch (err) {
-    alert(`Erro de conexao: ${err.message}`);
+    if (err.message !== "session_expired") alert(`Erro de conexao: ${err.message}`);
   } finally {
     els.previewBtn.disabled = false;
     els.previewBtn.textContent = "Simular envio";
@@ -703,12 +716,11 @@ async function mapBuscar(nome) {
   const container = document.querySelector("#mapCandidatos");
   container.innerHTML = `<p class="map-empty">Buscando no Tiny...</p>`;
   try {
-    const res = await fetch(`${apiBase}/api/suggest-clients`, {
+    const data = await apiFetch(`${apiBase}/api/suggest-clients`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nome }),
     });
-    const data = await res.json();
     if (!data.success) throw new Error(data.error);
     renderCandidatos(data.candidates);
   } catch (err) {
@@ -750,12 +762,11 @@ function renderCandidatos(candidates) {
 
 async function mapConfirmar(clienteNome, tinyId) {
   try {
-    const res = await fetch(`${apiBase}/api/map-client`, {
+    const data = await apiFetch(`${apiBase}/api/map-client`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clienteNome, tinyId }),
     });
-    const data = await res.json();
     if (!data.success) throw new Error(data.error);
 
     // Atualiza todos os registros com esse cliente em memoria
@@ -779,12 +790,11 @@ async function autoMapClientes() {
   els.autoMapBtn.textContent = "Mapeando...";
 
   try {
-    const res = await fetch(`${apiBase}/api/auto-map-clients`, {
+    const data = await apiFetch(`${apiBase}/api/auto-map-clients`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ clientes: unmapped, threshold: 0.90 }),
     });
-    const data = await res.json();
     if (!data.success) throw new Error(data.error);
 
     // Aplica os mapeamentos automaticos na memoria

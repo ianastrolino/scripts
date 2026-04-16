@@ -34,7 +34,7 @@ UNITS_CONFIG (JSON):
       "default_tipo_pessoa": "J",
       "numero_documento_prefix": "PLANILHA",
       "aliases": {
-        "servico": {"LAUDO DE VERIFICACA": "LAUDO DE VERIFICACAO"},
+        "servico": {"LAUDO DE VERIFICACA": "LAUDO DE VERIFICACAO", "LAUDO CAUTELAR VERI": "LAUDO CAUTELAR VERIFICACAO", "CAUTELAR COM ANALIS": "CAUTELAR COM ANALISE", "LAUDO CAUTELAR": "VISTORIA CAUTELAR"},
         "fp": {},
         "cliente": {}
       }
@@ -65,6 +65,7 @@ from tiny_import import (
     NormalizedRecord,
     TinyImporter,
     _is_doc_already_registered,
+    apply_alias,
     build_history,
     clean_text,
     compact_document_number,
@@ -146,14 +147,20 @@ def login_required(f):
 
 
 def unit_access_required(f):
-    """Verifica login + acesso a unidade (master ve tudo)."""
+    """Verifica login + acesso a unidade (master ve tudo).
+    Rotas /api/ recebem JSON 401 em vez de redirect HTML quando a sessao expira.
+    """
     @wraps(f)
     def wrapper(*args, **kwargs):
         user = _current_user()
         if not user:
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Sessao expirada. Recarregue a pagina e faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         unit = kwargs.get("unit")
         if not user.get("master") and user.get("unit") != unit:
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Acesso negado a esta unidade."}, 403)
             return Response("Acesso negado", status=403)
         return f(*args, **kwargs)
     return wrapper
@@ -423,10 +430,12 @@ def api_preview(unit: str):
             fp     = r.get("fp", "")
             av     = is_av_paid(av_pag)
 
+            servico_raw = clean_text(r.get("servico", "")).upper()
+            servico = apply_alias(config, "servico", servico_raw)
             rec = NormalizedRecord(
                 data=r["data"], modelo=r.get("modelo", ""),
                 placa=r.get("placa", ""), cliente=r.get("cliente", ""),
-                servico=r.get("servico", ""), fp=fp,
+                servico=servico, fp=fp,
                 preco=str(r.get("preco", "0")),
                 origem_arquivo=r.get("origemArquivo", "manual_ui"),
                 linha_origem=r.get("linhaOrigem", 0),
@@ -465,6 +474,7 @@ def api_preview(unit: str):
                 "formaRecebimento": forma_display,
                 "numeroDocumento": num_doc,
                 "jaEnviado": chave in imported,
+                "servico": rec.servico,
                 "payload": payload,
             })
 
@@ -494,10 +504,12 @@ def api_send(unit: str):
         results: dict[str, list] = {"enviados": [], "pulados": [], "falhas": []}
 
         for r in data.get("records", []):
+            servico_raw = clean_text(r.get("servico", "")).upper()
+            servico = apply_alias(config, "servico", servico_raw)
             rec = NormalizedRecord(
                 data=r["data"], modelo=r["modelo"],
                 placa=r["placa"], cliente=r["cliente"],
-                servico=r["servico"], fp=r["fp"],
+                servico=servico, fp=r["fp"],
                 preco=str(r["preco"]),
                 origem_arquivo=r.get("origemArquivo", "manual_ui"),
                 linha_origem=r.get("linhaOrigem", 0),
