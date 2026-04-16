@@ -407,18 +407,23 @@ def api_info(unit: str):
     ud = UNITS.get(unit, {})
     user = _current_user()
     # Deriva lista de servicos dos categoria_ids configurados
-    categoria_ids = ud.get("categoria_ids", {})
-    servicos = list(categoria_ids.keys()) if categoria_ids else [
-        "LAUDO DE TRANSFERENCIA",
-        "LAUDO CAUTELAR",
-        "CAUTELAR COM ANALISE DE PINTURA",
-        "REVISTORIA",
-        "BAIXA PERMANENTE",
-        "CONSULTA GRAVAME",
-        "EMISSAO CRLV",
-        "PESQUISA AVULSA",
-        "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
-    ]
+    # servicos_pdv tem prioridade; se nao definido, usa chaves de categoria_ids; se vazio, usa fallback
+    servicos_pdv = ud.get("servicos_pdv")
+    if servicos_pdv:
+        servicos = servicos_pdv
+    else:
+        categoria_ids = ud.get("categoria_ids", {})
+        servicos = list(categoria_ids.keys()) if categoria_ids else [
+            "LAUDO DE TRANSFERENCIA",
+            "LAUDO CAUTELAR",
+            "CAUTELAR COM ANALISE DE PINTURA",
+            "REVISTORIA",
+            "BAIXA PERMANENTE",
+            "CONSULTA GRAVAME",
+            "EMISSAO CRLV",
+            "PESQUISA AVULSA",
+            "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
+        ]
     return _json({
         "unidade": ud.get("nome", unit),
         "usuario": session.get("name", ""),
