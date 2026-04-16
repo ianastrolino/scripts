@@ -406,11 +406,19 @@ def api_auth_callback(unit: str):
 def api_info(unit: str):
     ud = UNITS.get(unit, {})
     user = _current_user()
+    # Deriva lista de servicos dos categoria_ids configurados
+    categoria_ids = ud.get("categoria_ids", {})
+    servicos = list(categoria_ids.keys()) if categoria_ids else [
+        "VISTORIA CAUTELAR", "LAUDO DE VERIFICACAO", "LAUDO DE TRANSFERENCIA",
+        "LAUDO CAUTELAR VERIFICACAO", "CAUTELAR COM ANALISE",
+    ]
     return _json({
         "unidade": ud.get("nome", unit),
         "usuario": session.get("name", ""),
         "email": session.get("email", ""),
         "master": bool(user and user.get("master")),
+        "servicos": servicos,
+        "pin_configurado": bool(ud.get("master_pin")),
     })
 
 
@@ -778,6 +786,172 @@ def api_auto_map_clients(unit: str):
             _save_extra_cliente_ids(unit, ids)
 
         return _json({"success": True, "mapped": mapped, "needs_review": needs_review})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Helpers: caixa do dia (PDV)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _load_caixa_dia(unit: str) -> dict[str, Any]:
+    p = _unit_state_dir(unit) / "caixa_dia.json"
+    today = dt.date.today().isoformat()
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+            if data.get("data") == today:
+                return data
+        except Exception:
+            pass
+    return {"data": today, "lancamentos": []}
+
+
+def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
+    p = _unit_state_dir(unit) / "caixa_dia.json"
+    tmp = p.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+        tmp.replace(p)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _verify_unit_pin(unit: str, pin: str) -> bool:
+    stored = str(UNITS.get(unit, {}).get("master_pin", ""))
+    return bool(stored) and secrets.compare_digest(pin.strip(), stored)
+
+
+def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
+    totals: dict[str, float] = {"dinheiro": 0.0, "debito": 0.0, "credito": 0.0, "pix": 0.0}
+    for lc in lancamentos:
+        fp = lc.get("fp", "")
+        if fp in totals:
+            totals[fp] += float(lc.get("valor", 0))
+    totals["total"] = sum(totals.values())
+    return totals
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: caixa do dia (PDV)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/caixa")
+@unit_access_required
+def unit_caixa(unit: str):
+    return send_from_directory(UI_DIR, "caixa.html")
+
+
+@app.route("/u/<unit>/api/caixa/estado")
+@unit_access_required
+def api_caixa_estado(unit: str):
+    state = _load_caixa_dia(unit)
+    return _json({
+        "success": True,
+        "data": state["data"],
+        "lancamentos": state["lancamentos"],
+        "totais": _caixa_totals(state["lancamentos"]),
+    })
+
+
+@app.route("/u/<unit>/api/caixa/lancar", methods=["POST"])
+@unit_access_required
+def api_caixa_lancar(unit: str):
+    try:
+        data    = request.get_json(force=True, silent=True) or {}
+        placa   = clean_text(data.get("placa", "")).upper()
+        cliente = clean_text(data.get("cliente", ""))
+        servico = clean_text(data.get("servico", "")).upper()
+        valor   = float(data.get("valor", 0))
+        fp      = data.get("fp", "")
+
+        if not placa:
+            return _json({"success": False, "error": "Placa obrigatoria."}, 400)
+        if not cliente:
+            return _json({"success": False, "error": "Cliente obrigatorio."}, 400)
+        if not servico:
+            return _json({"success": False, "error": "Servico obrigatorio."}, 400)
+        if valor <= 0:
+            return _json({"success": False, "error": "Valor deve ser maior que zero."}, 400)
+        if fp not in ("dinheiro", "debito", "credito", "pix"):
+            return _json({"success": False, "error": "Forma de pagamento invalida."}, 400)
+
+        now = dt.datetime.now()
+        lancamento = {
+            "id": secrets.token_hex(8),
+            "hora": now.strftime("%H:%M"),
+            "timestamp": now.isoformat(),
+            "placa": placa,
+            "cliente": cliente,
+            "servico": servico,
+            "valor": round(valor, 2),
+            "fp": fp,
+        }
+        state = _load_caixa_dia(unit)
+        state["lancamentos"].append(lancamento)
+        _save_caixa_dia(unit, state)
+
+        return _json({
+            "success": True,
+            "lancamento": lancamento,
+            "totais": _caixa_totals(state["lancamentos"]),
+            "total_lancamentos": len(state["lancamentos"]),
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/editar/<lancamento_id>", methods=["PUT"])
+@unit_access_required
+def api_caixa_editar(unit: str, lancamento_id: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not _verify_unit_pin(unit, data.get("pin", "")):
+            return _json({"success": False, "error": "PIN incorreto."}, 403)
+
+        placa   = clean_text(data.get("placa", "")).upper()
+        cliente = clean_text(data.get("cliente", ""))
+        servico = clean_text(data.get("servico", "")).upper()
+        valor   = float(data.get("valor", 0))
+        fp      = data.get("fp", "")
+
+        if not all([placa, cliente, servico]) or valor <= 0 or fp not in ("dinheiro", "debito", "credito", "pix"):
+            return _json({"success": False, "error": "Dados invalidos."}, 400)
+
+        state = _load_caixa_dia(unit)
+        for lc in state["lancamentos"]:
+            if lc["id"] == lancamento_id:
+                lc.update({"placa": placa, "cliente": cliente, "servico": servico,
+                            "valor": round(valor, 2), "fp": fp})
+                _save_caixa_dia(unit, state)
+                return _json({"success": True, "totais": _caixa_totals(state["lancamentos"])})
+
+        return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/excluir/<lancamento_id>", methods=["DELETE"])
+@unit_access_required
+def api_caixa_excluir(unit: str, lancamento_id: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not _verify_unit_pin(unit, data.get("pin", "")):
+            return _json({"success": False, "error": "PIN incorreto."}, 403)
+
+        state = _load_caixa_dia(unit)
+        antes = len(state["lancamentos"])
+        state["lancamentos"] = [lc for lc in state["lancamentos"] if lc["id"] != lancamento_id]
+        if len(state["lancamentos"]) == antes:
+            return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
+
+        _save_caixa_dia(unit, state)
+        return _json({
+            "success": True,
+            "totais": _caixa_totals(state["lancamentos"]),
+            "total_lancamentos": len(state["lancamentos"]),
+        })
     except Exception as exc:
         return _json({"success": False, "error": str(exc)}, 500)
 

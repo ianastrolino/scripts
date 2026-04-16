@@ -892,6 +892,8 @@ fetch(`${apiBase}/api/info`)
     if (apiBase) {
       const logoutLink = document.getElementById("logoutLink");
       if (logoutLink) logoutLink.style.display = "";
+      const linkCaixa = document.getElementById("linkCaixa");
+      if (linkCaixa) linkCaixa.href = `${apiBase}/caixa`;
     }
   })
   .catch(() => {});
