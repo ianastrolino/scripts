@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Caixa do Dia</title>
+    <style>
+      /* ── Reset & Base ─────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg:        #f0f2f5;
+        --surface:   #ffffff;
+        --ink:       #111827;
+        --muted:     #6b7280;
+        --line:      #e5e7eb;
+        --radius:    12px;
+        --radius-lg: 20px;
+        --shadow:    0 2px 12px rgba(0,0,0,.08);
+        --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
+
+        /* Astro brand */
+        --astro:     #d32f2f;
+        --astro-dk:  #b71c1c;
+
+        /* Payment colors */
+        --c-dinheiro: #16a34a;
+        --c-debito:   #1d4ed8;
+        --c-credito:  #7c3aed;
+        --c-pix:      #00897b;
+        --c-faturado: #92400e;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      /* ── Header ──────────────────────────────────────────── */
+      .header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        padding: 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 70px;
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        box-shadow: var(--shadow);
+      }
+
+      .header-brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .header-brand img {
+        height: 42px;
+        width: auto;
+      }
+
+      .header-brand-text {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header-brand-text strong {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--ink);
+        letter-spacing: -.01em;
+      }
+
+      .header-brand-text span {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .header-nav {
+        display: flex;
+        gap: 8px;
+        background: var(--bg);
+        padding: 5px;
+        border-radius: 10px;
+      }
+
+      .nav-pill {
+        padding: 8px 20px;
+        border-radius: 8px;
+        border: none;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        color: var(--muted);
+        background: transparent;
+        transition: all .18s;
+      }
+
+      .nav-pill:hover { background: var(--surface); color: var(--ink); }
+
+      .nav-pill.active {
+        background: var(--astro);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(211,47,47,.35);
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .user-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        background: var(--bg);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .user-avatar {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: var(--astro);
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700;
+      }
+
+      .btn-logout {
+        padding: 7px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all .15s;
+      }
+
+      .btn-logout:hover { border-color: var(--astro); color: var(--astro); }
+
+      /* ── Layout principal ────────────────────────────────── */
+      .workspace {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 24px;
+        padding: 24px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      /* ── Card base ───────────────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .card-header-icon {
+        width: 34px; height: 34px;
+        border-radius: 10px;
+        background: #fef2f2;
+        color: var(--astro);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px;
+      }
+
+      .card-header h2 {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+
+      .card-body { padding: 22px; }
+
+      /* ── Formulário ──────────────────────────────────────── */
+      .form-panel { display: flex; flex-direction: column; }
+
+      .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+
+      .field label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .field input, .field select {
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 15px;
+        font-family: inherit;
+        background: #fafafa;
+        color: var(--ink);
+        transition: border-color .15s, background .15s;
+        width: 100%;
+      }
+
+      .field input:focus, .field select:focus {
+        outline: none;
+        border-color: var(--astro);
+        background: #fff;
+      }
+
+      .field input.placa {
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        font-weight: 700;
+        font-size: 18px;
+      }
+
+      .valor-row {
+        position: relative;
+      }
+
+      .valor-prefix {
+        position: absolute;
+        left: 14px; top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--muted);
+        pointer-events: none;
+      }
+
+      .valor-row input { padding-left: 42px !important; font-size: 20px; font-weight: 700; }
+
+      /* ── Botões de pagamento ─────────────────────────────── */
+      .fp-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      .fp-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 4px;
+      }
+
+      .fp-card {
+        position: relative;
+        border: 2px solid transparent;
+        border-radius: 14px;
+        padding: 14px 10px;
+        cursor: pointer;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        transition: all .18s;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      .fp-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        transition: opacity .18s;
+        border-radius: 12px;
+      }
+
+      .fp-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+
+      .fp-card:focus { outline: 2px solid var(--astro); outline-offset: 2px; }
+
+      /* Dinheiro */
+      .fp-card[data-fp="dinheiro"] { --fp-color: var(--c-dinheiro); }
+      .fp-card[data-fp="dinheiro"]::before { background: linear-gradient(135deg, #16a34a, #15803d); }
+
+      /* Débito */
+      .fp-card[data-fp="debito"] { --fp-color: var(--c-debito); }
+      .fp-card[data-fp="debito"]::before { background: linear-gradient(135deg, #1d4ed8, #1e40af); }
+
+      /* Crédito */
+      .fp-card[data-fp="credito"] { --fp-color: var(--c-credito); }
+      .fp-card[data-fp="credito"]::before { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+
+      /* PIX */
+      .fp-card[data-fp="pix"] { --fp-color: var(--c-pix); }
+      .fp-card[data-fp="pix"]::before { background: linear-gradient(135deg, #00897b, #00796b); }
+
+      /* Faturado */
+      .fp-card[data-fp="faturado"] { --fp-color: var(--c-faturado); grid-column: 2 / 4; flex-direction: row; justify-content: center; padding: 12px; }
+      .fp-card[data-fp="faturado"]::before { background: linear-gradient(135deg, #b45309, #92400e); }
+
+      .fp-card.selected {
+        border-color: var(--fp-color);
+        box-shadow: 0 4px 20px color-mix(in srgb, var(--fp-color) 30%, transparent);
+      }
+
+      .fp-card.selected::before { opacity: 1; }
+
+      .fp-icon-wrap {
+        width: 40px; height: 40px;
+        border-radius: 12px;
+        background: white;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+        transition: all .18s;
+        position: relative;
+        z-index: 1;
+        flex-shrink: 0;
+      }
+
+      .fp-card.selected .fp-icon-wrap { background: rgba(255,255,255,.2); box-shadow: none; }
+
+      .fp-name {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--ink);
+        position: relative;
+        z-index: 1;
+        transition: color .18s;
+      }
+
+      .fp-card.selected .fp-name { color: #fff; }
+
+      .fp-card[data-fp="faturado"] .fp-name { font-size: 13px; margin-left: 8px; }
+
+      /* ── Botão lançar ─────────────────────────────────────── */
+      .btn-lancar {
+        width: 100%;
+        margin-top: 8px;
+        padding: 16px;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--astro), var(--astro-dk));
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(211,47,47,.35);
+        transition: all .18s;
+      }
+
+      .btn-lancar:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 24px rgba(211,47,47,.45);
+      }
+
+      .btn-lancar:disabled {
+        background: #d1d5db;
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      .form-msg {
+        text-align: center;
+        font-size: 13px;
+        min-height: 20px;
+        margin-top: 8px;
+        color: var(--c-dinheiro);
+        font-weight: 600;
+      }
+
+      /* ── Painel direito ───────────────────────────────────── */
+      .right-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      /* ── Cards de totais ─────────────────────────────────── */
+      .totals-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+
+      .total-tile {
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .total-tile::after {
+        content: '';
+        position: absolute;
+        right: -10px; bottom: -10px;
+        width: 60px; height: 60px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+      }
+
+      .total-tile .tt-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .07em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,.8);
+        margin-bottom: 6px;
+        display: block;
+      }
+
+      .total-tile .tt-value {
+        font-size: 20px;
+        font-weight: 800;
+        color: #fff;
+        display: block;
+        letter-spacing: -.02em;
+      }
+
+      .total-tile .tt-icon {
+        position: absolute;
+        right: 14px; top: 50%;
+        transform: translateY(-50%);
+        font-size: 28px;
+        opacity: .25;
+      }
+
+      .tile-dinheiro { background: linear-gradient(135deg, #16a34a, #15803d); }
+      .tile-debito   { background: linear-gradient(135deg, #1d4ed8, #1e40af); }
+      .tile-credito  { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+      .tile-pix      { background: linear-gradient(135deg, #00897b, #00796b); }
+      .tile-faturado { background: linear-gradient(135deg, #b45309, #92400e); }
+
+      .tile-avista {
+        grid-column: 1 / -1;
+        background: linear-gradient(135deg, #111827, #1f2937);
+        padding: 18px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .tile-avista .tt-value { font-size: 28px; }
+
+      .tile-avista-right { text-align: right; }
+      .tile-avista-right .tt-count { font-size: 13px; color: rgba(255,255,255,.5); font-weight: 600; }
+
+      /* ── Tabela ──────────────────────────────────────────── */
+      .table-card { flex: 1; }
+
+      .table-scroll { overflow-y: auto; max-height: 420px; }
+
+      table.ledger {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .ledger th {
+        position: sticky;
+        top: 0;
+        background: #f8fafc;
+        border-bottom: 2px solid var(--line);
+        padding: 11px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+        z-index: 2;
+      }
+
+      .ledger td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: middle;
+      }
+
+      .ledger tr:last-child td { border-bottom: none; }
+
+      .ledger tr:hover td { background: #f9fafb; }
+
+      .placa-tag {
+        display: inline-block;
+        background: var(--ink);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .1em;
+        padding: 4px 10px;
+        border-radius: 6px;
+      }
+
+      .valor-cell {
+        font-weight: 700;
+        font-size: 15px;
+        text-align: right;
+      }
+
+      .fp-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .fp-chip.dinheiro { background: #dcfce7; color: #16a34a; }
+      .fp-chip.debito   { background: #dbeafe; color: #1d4ed8; }
+      .fp-chip.credito  { background: #ede9fe; color: #7c3aed; }
+      .fp-chip.pix      { background: #ccfbf1; color: #00897b; }
+      .fp-chip.faturado { background: #fef3c7; color: #b45309; }
+
+      .action-btn {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        padding: 6px 8px;
+        border-radius: 8px;
+        font-size: 15px;
+        transition: all .15s;
+      }
+
+      .action-btn:hover { background: var(--bg); color: var(--astro); }
+
+      .empty-ledger {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--muted);
+      }
+
+      .empty-ledger .empty-icon { font-size: 52px; margin-bottom: 14px; }
+      .empty-ledger p { font-size: 15px; }
+      .empty-ledger small { font-size: 13px; }
+
+      /* ── Modais ──────────────────────────────────────────── */
+      .overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,.5);
+        backdrop-filter: blur(4px);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .overlay.open { display: flex; }
+
+      .modal {
+        background: var(--surface);
+        border-radius: 20px;
+        padding: 32px;
+        width: 380px;
+        max-width: calc(100vw - 32px);
+        box-shadow: 0 24px 64px rgba(0,0,0,.2);
+        animation: modal-in .2s ease;
+      }
+
+      .modal.modal-lg { width: 460px; }
+
+      @keyframes modal-in {
+        from { opacity: 0; transform: translateY(16px) scale(.97); }
+        to   { opacity: 1; transform: none; }
+      }
+
+      .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+      .modal p  { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+
+      .modal-input {
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 22px;
+        letter-spacing: .3em;
+        width: 100%;
+        text-align: center;
+        font-family: inherit;
+        margin-bottom: 8px;
+        transition: border-color .15s;
+      }
+
+      .modal-input:focus { outline: none; border-color: var(--astro); }
+
+      .modal-err {
+        color: var(--astro);
+        font-size: 13px;
+        min-height: 18px;
+        margin-bottom: 14px;
+        font-weight: 600;
+      }
+
+      .modal-actions { display: flex; gap: 10px; }
+
+      .btn-cancel {
+        flex: 1; padding: 13px;
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--ink);
+        font-size: 14px; font-weight: 600;
+        cursor: pointer;
+        transition: all .15s;
+        font-family: inherit;
+      }
+
+      .btn-cancel:hover { border-color: var(--muted); }
+
+      .btn-confirm {
+        flex: 1; padding: 13px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--astro), var(--astro-dk));
+        color: #fff;
+        font-size: 14px; font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(211,47,47,.3);
+        transition: all .15s;
+        font-family: inherit;
+      }
+
+      .btn-confirm:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(211,47,47,.45); }
+      .btn-confirm:disabled { background: #d1d5db; box-shadow: none; }
+
+      /* Edit modal fields */
+      .edit-field { margin-bottom: 14px; }
+      .edit-field label {
+        display: block;
+        font-size: 11px; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 5px;
+      }
+      .edit-field input, .edit-field select {
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 15px;
+        font-family: inherit;
+        width: 100%;
+        background: #fafafa;
+        transition: border-color .15s;
+      }
+      .edit-field input:focus, .edit-field select:focus {
+        outline: none; border-color: var(--astro);
+      }
+      .edit-field input.placa {
+        text-transform: uppercase;
+        letter-spacing: .12em;
+        font-weight: 700;
+      }
+
+      /* FP mini buttons no modal */
+      .fp-mini-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .fp-mini {
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 6px;
+        background: var(--bg);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        transition: all .15s;
+        font-family: inherit;
+        color: var(--ink);
+      }
+
+      .fp-mini:hover { border-color: var(--muted); }
+
+      .fp-mini[data-fp="dinheiro"].sel { background: var(--c-dinheiro); border-color: var(--c-dinheiro); color: #fff; }
+      .fp-mini[data-fp="debito"].sel   { background: var(--c-debito);   border-color: var(--c-debito);   color: #fff; }
+      .fp-mini[data-fp="credito"].sel  { background: var(--c-credito);  border-color: var(--c-credito);  color: #fff; }
+      .fp-mini[data-fp="pix"].sel      { background: var(--c-pix);      border-color: var(--c-pix);      color: #fff; }
+      .fp-mini[data-fp="faturado"].sel { background: var(--c-faturado); border-color: var(--c-faturado); color: #fff; grid-column: 2 / 4; }
+      .fp-mini[data-fp="faturado"]     { grid-column: 2 / 4; }
+    </style>
+  </head>
+  <body>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+        <div class="header-brand-text">
+          <strong>Caixa do Dia</strong>
+          <span id="unidadeLabel">Lancamentos a vista</span>
+        </div>
+      </div>
+
+      <div class="header-nav">
+        <a class="nav-pill active" href="">Caixa do Dia</a>
+        <a class="nav-pill" id="linkFechamento" href="">Fechamento</a>
+      </div>
+
+      <div class="header-right">
+        <div class="user-chip">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <span id="userLabel"></span>
+        </div>
+        <a class="btn-logout" href="/logout">Sair</a>
+      </div>
+    </header>
+
+    <!-- Workspace -->
+    <div class="workspace">
+
+      <!-- Coluna esquerda: formulário -->
+      <div class="form-panel">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-icon">➕</div>
+            <h2>Novo lancamento</h2>
+          </div>
+          <div class="card-body">
+
+            <div class="field">
+              <label for="fPlaca">Placa do veiculo</label>
+              <input id="fPlaca" class="placa" type="text" maxlength="8"
+                     placeholder="ABC1D23" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="field">
+              <label for="fCliente">Nome do cliente</label>
+              <input id="fCliente" type="text" placeholder="Digite o nome" autocomplete="off">
+            </div>
+
+            <div class="field">
+              <label for="fServico">Servico</label>
+              <select id="fServico">
+                <option value="">Selecione o servico...</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="fValor">Valor recebido</label>
+              <div class="valor-row">
+                <span class="valor-prefix">R$</span>
+                <input id="fValor" type="number" min="0" step="0.01"
+                       placeholder="0,00" autocomplete="off">
+              </div>
+            </div>
+
+            <div class="fp-label">Forma de pagamento</div>
+            <div class="fp-grid" id="fpGrid">
+              <button type="button" class="fp-card" data-fp="dinheiro" tabindex="0">
+                <div class="fp-icon-wrap">💵</div>
+                <span class="fp-name">Dinheiro</span>
+              </button>
+              <button type="button" class="fp-card" data-fp="debito" tabindex="0">
+                <div class="fp-icon-wrap">💳</div>
+                <span class="fp-name">Debito</span>
+              </button>
+              <button type="button" class="fp-card" data-fp="credito" tabindex="0">
+                <div class="fp-icon-wrap">💳</div>
+                <span class="fp-name">Credito</span>
+              </button>
+              <button type="button" class="fp-card" data-fp="pix" tabindex="0">
+                <div class="fp-icon-wrap">⚡</div>
+                <span class="fp-name">PIX</span>
+              </button>
+              <button type="button" class="fp-card" data-fp="faturado" tabindex="0">
+                <div class="fp-icon-wrap">🧾</div>
+                <span class="fp-name">Faturado</span>
+              </button>
+            </div>
+
+            <button id="btnLancar" class="btn-lancar" type="button" disabled>
+              Registrar lancamento
+            </button>
+            <div id="formMsg" class="form-msg"></div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna direita -->
+      <div class="right-panel">
+
+        <!-- Totais -->
+        <div class="totals-grid">
+          <div class="total-tile tile-dinheiro">
+            <span class="tt-label">Dinheiro</span>
+            <span class="tt-value" id="totDinheiro">R$ 0,00</span>
+            <span class="tt-icon">💵</span>
+          </div>
+          <div class="total-tile tile-debito">
+            <span class="tt-label">Debito</span>
+            <span class="tt-value" id="totDebito">R$ 0,00</span>
+            <span class="tt-icon">💳</span>
+          </div>
+          <div class="total-tile tile-credito">
+            <span class="tt-label">Credito</span>
+            <span class="tt-value" id="totCredito">R$ 0,00</span>
+            <span class="tt-icon">💳</span>
+          </div>
+          <div class="total-tile tile-pix">
+            <span class="tt-label">PIX</span>
+            <span class="tt-value" id="totPix">R$ 0,00</span>
+            <span class="tt-icon">⚡</span>
+          </div>
+          <div class="total-tile tile-faturado">
+            <span class="tt-label">Faturado</span>
+            <span class="tt-value" id="totFaturado">R$ 0,00</span>
+            <span class="tt-icon">🧾</span>
+          </div>
+          <div class="total-tile tile-avista">
+            <div>
+              <span class="tt-label">Total a vista</span>
+              <span class="tt-value" id="totAvista">R$ 0,00</span>
+            </div>
+            <div class="tile-avista-right">
+              <span class="tt-label">Lancamentos</span>
+              <span class="tt-count" id="totCount">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabela -->
+        <div class="card table-card">
+          <div class="card-header">
+            <div class="card-header-icon">📋</div>
+            <h2 id="tableTitle">Lancamentos de hoje</h2>
+          </div>
+          <div class="table-scroll">
+            <div class="empty-ledger" id="emptyState">
+              <div class="empty-icon">🧾</div>
+              <p>Nenhum lancamento hoje.</p>
+              <small>Preencha o formulario ao lado para comecar.</small>
+            </div>
+            <table class="ledger" id="pdvTable" style="display:none;">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hora</th>
+                  <th>Placa</th>
+                  <th>Cliente</th>
+                  <th>Servico</th>
+                  <th style="text-align:right">Valor</th>
+                  <th>Pgto</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="pdvBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Modal PIN (excluir) -->
+    <div class="overlay" id="pinModal">
+      <div class="modal">
+        <h3 id="pinModalTitle">Confirmar exclusao</h3>
+        <p id="pinModalDesc">Digite o PIN master para excluir.</p>
+        <input class="modal-input" id="pinInput" type="password" maxlength="8" placeholder="••••" autocomplete="off">
+        <div class="modal-err" id="pinError"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="pinCancelBtn">Cancelar</button>
+          <button class="btn-confirm" id="pinConfirmBtn">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Editar -->
+    <div class="overlay" id="editModal">
+      <div class="modal modal-lg">
+        <h3>Editar lancamento</h3>
+        <p>Altere os dados e confirme com o PIN master.</p>
+        <input type="hidden" id="editId">
+
+        <div class="edit-field">
+          <label>Placa</label>
+          <input id="ePlaca" class="placa" type="text" maxlength="8" autocomplete="off">
+        </div>
+        <div class="edit-field">
+          <label>Cliente</label>
+          <input id="eCliente" type="text" autocomplete="off">
+        </div>
+        <div class="edit-field">
+          <label>Servico</label>
+          <select id="eServico"></select>
+        </div>
+        <div class="edit-field">
+          <label>Valor</label>
+          <div class="valor-row">
+            <span class="valor-prefix">R$</span>
+            <input id="eValor" type="number" min="0" step="0.01" autocomplete="off" style="padding-left:42px;font-size:20px;font-weight:700;">
+          </div>
+        </div>
+        <div class="edit-field">
+          <label>Forma de pagamento</label>
+          <div class="fp-mini-grid" id="editFpMini">
+            <button type="button" class="fp-mini" data-fp="dinheiro">💵 Dinheiro</button>
+            <button type="button" class="fp-mini" data-fp="debito">💳 Debito</button>
+            <button type="button" class="fp-mini" data-fp="credito">💳 Credito</button>
+            <button type="button" class="fp-mini" data-fp="pix">⚡ PIX</button>
+            <button type="button" class="fp-mini" data-fp="faturado">🧾 Faturado</button>
+          </div>
+        </div>
+        <div class="edit-field">
+          <label>PIN master</label>
+          <input class="modal-input" id="ePinInput" type="password" maxlength="8" placeholder="••••" autocomplete="off" style="font-size:20px;letter-spacing:.3em;text-align:center;">
+        </div>
+        <div class="modal-err" id="editError"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="editCancelBtn">Cancelar</button>
+          <button class="btn-confirm" id="editConfirmBtn">Salvar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="caixa.js"></script>
+    <script>
+      // Patch: rebind fp-grid e edit modal para o layout2
+      document.addEventListener("DOMContentLoaded", () => {
+        // FP grid principal
+        document.getElementById("fpGrid").querySelectorAll(".fp-card").forEach(btn => {
+          btn.addEventListener("click", () => {
+            state.fpSelecionado = btn.dataset.fp;
+            document.getElementById("fpGrid").querySelectorAll(".fp-card")
+              .forEach(b => b.classList.toggle("selected", b.dataset.fp === btn.dataset.fp));
+            validarFormulario();
+          });
+        });
+        // FP mini (modal editar)
+        document.getElementById("editFpMini").querySelectorAll(".fp-mini").forEach(btn => {
+          btn.addEventListener("click", () => {
+            state.editFpSelecionado = btn.dataset.fp;
+            document.getElementById("editFpMini").querySelectorAll(".fp-mini")
+              .forEach(b => b.classList.toggle("sel", b.dataset.fp === btn.dataset.fp));
+          });
+        });
+      });
+
+      // Override abrirEditar para usar fp-mini no layout2
+      const _origAbrirEditar = abrirEditar;
+      function abrirEditar(id) {
+        _origAbrirEditar(id);
+        const lc = state.lancamentos.find(l => l.id === id);
+        if (!lc) return;
+        document.getElementById("editFpMini").querySelectorAll(".fp-mini")
+          .forEach(b => b.classList.toggle("sel", b.dataset.fp === lc.fp));
+      }
+    </script>
+  </body>
+</html>

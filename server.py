@@ -856,6 +856,12 @@ def unit_caixa(unit: str):
     return send_from_directory(UI_DIR, "caixa.html")
 
 
+@app.route("/u/<unit>/caixa2")
+@unit_access_required
+def unit_caixa2(unit: str):
+    return send_from_directory(UI_DIR, "caixa2.html")
+
+
 @app.route("/u/<unit>/api/caixa/estado")
 @unit_access_required
 def api_caixa_estado(unit: str):
