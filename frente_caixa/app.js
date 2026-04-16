@@ -47,7 +47,16 @@ const apiBase = _pathMatch ? _pathMatch[1] : "";
  */
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, options);
-  const data = await response.json();
+  const text = await response.text();
+  if (!text) {
+    throw new Error(`Servidor retornou resposta vazia (HTTP ${response.status}). Tente novamente.`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Resposta invalida do servidor (HTTP ${response.status}): ${text.substring(0, 200)}`);
+  }
   if (data.session_expired) {
     alert("Sua sessao expirou. Voce sera redirecionado para o login.");
     window.location.href = "/login";
@@ -516,7 +525,7 @@ els.confirmSendBtn.addEventListener("click", async () => {
   if (!_pendingToSend.length) return;
 
   els.confirmSendBtn.disabled = true;
-  const BATCH_SIZE = 15; // evita timeout do Railway (~30s por requisicao)
+  const BATCH_SIZE = 5; // evita timeout do Railway (Gunicorn 60s; cada registro = 3 chamadas Tiny)
   const source = state.sourceFiles[0] || "manual_ui";
   const total = { enviados: [], pulados: [], falhas: [] };
   let tokenError = false;
