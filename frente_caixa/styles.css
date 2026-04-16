@@ -75,12 +75,12 @@ button:disabled {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-width: 230px;
+  gap: 16px;
+  min-width: 280px;
 }
 
 .brand-mark {
-  height: 48px;
+  height: 36px;
   width: auto;
   object-fit: contain;
 }
