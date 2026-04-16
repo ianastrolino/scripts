@@ -527,7 +527,7 @@ els.confirmSendBtn.addEventListener("click", async () => {
   if (!_pendingToSend.length) return;
 
   els.confirmSendBtn.disabled = true;
-  const BATCH_SIZE = 5; // evita timeout do Railway (Gunicorn 60s; cada registro = 3 chamadas Tiny)
+  const BATCH_SIZE = 20; // servidor processa em paralelo (5 threads); Gunicorn timeout=120s
   const source = state.sourceFiles[0] || "manual_ui";
   const total = { enviados: [], pulados: [], falhas: [] };
   let tokenError = false;

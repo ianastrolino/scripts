@@ -49,6 +49,7 @@ import json
 import os
 import secrets
 import sys
+import threading
 import traceback
 import urllib.parse
 from dataclasses import asdict
@@ -524,12 +525,16 @@ def api_send(unit: str):
         importer   = TinyImporter(config, state_dir)
         results: dict[str, list] = {"enviados": [], "pulados": [], "falhas": []}
 
-        for r in data.get("records", []):
+        # Lock protege imported dict e results de acessos concorrentes entre threads
+        lock = threading.Lock()
+
+        def _process_one(r: dict) -> None:
+            """Processa um unico registro. Executado em thread pool."""
             servico_raw = clean_text(r.get("servico", "")).upper()
             servico = apply_alias(config, "servico", servico_raw)
             rec = NormalizedRecord(
-                data=r["data"], modelo=r["modelo"],
-                placa=r["placa"], cliente=r["cliente"],
+                data=r["data"], modelo=r.get("modelo", ""),
+                placa=r.get("placa", ""), cliente=r["cliente"],
                 servico=servico, fp=r["fp"],
                 preco=str(r["preco"]),
                 origem_arquivo=r.get("origemArquivo", "manual_ui"),
@@ -540,39 +545,48 @@ def api_send(unit: str):
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
 
-            # Camada 1: pré-check local — pula se já foi enviado nesta sessão/importação
-            if rec.chave_deduplicacao in imported:
-                results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja importado"})
-                continue
+            # Camada 1: check local (thread-safe via lock)
+            with lock:
+                if rec.chave_deduplicacao in imported:
+                    results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja importado"})
+                    return
 
             try:
-                # create_accounts_receivable já faz GET /contas-receber antes do POST
-                # (camada 2: verifica no Tiny se já existe pelo numeroDocumento)
                 resp = importer.create_accounts_receivable(rec)
-                imported[rec.chave_deduplicacao] = {
-                    "arquivo": rec.origem_arquivo,
-                    "linha": rec.linha_origem,
-                    "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
-                    "resposta": resp,
-                }
-                save_state(state_path, st)
-                results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
-            except Exception as exc:
-                if _is_doc_already_registered(exc):
+                with lock:
                     imported[rec.chave_deduplicacao] = {
                         "arquivo": rec.origem_arquivo,
                         "linha": rec.linha_origem,
                         "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
-                        "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
+                        "resposta": resp,
                     }
-                    save_state(state_path, st)
-                    results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
-                else:
-                    results["falhas"].append({
-                        "chave": rec.chave_deduplicacao,
-                        "cliente": rec.cliente,
-                        "erro": str(exc),
-                    })
+                    results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
+            except Exception as exc:
+                with lock:
+                    if _is_doc_already_registered(exc):
+                        imported[rec.chave_deduplicacao] = {
+                            "arquivo": rec.origem_arquivo,
+                            "linha": rec.linha_origem,
+                            "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                            "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
+                        }
+                        results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
+                    else:
+                        results["falhas"].append({
+                            "chave": rec.chave_deduplicacao,
+                            "cliente": rec.cliente,
+                            "erro": str(exc),
+                        })
+
+        # Processa todos os registros do lote em paralelo (5 threads concorrentes)
+        # Cada thread faz chamadas de I/O ao Tiny de forma independente
+        from concurrent.futures import ThreadPoolExecutor
+        records = data.get("records", [])
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            list(pool.map(_process_one, records))
+
+        # Salva estado uma unica vez apos processar todos (escrita atomica)
+        save_state(state_path, st)
 
         return _json({
             "success": True, "summary": results,
