@@ -22,9 +22,10 @@ UNITS_CONFIG (JSON):
       "client_secret": "...",
       "refresh_token": "...",
       "redirect_uri": "https://app.railway.app/u/moema/callback",
-      "forma_recebimento_ids": {"FA": 802165201, "dinheiro": 556498207, ...},
+      "forma_recebimento_ids": {"FA": 802165201, "dinheiro": 556498207, "debito": 556498211, "credito": 556498209, "pix": 556498217},
       "cliente_ids": {"MARIN IMPORT": 566890464, ...},
       "categoria_id": null,
+      "categoria_ids": {"VISTORIA CAUTELAR": 802154986, "LAUDO DE TRANSFERENCIA": 802154835, "LAUDO DE VERIFICACAO": 842630772, "LAUDO CAUTELAR VERIFICACAO": 842630772, "CAUTELAR COM ANALISE": 842630772},
       "vencimento_dias": 0,
       "vencimento_tipo": "ultimo_dia_mes",
       "include_forma_recebimento": true,
@@ -63,15 +64,17 @@ from tiny_import import (
     DEFAULT_CONFIG,
     NormalizedRecord,
     TinyImporter,
+    _is_doc_already_registered,
     build_history,
     clean_text,
     compact_document_number,
-    due_date_for_record,
+    last_day_of_month,
     load_state,
     lookup_config_id,
     merge_config,
     money_as_float,
     record_key,
+    resolve_categoria_id,
     save_state,
     similarity_score,
 )
@@ -185,7 +188,7 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
 
     for field in (
         "client_id", "client_secret", "refresh_token", "redirect_uri",
-        "forma_recebimento_ids", "cliente_ids", "categoria_id",
+        "forma_recebimento_ids", "cliente_ids", "categoria_id", "categoria_ids",
         "vencimento_dias", "vencimento_tipo", "numero_documento_prefix",
         "auto_create_contacts", "require_payment_mapping",
         "include_forma_recebimento", "default_tipo_pessoa",
@@ -430,7 +433,7 @@ def api_preview(unit: str):
                 chave_deduplicacao=chave, av_pagamento=av_pag,
             )
 
-            due     = rec.data if av_pag else due_date_for_record(rec, tiny_config)
+            due     = rec.data if av_pag else last_day_of_month(rec.data)
             num_doc = compact_document_number(tiny_config, rec)
             forma_display = (
                 f"{_FORMA_NAMES.get(pay_id, str(pay_id))} (ID {pay_id})"
@@ -449,8 +452,8 @@ def api_preview(unit: str):
             }
             if pay_id and tiny_config.get("include_forma_recebimento"):
                 payload["formaRecebimento"] = pay_id  # Tiny espera int, nao objeto
-            if cat := tiny_config.get("categoria_id"):
-                payload["categoria"] = {"id": int(cat)}
+            if cat := resolve_categoria_id(tiny_config, rec.servico):
+                payload["categoria"] = {"id": cat}
 
             previews.append({
                 "chave": chave, "cliente": rec.cliente,
@@ -502,10 +505,6 @@ def api_send(unit: str):
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
 
-            if rec.chave_deduplicacao in imported:
-                results["pulados"].append({"chave": rec.chave_deduplicacao, "motivo": "ja importado"})
-                continue
-
             try:
                 resp = importer.create_accounts_receivable(rec)
                 imported[rec.chave_deduplicacao] = {
@@ -517,11 +516,21 @@ def api_send(unit: str):
                 save_state(state_path, st)
                 results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
             except Exception as exc:
-                results["falhas"].append({
-                    "chave": rec.chave_deduplicacao,
-                    "cliente": rec.cliente,
-                    "erro": str(exc),
-                })
+                if _is_doc_already_registered(exc):
+                    imported[rec.chave_deduplicacao] = {
+                        "arquivo": rec.origem_arquivo,
+                        "linha": rec.linha_origem,
+                        "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                        "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
+                    }
+                    save_state(state_path, st)
+                    results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
+                else:
+                    results["falhas"].append({
+                        "chave": rec.chave_deduplicacao,
+                        "cliente": rec.cliente,
+                        "erro": str(exc),
+                    })
 
         return _json({
             "success": True, "summary": results,
@@ -621,6 +630,73 @@ def api_map_client(unit: str):
         ids[cliente_nome] = int(tiny_id)
         _save_extra_cliente_ids(unit, ids)
         return _json({"success": True, "saved": True})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/auto-map-clients", methods=["POST"])
+@unit_access_required
+def api_auto_map_clients(unit: str):
+    try:
+        data      = request.get_json(force=True)
+        clientes: list[str] = data.get("clientes", [])
+        threshold: float    = float(data.get("threshold", 0.90))
+        if not clientes:
+            raise ValueError("clientes obrigatorio")
+
+        config    = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        _seed_tokens(unit, config)
+        importer  = TinyImporter(config, state_dir)
+
+        # Carrega todos os contatos do Tiny de uma vez
+        all_contacts: list[dict] = []
+        page = 1
+        while True:
+            result = importer.client.request("GET", "contatos", params={"limit": 100, "offset": (page - 1) * 100})
+            items  = result.get("itens", [])
+            if not items:
+                break
+            all_contacts.extend(items)
+            if len(items) < 100:
+                break
+            page += 1
+
+        mapped       = []
+        needs_review = []
+
+        for nome in clientes:
+            nome = clean_text(nome)
+            if not nome:
+                continue
+            best_score  = 0.0
+            best_match  = None
+            for item in all_contacts:
+                item_nome     = item.get("nome", "")
+                item_fantasia = item.get("fantasia", "") or ""
+                score = max(
+                    similarity_score(nome, item_nome),
+                    similarity_score(nome, item_fantasia) if item_fantasia else 0.0,
+                )
+                if score > best_score:
+                    best_score = score
+                    best_match = item
+
+            if best_score >= threshold and best_match:
+                tiny_id = int(best_match["id"])
+                ids = _load_extra_cliente_ids(unit)
+                ids[nome] = tiny_id
+                _save_extra_cliente_ids(unit, ids)
+                mapped.append({
+                    "clienteNome": nome,
+                    "tinyId": tiny_id,
+                    "tinyNome": best_match.get("nome", ""),
+                    "score": round(best_score, 2),
+                })
+            else:
+                needs_review.append(nome)
+
+        return _json({"success": True, "mapped": mapped, "needs_review": needs_review})
     except Exception as exc:
         return _json({"success": False, "error": str(exc)}, 500)
 
