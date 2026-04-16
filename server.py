@@ -49,6 +49,7 @@ import json
 import os
 import secrets
 import sys
+import traceback
 import urllib.parse
 from dataclasses import asdict
 from functools import wraps
@@ -93,6 +94,19 @@ app.config.update(
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 UI_DIR   = _HERE / "frente_caixa"
+
+
+@app.errorhandler(Exception)
+def handle_unhandled_exception(exc):
+    """Captura qualquer excecao que escape os try-catch das views e retorna JSON
+    em vez da pagina HTML padrao do Flask/Gunicorn.
+    Isso tambem expoe o traceback para facilitar o diagnostico."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc  # deixa redirecionamentos e 404 funcionarem normalmente
+    tb = traceback.format_exc()
+    print(f"[UNHANDLED] {exc}\n{tb}", file=sys.stderr, flush=True)
+    return _json({"success": False, "error": str(exc), "traceback": tb}, 500)
 
 # ── Carregamento de config ─────────────────────────────────────────────────────
 def _load_users() -> dict[str, Any]:

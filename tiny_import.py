@@ -533,14 +533,21 @@ def load_state(path: Path) -> dict[str, Any]:
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
-    """Salva estado usando escrita atomica (write-then-rename) para evitar corrupcao
-    caso o processo seja encerrado no meio da escrita."""
+    """Salva estado usando escrita atomica (write-then-rename) quando possivel.
+    Fallback para escrita direta se o rename falhar (ex: volumes em mount points
+    diferentes no Railway)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     try:
         with tmp.open("w", encoding="utf-8") as file:
             json.dump(state, file, ensure_ascii=False, indent=2)
-        tmp.replace(path)  # rename() e atomico no POSIX — arquivo nunca fica a meio
+        try:
+            tmp.replace(path)  # atomico no POSIX
+        except OSError:
+            # Fallback: se rename falhar (ex: cross-device), copia e remove
+            import shutil
+            shutil.copy2(str(tmp), str(path))
+            tmp.unlink(missing_ok=True)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
