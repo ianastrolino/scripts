@@ -862,6 +862,91 @@ def unit_caixa2(unit: str):
     return send_from_directory(UI_DIR, "caixa2.html")
 
 
+@app.route("/u/<unit>/api/astro", methods=["POST"])
+@unit_access_required
+def api_astro(unit: str):
+    """Assistente virtual Astro — powered by Claude Haiku."""
+    try:
+        import anthropic as _anthropic
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return _json({"success": False, "error": "Assistente nao configurado. Adicione ANTHROPIC_API_KEY nas variaveis do Railway."}, 503)
+
+        data     = request.get_json(force=True, silent=True) or {}
+        messages = data.get("messages", [])
+        if not messages:
+            return _json({"success": False, "error": "messages obrigatorio."}, 400)
+
+        ud        = UNITS.get(unit, {})
+        unit_nome = ud.get("nome", unit)
+        servicos  = list(ud.get("categoria_ids", {}).keys()) or ud.get("servicos_pdv", [])
+
+        system_prompt = f"""Voce e o Astro, assistente virtual da Astrovistorias — rede de vistorias automotivas.
+Voce esta ajudando os atendentes da unidade {unit_nome} a usar o sistema Frente de Caixa.
+Responda sempre em portugues brasileiro, de forma direta e simples. Maximo 3 paragrafos curtos.
+
+SISTEMA FRENTE DE CAIXA — VISAO GERAL:
+O sistema tem duas telas principais:
+1. CAIXA DO DIA (PDV): lancamento de pagamentos em tempo real enquanto o cliente esta na recepcao.
+2. FECHAMENTO: importacao da planilha diaria + cruzamento com os lancamentos do PDV + envio para o Tiny ERP.
+
+COMO FAZER UM LANCAMENTO (CAIXA DO DIA):
+- Preencha: Placa, Nome do cliente, Servico, Valor
+- Clique no botao da forma de pagamento (Dinheiro, Debito, Credito, PIX ou Faturado)
+- Clique em "Registrar lancamento"
+- O lancamento aparece na tabela abaixo com hora, placa e valor
+- Use Tab para navegar entre campos e Enter para avancar
+
+FORMAS DE PAGAMENTO:
+- Dinheiro: pagamento em especie
+- Debito: cartao de debito
+- Credito: cartao de credito
+- PIX: transferencia instantanea
+- Faturado: sera cobrado depois via nota fiscal (para empresas clientes)
+Os lancamentos ficam salvos localmente — NAO vao para o Tiny ainda.
+
+EDITAR OU EXCLUIR LANCAMENTO:
+- Clique no icone de lapis (✏️) para editar ou lixeira (🗑️) para excluir
+- Sera solicitado o PIN master definido pelo administrador
+- Sem PIN configurado, edicao e exclusao ficam bloqueadas
+
+RESUMO DO DIA:
+- Clique no botao "Resumo" no topo da tela
+- Mostra total por servico, por cliente, por forma de pagamento
+- Botao "Copiar" formata o resumo para WhatsApp
+
+FECHAMENTO DO DIA:
+- Acesse a tela "Fechamento" pelo botao no topo
+- Importe a planilha do dia (arquivo .xls)
+- O sistema cruza automaticamente com os lancamentos do PDV
+- Divergencias aparecem em vermelho para correcao manual
+- Apos correcoes, clique "Enviar para Tiny"
+
+SERVICOS DA UNIDADE {unit_nome.upper()}:
+{chr(10).join(f'- {s}' for s in servicos) if servicos else '- Consulte o administrador da unidade'}
+
+DICAS IMPORTANTES:
+- Se esquecer o PIN, o administrador pode redefinir nas configuracoes do Railway
+- Em caso de erro de conexao com o Tiny, tente novamente em alguns minutos
+- Nao feche o navegador no meio de um envio para o Tiny
+- Cada lancamento e salvo automaticamente — nao ha botao de "salvar"
+
+Se nao souber responder algo especifico sobre precos ou politicas da empresa, oriente o atendente a perguntar ao administrador/franqueador."""
+
+        client   = _anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            system=system_prompt,
+            messages=messages,
+        )
+        reply = response.content[0].text if response.content else "Desculpe, nao consegui processar. Tente novamente."
+        return _json({"success": True, "reply": reply})
+
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/caixa/estado")
 @unit_access_required
 def api_caixa_estado(unit: str):

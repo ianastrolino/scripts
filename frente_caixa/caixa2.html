@@ -711,6 +711,258 @@
       .fp-mini[data-fp="pix"].sel      { background: var(--c-pix);      border-color: var(--c-pix);      color: #fff; }
       .fp-mini[data-fp="faturado"].sel { background: var(--c-faturado); border-color: var(--c-faturado); color: #fff; grid-column: 2 / 4; }
       .fp-mini[data-fp="faturado"]     { grid-column: 2 / 4; }
+
+      /* ── Botão Resumo ────────────────────────────────────── */
+      .btn-resumo {
+        padding: 9px 18px;
+        border-radius: 10px;
+        border: 2px solid var(--astro);
+        background: transparent;
+        color: var(--astro);
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .18s;
+        font-family: inherit;
+        white-space: nowrap;
+      }
+      .btn-resumo:hover {
+        background: var(--astro);
+        color: #fff;
+        box-shadow: 0 4px 16px rgba(211,47,47,.3);
+      }
+
+      /* ── Barra de status ─────────────────────────────────── */
+      .status-bar {
+        background: #1a1d2e;
+        color: rgba(255,255,255,.7);
+        padding: 7px 28px;
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .status-bar strong { color: #fff; }
+      .status-item { display: flex; align-items: center; gap: 6px; }
+      .status-dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 6px #22c55e;
+        animation: pulse-dot 2s infinite;
+      }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: .5; }
+      }
+
+      /* ── Modal Resumo ────────────────────────────────────── */
+      .resumo-modal {
+        background: var(--surface);
+        border-radius: 20px;
+        width: 680px;
+        max-width: calc(100vw - 32px);
+        max-height: 85vh;
+        overflow-y: auto;
+        box-shadow: 0 24px 64px rgba(0,0,0,.2);
+        animation: modal-in .2s ease;
+      }
+      .resumo-header {
+        padding: 24px 28px 20px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        background: var(--surface);
+        z-index: 2;
+        border-radius: 20px 20px 0 0;
+      }
+      .resumo-header h3 { font-size: 18px; font-weight: 800; }
+      .resumo-body { padding: 24px 28px; }
+      .resumo-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      .resumo-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
+      .resumo-table tr:last-child td { border-bottom: none; }
+      .btn-copiar {
+        padding: 10px 20px;
+        border-radius: 10px;
+        border: none;
+        background: #25d366;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all .15s;
+      }
+      .btn-copiar:hover { background: #1ebe59; }
+      .btn-fechar-resumo {
+        border: none; background: transparent;
+        color: var(--muted); font-size: 22px;
+        cursor: pointer; padding: 4px 8px;
+        border-radius: 8px; line-height: 1;
+      }
+      .btn-fechar-resumo:hover { background: var(--bg); color: var(--ink); }
+
+      /* ── Chat flutuante ──────────────────────────────────── */
+      .chat-fab {
+        position: fixed;
+        bottom: 28px; right: 28px;
+        width: 58px; height: 58px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--astro), var(--astro-dk));
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 6px 24px rgba(211,47,47,.45);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 200;
+        transition: transform .18s, box-shadow .18s;
+        overflow: visible;
+      }
+      .chat-fab:hover { transform: scale(1.08); box-shadow: 0 8px 32px rgba(211,47,47,.55); }
+      .chat-fab img { width: 32px; height: 32px; border-radius: 50%; object-fit: contain; background: #fff; padding: 2px; }
+      .chat-fab-label {
+        position: absolute;
+        bottom: -20px; left: 50%;
+        transform: translateX(-50%);
+        font-size: 10px; font-weight: 700;
+        color: var(--astro); letter-spacing: .04em;
+        white-space: nowrap;
+      }
+      .chat-badge {
+        position: absolute;
+        top: -4px; right: -4px;
+        width: 20px; height: 20px;
+        border-radius: 50%;
+        background: #16a34a;
+        color: #fff;
+        font-size: 11px; font-weight: 700;
+        display: none;
+        align-items: center; justify-content: center;
+        border: 2px solid #fff;
+      }
+
+      /* Painel do chat */
+      .chat-panel {
+        position: fixed;
+        bottom: 100px; right: 28px;
+        width: 360px;
+        max-height: 520px;
+        background: var(--surface);
+        border-radius: 20px;
+        box-shadow: 0 16px 64px rgba(0,0,0,.18);
+        z-index: 199;
+        display: flex; flex-direction: column;
+        transform: translateY(20px) scale(.96);
+        opacity: 0;
+        pointer-events: none;
+        transition: all .22s cubic-bezier(.34,1.56,.64,1);
+        overflow: hidden;
+      }
+      .chat-panel.open {
+        transform: none;
+        opacity: 1;
+        pointer-events: all;
+      }
+      .chat-panel-header {
+        background: linear-gradient(135deg, var(--astro), var(--astro-dk));
+        padding: 16px 18px;
+        display: flex; align-items: center; gap: 12px;
+        border-radius: 20px 20px 0 0;
+      }
+      .chat-panel-avatar {
+        width: 38px; height: 38px; border-radius: 50%;
+        background: rgba(255,255,255,.2);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; color: #fff; font-size: 16px;
+        overflow: hidden;
+      }
+      .chat-panel-avatar img { width: 100%; height: 100%; object-fit: contain; background: #fff; padding: 3px; border-radius: 50%; }
+      .chat-panel-info { flex: 1; }
+      .chat-panel-info strong { color: #fff; font-size: 15px; display: block; }
+      .chat-panel-info span { color: rgba(255,255,255,.75); font-size: 12px; }
+      .chat-close-btn {
+        border: none; background: rgba(255,255,255,.15);
+        color: #fff; width: 30px; height: 30px;
+        border-radius: 50%; cursor: pointer;
+        font-size: 16px; display: flex; align-items: center; justify-content: center;
+        transition: background .15s;
+      }
+      .chat-close-btn:hover { background: rgba(255,255,255,.3); }
+
+      .chat-messages {
+        flex: 1; overflow-y: auto; padding: 16px;
+        display: flex; flex-direction: column; gap: 10px;
+        min-height: 200px; max-height: 300px;
+      }
+      .chat-msg { display: flex; align-items: flex-end; gap: 8px; }
+      .chat-msg-user { flex-direction: row-reverse; }
+      .chat-avatar {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: var(--astro); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 800; flex-shrink: 0;
+      }
+      .chat-bubble {
+        max-width: 80%; padding: 10px 14px;
+        border-radius: 16px; font-size: 13px; line-height: 1.5;
+        background: var(--bg); color: var(--ink);
+      }
+      .chat-msg-user .chat-bubble {
+        background: var(--astro); color: #fff;
+        border-bottom-right-radius: 4px;
+      }
+      .chat-msg-assistant .chat-bubble { border-bottom-left-radius: 4px; }
+
+      /* Typing indicator */
+      .chat-typing { display: flex; gap: 4px; align-items: center; padding: 12px 16px; }
+      .chat-typing span {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--muted); display: inline-block;
+        animation: typing-bounce .9s infinite;
+      }
+      .chat-typing span:nth-child(2) { animation-delay: .15s; }
+      .chat-typing span:nth-child(3) { animation-delay: .3s; }
+      @keyframes typing-bounce {
+        0%, 60%, 100% { transform: translateY(0); }
+        30% { transform: translateY(-6px); }
+      }
+
+      .chat-quick-replies {
+        padding: 0 12px 8px;
+        display: flex; flex-wrap: wrap; gap: 6px;
+      }
+      .quick-reply-btn {
+        padding: 6px 12px; border-radius: 20px;
+        border: 1.5px solid var(--astro); background: transparent;
+        color: var(--astro); font-size: 12px; font-weight: 600;
+        cursor: pointer; font-family: inherit; transition: all .15s;
+        white-space: nowrap;
+      }
+      .quick-reply-btn:hover { background: var(--astro); color: #fff; }
+
+      .chat-input-row {
+        padding: 12px 14px;
+        border-top: 1px solid var(--line);
+        display: flex; gap: 8px; align-items: center;
+      }
+      .chat-input-row input {
+        flex: 1; border: 1.5px solid var(--line);
+        border-radius: 20px; padding: 9px 14px;
+        font-size: 13px; font-family: inherit;
+        background: var(--bg); transition: border-color .15s;
+      }
+      .chat-input-row input:focus { outline: none; border-color: var(--astro); }
+      .chat-send-btn {
+        width: 36px; height: 36px; border-radius: 50%;
+        border: none; background: var(--astro); color: #fff;
+        cursor: pointer; font-size: 16px;
+        display: flex; align-items: center; justify-content: center;
+        transition: all .15s; flex-shrink: 0;
+      }
+      .chat-send-btn:hover { background: var(--astro-dk); transform: scale(1.05); }
     </style>
   </head>
   <body>
@@ -720,17 +972,20 @@
       <div class="header-brand">
         <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
         <div class="header-brand-text">
-          <strong>Caixa do Dia</strong>
-          <span id="unidadeLabel">Lancamentos a vista</span>
+          <strong>Frente de Caixa</strong>
+          <span id="unidadeLabel">Carregando...</span>
         </div>
       </div>
 
       <div class="header-nav">
-        <a class="nav-pill active" href="">Caixa do Dia</a>
+        <a class="nav-pill active" id="linkCaixaL2" href="">Caixa do Dia</a>
         <a class="nav-pill" id="linkFechamento" href="">Fechamento</a>
       </div>
 
       <div class="header-right">
+        <button id="btnResumo" class="btn-resumo" type="button">
+          📊 Resumo do Dia
+        </button>
         <div class="user-chip">
           <div class="user-avatar" id="userAvatar">?</div>
           <span id="userLabel"></span>
@@ -738,6 +993,20 @@
         <a class="btn-logout" href="/logout">Sair</a>
       </div>
     </header>
+
+    <!-- Barra de status -->
+    <div class="status-bar">
+      <div class="status-item">
+        <span class="status-dot"></span>
+        <span>Caixa aberto</span>
+      </div>
+      <div class="status-item">
+        🗓️ <span id="statusDate">—</span>
+      </div>
+      <div class="status-item">
+        📍 Unidade <strong id="statusUnit">—</strong>
+      </div>
+    </div>
 
     <!-- Workspace -->
     <div class="workspace">
@@ -886,6 +1155,51 @@
       </div>
     </div>
 
+    <!-- Modal Resumo do Dia -->
+    <div class="overlay" id="resumoModal">
+      <div class="resumo-modal">
+        <div class="resumo-header">
+          <h3>📊 Resumo do Dia</h3>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn-copiar" id="btnCopiarResumo">📋 Copiar para WhatsApp</button>
+            <button class="btn-fechar-resumo" id="resumoCloseBtn">✕</button>
+          </div>
+        </div>
+        <div class="resumo-body" id="resumoContent"></div>
+      </div>
+    </div>
+
+    <!-- Chat flutuante Astro -->
+    <button class="chat-fab" id="chatToggleBtn" title="Falar com o Astro">
+      <img src="logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <span style="display:none;color:#fff;font-weight:800;font-size:18px;">A</span>
+      <span class="chat-badge" id="chatBadge">1</span>
+      <span class="chat-fab-label">Astro</span>
+    </button>
+
+    <div class="chat-panel" id="chatPanel">
+      <div class="chat-panel-header">
+        <div class="chat-panel-avatar">
+          <img src="logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
+               onerror="this.parentElement.textContent='A'">
+        </div>
+        <div class="chat-panel-info">
+          <strong>Astro</strong>
+          <span>Assistente Astrovistorias · Online</span>
+        </div>
+        <button class="chat-close-btn" id="chatCloseBtn">✕</button>
+      </div>
+
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-quick-replies" id="chatQuickReplies"></div>
+
+      <div class="chat-input-row">
+        <input id="chatInput" type="text" placeholder="Digite sua duvida..." maxlength="400" autocomplete="off">
+        <button class="chat-send-btn" id="chatSendBtn">➤</button>
+      </div>
+    </div>
+
     <!-- Modal PIN (excluir) -->
     <div class="overlay" id="pinModal">
       <div class="modal">
@@ -950,9 +1264,8 @@
 
     <script src="caixa.js"></script>
     <script>
-      // Patch: rebind fp-grid e edit modal para o layout2
+      // Rebind fp-grid para o layout2 (sobrescreve listeners do caixa.js)
       document.addEventListener("DOMContentLoaded", () => {
-        // FP grid principal
         document.getElementById("fpGrid").querySelectorAll(".fp-card").forEach(btn => {
           btn.addEventListener("click", () => {
             state.fpSelecionado = btn.dataset.fp;
@@ -961,7 +1274,6 @@
             validarFormulario();
           });
         });
-        // FP mini (modal editar)
         document.getElementById("editFpMini").querySelectorAll(".fp-mini").forEach(btn => {
           btn.addEventListener("click", () => {
             state.editFpSelecionado = btn.dataset.fp;
@@ -971,7 +1283,6 @@
         });
       });
 
-      // Override abrirEditar para usar fp-mini no layout2
       const _origAbrirEditar = abrirEditar;
       function abrirEditar(id) {
         _origAbrirEditar(id);
@@ -981,5 +1292,6 @@
           .forEach(b => b.classList.toggle("sel", b.dataset.fp === lc.fp));
       }
     </script>
+    <script src="caixa2.js"></script>
   </body>
 </html>
