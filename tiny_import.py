@@ -91,8 +91,15 @@ class TinyApiError(Exception):
 
 
 def _is_doc_already_registered(exc: Exception) -> bool:
-    """Retorna True se o Tiny rejeitou por numeroDocumento duplicado."""
-    return "já cadastrado no sistema" in str(exc) or "ja cadastrado no sistema" in str(exc)
+    """Retorna True se o Tiny rejeitou por numeroDocumento duplicado.
+    Cobre tanto a mensagem do pre-check local quanto a resposta nativa da API Tiny."""
+    msg = str(exc)
+    return (
+        "já cadastrado no sistema" in msg
+        or "ja cadastrado no sistema" in msg
+        or "j\u00e1 cadastrado" in msg  # variante sem "no sistema"
+        or "numero do documento" in msg.lower() and "cadastrado" in msg.lower()
+    )
 
 
 def is_av_paid(av_pagamento: str) -> bool:
@@ -758,7 +765,8 @@ class TinyClient:
 
         if response.status_code == 429:
             reset_after = int(response.headers.get("X-RateLimit-Reset", "5"))
-            time.sleep(max(reset_after, 1))
+            # Limita o sleep a 15s para nao estourar o timeout do Gunicorn (120s por request)
+            time.sleep(min(max(reset_after, 1), 15))
             return self.request(method, path, params=params, json_body=json_body, retry_auth=retry_auth)
 
         if response.status_code >= 400:
@@ -922,11 +930,10 @@ class TinyImporter:
 
     def create_accounts_receivable(self, record: NormalizedRecord) -> dict[str, Any]:
         payload = self.build_accounts_receivable_payload(record)
-        num_doc = payload["numeroDocumento"]
-        if self.check_existing_by_numero_documento(num_doc):
-            raise TinyApiError(
-                f"Número do documento {num_doc!r} já cadastrado no sistema"
-            )
+        # Nao faz pre-check GET antes do POST: o tracking local (imported.json) ja
+        # previne duplicatas e o POST retorna erro 400 se o numeroDocumento existir,
+        # que e capturado por _is_doc_already_registered. Remover esse GET economiza
+        # 1 chamada de API por registro, reduzindo o risco de timeout no Railway.
         return self.client.request("POST", "contas-receber", json_body=payload)
 
     @staticmethod
