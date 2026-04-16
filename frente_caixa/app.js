@@ -260,7 +260,8 @@ function recordsForFilter() {
 
 function recordIssues(record) {
   const issues = [];
-  if (record.fp === "FA" && !record.tinyClienteId) issues.push("cliente Tiny");
+  // "sem-vinculo" = usuario confirmou que cliente nao existe no Tiny → nao pode enviar
+  if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
   return issues;
@@ -352,8 +353,9 @@ function paymentControl(record) {
 
 function tinyControl(record, issues) {
   if (record.fp === "FA") {
-    if (!record.tinyClienteId) {
-      return `<button class="client-select" type="button" data-map-client="${record.id}">Mapear cliente</button>`;
+    if (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo") {
+      const label = record.tinyClienteId === "sem-vinculo" ? "Nao encontrado" : "Mapear cliente";
+      return `<button class="client-select" type="button" data-map-client="${record.id}">${label}</button>`;
     }
     return `<span class="status ok">Pronto</span>`;
   }
@@ -503,7 +505,7 @@ els.sendBtn.addEventListener("click", async () => {
     els.confirmModal._previews = result.previews;
     openConfirmModal();
   } catch (err) {
-    alert(`Erro de conexao: ${err.message}`);
+    if (err.message !== "session_expired") alert(`Erro de conexao: ${err.message}`);
   } finally {
     els.sendBtn.disabled = false;
     els.sendBtn.textContent = "Enviar para Tiny";
@@ -894,4 +896,5 @@ fetch(`${apiBase}/api/info`)
   })
   .catch(() => {});
 
-loadSample();
+// Em modo local (sem Railway) carrega exemplo para facilitar testes
+if (!apiBase) loadSample();

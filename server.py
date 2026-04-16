@@ -185,8 +185,15 @@ def _load_extra_cliente_ids(unit: str) -> dict[str, int]:
 
 
 def _save_extra_cliente_ids(unit: str, ids: dict[str, int]) -> None:
+    """Escrita atomica: evita corrupcao se o processo for morto durante o flush."""
     p = _unit_state_dir(unit) / "cliente_ids.json"
-    p.write_text(json.dumps(ids, ensure_ascii=False, indent=2))
+    tmp = p.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(ids, ensure_ascii=False, indent=2))
+        tmp.replace(p)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _build_unit_config(unit: str) -> dict[str, Any]:
@@ -414,7 +421,7 @@ _FORMA_NAMES: dict[int, str] = {
 @unit_access_required
 def api_preview(unit: str):
     try:
-        data       = request.get_json(force=True)
+        data       = request.get_json(force=True, silent=True) or {}
         config     = _build_unit_config(unit)
         state_dir  = _unit_state_dir(unit)
         tiny_config = config["tiny"]
@@ -492,7 +499,7 @@ def api_preview(unit: str):
 @unit_access_required
 def api_send(unit: str):
     try:
-        data      = request.get_json(force=True)
+        data      = request.get_json(force=True, silent=True) or {}
         config    = _build_unit_config(unit)
         state_dir = _unit_state_dir(unit)
         _seed_tokens(unit, config)
@@ -584,7 +591,7 @@ def api_clear_imported(unit: str):
 @unit_access_required
 def api_suggest_clients(unit: str):
     try:
-        data = request.get_json(force=True)
+        data = request.get_json(force=True, silent=True) or {}
         nome = clean_text(data.get("nome", ""))
         if not nome:
             raise ValueError("nome obrigatorio")
@@ -660,7 +667,7 @@ def api_diagnostic_payment(unit: str):
 @unit_access_required
 def api_map_client(unit: str):
     try:
-        data         = request.get_json(force=True)
+        data         = request.get_json(force=True, silent=True) or {}
         cliente_nome = clean_text(data.get("clienteNome", ""))
         tiny_id      = data.get("tinyId")
         if not cliente_nome or not tiny_id:
@@ -678,7 +685,7 @@ def api_map_client(unit: str):
 @unit_access_required
 def api_auto_map_clients(unit: str):
     try:
-        data      = request.get_json(force=True)
+        data      = request.get_json(force=True, silent=True) or {}
         clientes: list[str] = data.get("clientes", [])
         threshold: float    = float(data.get("threshold", 0.90))
         if not clientes:
@@ -704,6 +711,9 @@ def api_auto_map_clients(unit: str):
 
         mapped       = []
         needs_review = []
+        # Carrega IDs salvos uma unica vez antes do loop
+        ids = _load_extra_cliente_ids(unit)
+        ids_updated = False
 
         for nome in clientes:
             nome = clean_text(nome)
@@ -724,9 +734,8 @@ def api_auto_map_clients(unit: str):
 
             if best_score >= threshold and best_match:
                 tiny_id = int(best_match["id"])
-                ids = _load_extra_cliente_ids(unit)
                 ids[nome] = tiny_id
-                _save_extra_cliente_ids(unit, ids)
+                ids_updated = True
                 mapped.append({
                     "clienteNome": nome,
                     "tinyId": tiny_id,
@@ -735,6 +744,10 @@ def api_auto_map_clients(unit: str):
                 })
             else:
                 needs_review.append(nome)
+
+        # Salva uma unica vez ao final (evita N escritas em disco)
+        if ids_updated:
+            _save_extra_cliente_ids(unit, ids)
 
         return _json({"success": True, "mapped": mapped, "needs_review": needs_review})
     except Exception as exc:
