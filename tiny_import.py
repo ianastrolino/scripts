@@ -524,14 +524,26 @@ def latest_input(input_dir: Path) -> Path:
 def load_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"imported": {}}
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except (json.JSONDecodeError, ValueError):
+        # Arquivo corrompido (ex: escrita interrompida pelo Gunicorn) — reinicia estado
+        return {"imported": {}}
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
+    """Salva estado usando escrita atomica (write-then-rename) para evitar corrupcao
+    caso o processo seja encerrado no meio da escrita."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as file:
-        json.dump(state, file, ensure_ascii=False, indent=2)
+    tmp = path.with_suffix(".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as file:
+            json.dump(state, file, ensure_ascii=False, indent=2)
+        tmp.replace(path)  # rename() e atomico no POSIX — arquivo nunca fica a meio
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def lookup_config_id(mapping: dict[str, Any], name: str) -> int | None:
