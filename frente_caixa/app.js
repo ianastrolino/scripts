@@ -516,49 +516,65 @@ els.confirmSendBtn.addEventListener("click", async () => {
   if (!_pendingToSend.length) return;
 
   els.confirmSendBtn.disabled = true;
-  els.confirmSendBtn.textContent = "Enviando...";
+  const BATCH_SIZE = 15; // evita timeout do Railway (~30s por requisicao)
+  const source = state.sourceFiles[0] || "manual_ui";
+  const total = { enviados: [], pulados: [], falhas: [] };
+  let tokenError = false;
 
   try {
-    const result = await apiFetch(`${apiBase}/api/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: state.sourceFiles[0] || "manual_ui", records: _pendingToSend }),
-    });
+    const batches = [];
+    for (let i = 0; i < _pendingToSend.length; i += BATCH_SIZE) {
+      batches.push(_pendingToSend.slice(i, i + BATCH_SIZE));
+    }
 
-    if (result.success) {
+    for (let i = 0; i < batches.length; i++) {
+      els.confirmSendBtn.textContent = `Enviando lote ${i + 1}/${batches.length}...`;
+      const result = await apiFetch(`${apiBase}/api/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source, records: batches[i] }),
+      });
+
+      if (!result.success) {
+        const errMsg = result.error || "";
+        const tokenErr = errMsg.includes("token") || errMsg.includes("Token") || errMsg.includes("401");
+        const suffix = tokenErr
+          ? `\n\n⚠️ Token invalido ou expirado. Reautorize em:\n${window.location.origin}${apiBase}/auth`
+          : "";
+        alert(`Erro no servidor (lote ${i + 1}): ${errMsg}${suffix}`);
+        return;
+      }
+
       const s = result.summary;
-      closeConfirmModal();
-      _pendingToSend = [];
+      total.enviados.push(...(s.enviados || []));
+      total.pulados.push(...(s.pulados || []));
+      total.falhas.push(...(s.falhas || []));
 
-      let msg = `Enviados com sucesso: ${s.enviados.length}`;
-      if (s.pulados.length) msg += `\nPulados (ja existiam): ${s.pulados.length}`;
-      if (s.falhas.length) {
-        msg += `\nFalhas: ${s.falhas.length}`;
-        const detalhes = s.falhas.map((f) => `  • ${f.cliente}: ${f.erro}`).join("\n");
-        msg += `\n\nDetalhes das falhas:\n${detalhes}`;
-        // Detecta erro de token e oferece link de reautorizacao
-        const tokenError = s.falhas.some((f) =>
-          f.erro && (f.erro.includes("token") || f.erro.includes("Token") || f.erro.includes("401"))
-        );
-        if (tokenError) {
-          msg += `\n\n⚠️ Erro de autenticacao detectado.\nVocê pode reautorizar em: ${window.location.origin}${apiBase}/auth`;
-        }
+      if (s.falhas && s.falhas.some((f) => f.erro && (f.erro.includes("token") || f.erro.includes("Token") || f.erro.includes("401")))) {
+        tokenError = true;
       }
-      alert(msg);
+    }
 
-      if (s.falhas.length === 0 && confirm("Deseja limpar o lote atual?")) {
-        clearBatch();
+    closeConfirmModal();
+    _pendingToSend = [];
+
+    let msg = `Enviados com sucesso: ${total.enviados.length}`;
+    if (total.pulados.length) msg += `\nPulados (ja existiam): ${total.pulados.length}`;
+    if (total.falhas.length) {
+      msg += `\nFalhas: ${total.falhas.length}`;
+      const detalhes = total.falhas.map((f) => `  • ${f.cliente}: ${f.erro}`).join("\n");
+      msg += `\n\nDetalhes das falhas:\n${detalhes}`;
+      if (tokenError) {
+        msg += `\n\n⚠️ Erro de autenticacao detectado.\nVocê pode reautorizar em: ${window.location.origin}${apiBase}/auth`;
       }
-    } else {
-      const errMsg = result.error || "";
-      const tokenErr = errMsg.includes("token") || errMsg.includes("Token") || errMsg.includes("401");
-      const suffix = tokenErr
-        ? `\n\n⚠️ Token invalido ou expirado. Reautorize em:\n${window.location.origin}${apiBase}/auth`
-        : "";
-      alert(`Erro no servidor: ${errMsg}${suffix}`);
+    }
+    alert(msg);
+
+    if (total.falhas.length === 0 && confirm("Deseja limpar o lote atual?")) {
+      clearBatch();
     }
   } catch (err) {
-    alert(`Erro de conexao: ${err.message}`);
+    if (err.message !== "session_expired") alert(`Erro de conexao: ${err.message}`);
   } finally {
     els.confirmSendBtn.disabled = false;
     els.confirmSendBtn.textContent = "Confirmar e Enviar";
