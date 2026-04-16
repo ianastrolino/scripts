@@ -746,35 +746,49 @@ class TinyClient:
             raise TinyApiError("A biblioteca requests e necessaria para enviar ao Tiny.") from exc
 
         url = f"{self.base_url}/{path.lstrip('/')}"
-        response = requests.request(
-            method,
-            url,
-            headers={
-                "Authorization": f"Bearer {self.access_token()}",
-                "Content-Type": "application/json",
-            },
-            params=params,
-            json=json_body,
-            timeout=self.timeout,
-        )
+        attempts = 0
+        max_attempts = 3
+        
+        while attempts < max_attempts:
 
-        if response.status_code == 401 and retry_auth:
-            self._access_token = None
-            self.refresh_access_token()
-            return self.request(method, path, params=params, json_body=json_body, retry_auth=False)
+            attempts += 1
+            response = requests.request(
+                method,
+                url,
+                headers={
+                    "Authorization": f"Bearer {self.access_token()}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                },
+                params=params,
+                json=json_body,
+                timeout=self.timeout,
+            )
 
-        if response.status_code == 429:
-            reset_after = int(response.headers.get("X-RateLimit-Reset", "5"))
-            # Limita o sleep a 15s para nao estourar o timeout do Gunicorn (120s por request)
-            time.sleep(min(max(reset_after, 1), 15))
-            return self.request(method, path, params=params, json_body=json_body, retry_auth=retry_auth)
+            if response.status_code == 401 and retry_auth:
+                self._access_token = None
+                self.refresh_access_token()
+                return self.request(method, path, params=params, json_body=json_body, retry_auth=False)
 
-        if response.status_code >= 400:
-            raise TinyApiError(f"Erro Tiny {method} {path} ({response.status_code}): {response.text[:1500]}")
+            if response.status_code == 429:
+                reset_after = int(response.headers.get("X-RateLimit-Reset", "5"))
+                # Limita o sleep a 15s para nao estourar o timeout do Gunicorn (120s por request)
+                time.sleep(min(max(reset_after, 1), 15))
+                return self.request(method, path, params=params, json_body=json_body, retry_auth=retry_auth)
 
-        if not response.text.strip():
-            return {}
-        return response.json()
+            if response.status_code in {502, 503, 504} and attempts < max_attempts:
+                # Erros transientes do Tiny: espera um pouco e tenta de novo (exponential backoff)
+                time.sleep(3 ** attempts)  # 3s, 9s entre tentativas
+                continue
+
+            if response.status_code >= 400:
+                raise TinyApiError(f"Erro Tiny {method} {path} ({response.status_code}): {response.text[:1500]}")
+
+            if not response.text.strip():
+                return {}
+            return response.json()
+
 
     def exchange_authorization_code(self, code: str, redirect_uri: str) -> dict[str, Any]:
         try:
