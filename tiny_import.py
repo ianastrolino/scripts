@@ -1385,6 +1385,8 @@ def run_server(args: argparse.Namespace) -> int:
                 self._handle_api_suggest_clients()
             elif self.path == "/api/map-client":
                 self._handle_api_map_client()
+            elif self.path == "/api/auto-map-clients":
+                self._handle_api_auto_map_clients()
             else:
                 self.send_error(404, "Endpoint nao encontrado")
 
@@ -1642,6 +1644,77 @@ def run_server(args: argparse.Namespace) -> int:
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": True, "saved": True}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode())
+
+        def _handle_api_auto_map_clients(self):
+            """Mapeia automaticamente clientes com similaridade >= threshold (padrao 0.90)."""
+            try:
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                clientes: list[str] = body.get("clientes", [])
+                threshold: float = float(body.get("threshold", 0.90))
+                if not clientes:
+                    raise ValueError("clientes obrigatorio")
+
+                importer = TinyImporter(config, state_dir)
+
+                # Carrega todos os contatos do Tiny de uma vez para evitar muitas chamadas
+                all_contacts: list[dict] = []
+                page = 1
+                while True:
+                    result = importer.client.request("GET", "contatos", params={"limit": 100, "offset": (page - 1) * 100})
+                    items = result.get("itens", [])
+                    if not items:
+                        break
+                    all_contacts.extend(items)
+                    if len(items) < 100:
+                        break
+                    page += 1
+
+                mapped = []
+                needs_review = []
+
+                for nome in clientes:
+                    nome = clean_text(nome)
+                    if not nome:
+                        continue
+                    best_score = 0.0
+                    best_match = None
+                    for item in all_contacts:
+                        item_nome = item.get("nome", "")
+                        item_fantasia = item.get("fantasia", "") or ""
+                        score = max(
+                            similarity_score(nome, item_nome),
+                            similarity_score(nome, item_fantasia) if item_fantasia else 0.0,
+                        )
+                        if score > best_score:
+                            best_score = score
+                            best_match = item
+
+                    if best_score >= threshold and best_match:
+                        tiny_id = int(best_match["id"])
+                        config["tiny"].setdefault("cliente_ids", {})[nome] = tiny_id
+                        _update_env_cliente_id(env_file_path, nome, tiny_id)
+                        mapped.append({
+                            "clienteNome": nome,
+                            "tinyId": tiny_id,
+                            "tinyNome": best_match.get("nome", ""),
+                            "score": round(best_score, 2),
+                        })
+                    else:
+                        needs_review.append(nome)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "mapped": mapped,
+                    "needs_review": needs_review,
+                }).encode())
             except Exception as e:
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json")

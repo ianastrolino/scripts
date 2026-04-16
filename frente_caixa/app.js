@@ -72,6 +72,7 @@ const els = {
   tableSubtitle: document.querySelector("#tableSubtitle"),
   issuesList: document.querySelector("#issuesList"),
   validateBtn: document.querySelector("#validateBtn"),
+  autoMapBtn: document.querySelector("#autoMapBtn"),
   mapClientesBtn: document.querySelector("#mapClientesBtn"),
   previewBtn: document.querySelector("#previewBtn"),
   sendBtn: document.querySelector("#sendBtn"),
@@ -379,6 +380,7 @@ function renderSummary() {
   els.sendBtn.disabled = sendableCount === 0;
   els.previewBtn.disabled = sendableCount === 0;
   const unmappedFa = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId);
+  els.autoMapBtn.hidden = unmappedFa.length === 0;
   els.mapClientesBtn.hidden = unmappedFa.length === 0;
 }
 
@@ -756,6 +758,54 @@ async function mapConfirmar(clienteNome, tinyId) {
   }
 }
 
+async function autoMapClientes() {
+  const unmapped = [...new Set(
+    state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId).map((r) => r.cliente)
+  )];
+  if (!unmapped.length) return;
+
+  els.autoMapBtn.disabled = true;
+  els.autoMapBtn.textContent = "Mapeando...";
+
+  try {
+    const res = await fetch(`${apiBase}/api/auto-map-clients`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientes: unmapped, threshold: 0.90 }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    // Aplica os mapeamentos automaticos na memoria
+    for (const m of data.mapped) {
+      state.records.forEach((r) => {
+        if (r.cliente === m.clienteNome) r.tinyClienteId = `tiny-${m.tinyId}`;
+      });
+      knownTinyClients.set(normalizeKey(m.clienteNome), m.tinyId);
+    }
+
+    const msg = data.mapped.length > 0
+      ? `${data.mapped.length} cliente(s) mapeados automaticamente.\n` +
+        data.mapped.map((m) => `  ✓ ${m.clienteNome} → ${m.tinyNome} (${Math.round(m.score * 100)}%)`).join("\n")
+      : "Nenhum cliente com confiança ≥90% encontrado.";
+
+    alert(msg + (data.needs_review.length ? `\n\n${data.needs_review.length} cliente(s) precisam de mapeamento manual.` : ""));
+
+    render();
+
+    // Abre o modal manual apenas para os que sobraram
+    if (data.needs_review.length) {
+      openMapClientesModal();
+    }
+  } catch (err) {
+    alert(`Erro no auto-mapeamento: ${err.message}`);
+  } finally {
+    els.autoMapBtn.disabled = false;
+    els.autoMapBtn.textContent = "Auto-mapear clientes (≥90%)";
+  }
+}
+
+els.autoMapBtn.addEventListener("click", autoMapClientes);
 els.mapClientesBtn.addEventListener("click", openMapClientesModal);
 document.querySelector("#mapClientesClose").addEventListener("click", closeMapClientesModal);
 document.querySelector("#mapPularBtn").addEventListener("click", mapNext);
