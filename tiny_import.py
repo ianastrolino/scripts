@@ -57,6 +57,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "include_forma_recebimento": True,
         "default_tipo_pessoa": "J",
         "categoria_id": None,
+        "categoria_ids": {},
         "contas_receber_fp": ["FA"],
         "vencimento_tipo": "ultimo_dia_mes",
         "vencimento_dias": 0,
@@ -87,6 +88,23 @@ class ImportErrorWithContext(Exception):
 
 class TinyApiError(Exception):
     pass
+
+
+def _is_doc_already_registered(exc: Exception) -> bool:
+    """Retorna True se o Tiny rejeitou por numeroDocumento duplicado."""
+    return "já cadastrado no sistema" in str(exc) or "ja cadastrado no sistema" in str(exc)
+
+
+def resolve_categoria_id(config: dict[str, Any], servico: str) -> int | None:
+    """Resolve o ID de categoria com base no servico, com fallback para categoria_id global."""
+    categoria_ids: dict[str, Any] = config.get("categoria_ids") or {}
+    if categoria_ids:
+        servico_key = normalize_key(servico)
+        for nome, cat_id in categoria_ids.items():
+            if normalize_key(str(nome)) in servico_key or servico_key in normalize_key(str(nome)):
+                return int(cat_id)
+    fallback = config.get("categoria_id")
+    return int(fallback) if fallback else None
 
 
 @dataclass
@@ -299,6 +317,10 @@ def apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
     contas_receber_fp = env_json_list("TINY_CONTAS_RECEBER_FP_JSON")
     if contas_receber_fp is not None:
         env_config["tiny"]["contas_receber_fp"] = contas_receber_fp
+
+    categoria_ids = env_json_dict("TINY_CATEGORIA_IDS_JSON")
+    if categoria_ids is not None:
+        env_config["tiny"]["categoria_ids"] = categoria_ids
 
     aliases = {
         "servico": env_json_dict("TINY_SERVICO_ALIASES_JSON"),
@@ -593,11 +615,7 @@ def compact_document_number(config: dict[str, Any], record: NormalizedRecord) ->
 
 
 def build_history(record: NormalizedRecord) -> str:
-    history = (
-        f"{record.servico} | {record.modelo} | Placa {record.placa} | "
-        f"FP {record.fp} | Origem {record.origem_arquivo} linha {record.linha_origem}"
-    )
-    return history[:250]
+    return f"Placa {record.placa} | {record.modelo}"[:250]
 
 
 class TinyClient:
@@ -840,8 +858,8 @@ class TinyImporter:
         # FA: usa o codigo FP do registro (ex: "FA" → "A faturar")
         payment_key = record.av_pagamento if record.av_pagamento else record.fp
         payment_id = self.resolve_payment(payment_key)
-        # AV: ja recebido na data do servico; FA: vencimento calculado pela regra configurada
-        due = record.data if record.av_pagamento else due_date_for_record(record, self.config)
+        # AV: ja recebido na data do servico; FA: sempre ultimo dia do mes
+        due = record.data if record.av_pagamento else last_day_of_month(record.data)
 
         payload: dict[str, Any] = {
             "data": record.data,
@@ -854,9 +872,9 @@ class TinyImporter:
             "ocorrencia": "U",
         }
 
-        categoria_id = self.config.get("categoria_id")
+        categoria_id = resolve_categoria_id(self.config, record.servico)
         if categoria_id:
-            payload["categoria"] = {"id": int(categoria_id)}
+            payload["categoria"] = {"id": categoria_id}
 
         if self.config.get("include_forma_recebimento") and payment_id:
             payload["formaRecebimento"] = payment_id  # Tiny espera int, nao objeto
@@ -886,7 +904,7 @@ def write_payload_preview(records: list[NormalizedRecord], output_dir: Path, sou
             "endpoint": "POST /contas-receber",
             "enviar_contas_receber": enviar_contas_receber,
             "data": record.data,
-            "dataVencimento": due_date_for_record(record, tiny_config) if enviar_contas_receber else None,
+            "dataVencimento": last_day_of_month(record.data) if enviar_contas_receber else None,
             "dataCompetencia": record.data[:7],
             "valor": money_as_float(record.preco),
             "contato": {
@@ -903,9 +921,9 @@ def write_payload_preview(records: list[NormalizedRecord], output_dir: Path, sou
                 f"FP {record.fp} nao esta em TINY_CONTAS_RECEBER_FP_JSON. "
                 "Linha fica para fechamento/painel, nao para contas a receber."
             )
-        categoria_id = tiny_config.get("categoria_id")
-        if categoria_id and enviar_contas_receber:
-            payload_base["categoria"] = {"id": int(categoria_id)}
+        categoria_id = resolve_categoria_id(tiny_config, record.servico) if enviar_contas_receber else None
+        if categoria_id:
+            payload_base["categoria"] = {"id": categoria_id}
         forma_recebimento_id = lookup_config_id(tiny_config.get("forma_recebimento_ids", {}), record.fp)
         if tiny_config.get("include_forma_recebimento") and forma_recebimento_id and enviar_contas_receber:
             payload_base["formaRecebimento"] = forma_recebimento_id
@@ -1019,9 +1037,21 @@ def process(args: argparse.Namespace) -> int:
             save_state(state_path, state)
             summary["enviados"].append({"chave": record.chave_deduplicacao, "resposta": response})
         except Exception as exc:
-            summary["falhas_envio"].append(
-                {"chave": record.chave_deduplicacao, "linha": record.linha_origem, "erro": str(exc)}
-            )
+            if _is_doc_already_registered(exc):
+                imported[record.chave_deduplicacao] = {
+                    "arquivo": record.origem_arquivo,
+                    "linha": record.linha_origem,
+                    "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                    "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
+                }
+                save_state(state_path, state)
+                summary["pulados"].append(
+                    {"chave": record.chave_deduplicacao, "motivo": "ja existia no Tiny (numeroDocumento duplicado)"}
+                )
+            else:
+                summary["falhas_envio"].append(
+                    {"chave": record.chave_deduplicacao, "linha": record.linha_origem, "erro": str(exc)}
+                )
 
     if args.archive and not summary["falhas_envio"]:
         summary["arquivado_em"] = str(archive_source(source, archive_dir))
@@ -1410,7 +1440,17 @@ def run_server(args: argparse.Namespace) -> int:
                         save_state(state_path, state)
                         results["enviados"].append({"chave": record.chave_deduplicacao, "cliente": record.cliente})
                     except Exception as exc:
-                        results["falhas"].append({"chave": record.chave_deduplicacao, "cliente": record.cliente, "erro": str(exc)})
+                        if _is_doc_already_registered(exc):
+                            imported[record.chave_deduplicacao] = {
+                                "arquivo": record.origem_arquivo,
+                                "linha": record.linha_origem,
+                                "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                                "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
+                            }
+                            save_state(state_path, state)
+                            results["pulados"].append({"chave": record.chave_deduplicacao, "cliente": record.cliente, "motivo": "ja existia no Tiny (numeroDocumento duplicado)"})
+                        else:
+                            results["falhas"].append({"chave": record.chave_deduplicacao, "cliente": record.cliente, "erro": str(exc)})
 
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -1475,7 +1515,7 @@ def run_server(args: argparse.Namespace) -> int:
                         av_pagamento=av_pag,
                     )
 
-                    due = rec.data if av_pag else due_date_for_record(rec, tiny_config)
+                    due = rec.data if av_pag else last_day_of_month(rec.data)
                     num_doc = compact_document_number(tiny_config, rec)
                     forma_display = (
                         f"{_forma_names.get(payment_id, str(payment_id))} (ID {payment_id})"
@@ -1494,9 +1534,9 @@ def run_server(args: argparse.Namespace) -> int:
                     }
                     if payment_id and tiny_config.get("include_forma_recebimento"):
                         payload["formaRecebimento"] = payment_id  # Tiny espera int
-                    categoria_id = tiny_config.get("categoria_id")
+                    categoria_id = resolve_categoria_id(tiny_config, rec.servico)
                     if categoria_id:
-                        payload["categoria"] = {"id": int(categoria_id)}
+                        payload["categoria"] = {"id": categoria_id}
 
                     previews.append({
                         "chave": chave,
