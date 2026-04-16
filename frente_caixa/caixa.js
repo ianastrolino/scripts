@@ -37,7 +37,7 @@ function brl(valor) {
 }
 
 function fpLabel(fp) {
-  return { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX" }[fp] || fp;
+  return { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" }[fp] || fp;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -130,11 +130,12 @@ function escHtml(s) {
 function renderTotais(totais, count) {
   const t = totais || state.totais;
   const n = count !== undefined ? count : state.lancamentos.length;
-  document.getElementById("totDinheiro").textContent = brl(t.dinheiro || 0);
-  document.getElementById("totDebito").textContent   = brl(t.debito   || 0);
-  document.getElementById("totCredito").textContent  = brl(t.credito  || 0);
-  document.getElementById("totPix").textContent      = brl(t.pix      || 0);
-  document.getElementById("totGeral").textContent    = brl(t.total    || 0);
+  document.getElementById("totDinheiro").textContent = brl(t.dinheiro    || 0);
+  document.getElementById("totDebito").textContent   = brl(t.debito      || 0);
+  document.getElementById("totCredito").textContent  = brl(t.credito     || 0);
+  document.getElementById("totPix").textContent      = brl(t.pix         || 0);
+  document.getElementById("totFaturado").textContent = brl(t.faturado    || 0);
+  document.getElementById("totAvista").textContent   = brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0));
   document.getElementById("totCount").textContent    =
     `${n} lancamento${n !== 1 ? "s" : ""}`;
 }

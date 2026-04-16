@@ -102,9 +102,13 @@
       /* Botões FP */
       .fp-buttons {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
         gap: 8px;
       }
+
+      /* Faturado ocupa as 2 ultimas colunas da segunda linha */
+      .fp-btn[data-fp="pix"]      { grid-column: 1; }
+      .fp-btn[data-fp="faturado"] { grid-column: 2 / 4; }
 
       .fp-btn {
         border: 2px solid var(--line);
@@ -285,10 +289,11 @@
         text-transform: uppercase;
       }
 
-      .fp-badge.dinheiro { background: #e8f5e9; color: #2e7d32; }
-      .fp-badge.debito   { background: #e3f2fd; color: #1565c0; }
-      .fp-badge.credito  { background: #fff3e0; color: #e65100; }
-      .fp-badge.pix      { background: #e8f5e9; color: #00695c; }
+      .fp-badge.dinheiro  { background: #e8f5e9; color: #2e7d32; }
+      .fp-badge.debito    { background: #e3f2fd; color: #1565c0; }
+      .fp-badge.credito   { background: #fff3e0; color: #e65100; }
+      .fp-badge.pix       { background: #e8f5e9; color: #00695c; }
+      .fp-badge.faturado  { background: #f3e5f5; color: #6a1b9a; }
 
       .td-actions {
         display: flex;
@@ -527,6 +532,10 @@
                 <span class="fp-icon">⚡</span>
                 PIX
               </button>
+              <button type="button" class="fp-btn" data-fp="faturado" tabindex="0">
+                <span class="fp-icon">🧾</span>
+                Faturado
+              </button>
             </div>
           </div>
 
@@ -556,9 +565,13 @@
           <span class="tc-label">PIX</span>
           <span class="tc-value" id="totPix">R$ 0,00</span>
         </div>
+        <div class="total-card" style="border-right-color:var(--line);">
+          <span class="tc-label" style="color:#6a1b9a;">Faturado</span>
+          <span class="tc-value" id="totFaturado" style="color:#6a1b9a;">R$ 0,00</span>
+        </div>
         <div class="total-card total-geral">
-          <span class="tc-label">Total do dia</span>
-          <span class="tc-value" id="totGeral">R$ 0,00</span>
+          <span class="tc-label">A vista</span>
+          <span class="tc-value" id="totAvista">R$ 0,00</span>
           <span class="tc-count" id="totCount">0 lancamentos</span>
         </div>
       </div>
@@ -648,6 +661,9 @@
             </button>
             <button type="button" class="fp-btn" data-fp="pix">
               <span class="fp-icon">⚡</span>PIX
+            </button>
+            <button type="button" class="fp-btn" data-fp="faturado">
+              <span class="fp-icon">🧾</span>Faturado
             </button>
           </div>
         </div>

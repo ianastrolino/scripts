@@ -409,8 +409,15 @@ def api_info(unit: str):
     # Deriva lista de servicos dos categoria_ids configurados
     categoria_ids = ud.get("categoria_ids", {})
     servicos = list(categoria_ids.keys()) if categoria_ids else [
-        "VISTORIA CAUTELAR", "LAUDO DE VERIFICACAO", "LAUDO DE TRANSFERENCIA",
-        "LAUDO CAUTELAR VERIFICACAO", "CAUTELAR COM ANALISE",
+        "LAUDO DE TRANSFERENCIA",
+        "LAUDO CAUTELAR",
+        "CAUTELAR COM ANALISE DE PINTURA",
+        "REVISTORIA",
+        "BAIXA PERMANENTE",
+        "CONSULTA GRAVAME",
+        "EMISSAO CRLV",
+        "PESQUISA AVULSA",
+        "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
     ]
     return _json({
         "unidade": ud.get("nome", unit),
@@ -824,12 +831,13 @@ def _verify_unit_pin(unit: str, pin: str) -> bool:
 
 
 def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
-    totals: dict[str, float] = {"dinheiro": 0.0, "debito": 0.0, "credito": 0.0, "pix": 0.0}
+    totals: dict[str, float] = {"dinheiro": 0.0, "debito": 0.0, "credito": 0.0, "pix": 0.0, "faturado": 0.0}
     for lc in lancamentos:
         fp = lc.get("fp", "")
         if fp in totals:
             totals[fp] += float(lc.get("valor", 0))
     totals["total"] = sum(totals.values())
+    totals["total_avista"] = totals["total"] - totals["faturado"]
     return totals
 
 
@@ -874,7 +882,7 @@ def api_caixa_lancar(unit: str):
             return _json({"success": False, "error": "Servico obrigatorio."}, 400)
         if valor <= 0:
             return _json({"success": False, "error": "Valor deve ser maior que zero."}, 400)
-        if fp not in ("dinheiro", "debito", "credito", "pix"):
+        if fp not in ("dinheiro", "debito", "credito", "pix", "faturado"):
             return _json({"success": False, "error": "Forma de pagamento invalida."}, 400)
 
         now = dt.datetime.now()
