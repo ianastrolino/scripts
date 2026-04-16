@@ -263,6 +263,12 @@ def logout():
     return redirect(url_for("login_page"))
 
 
+@app.route("/<path:filename>")
+def root_static(filename: str):
+    """Serve arquivos estaticos da UI (logo, css, js) fora das rotas de unidade."""
+    return send_from_directory(UI_DIR, filename)
+
+
 @app.route("/")
 @login_required
 def index():
