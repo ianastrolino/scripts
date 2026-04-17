@@ -1291,9 +1291,10 @@
       letter-spacing: -.02em; text-align: right;
     }
     .confirm-row-val.placa {
-      font-size: 15px; font-weight: 800; letter-spacing: .1em;
+      font-size: 22px; font-weight: 900; letter-spacing: .12em;
       background: var(--t1); color: #fff;
-      padding: 3px 10px; border-radius: 5px;
+      padding: 5px 14px; border-radius: 6px;
+      font-family: 'Courier New', monospace;
     }
     .confirm-row-val.valor {
       font-size: 20px; font-weight: 800; letter-spacing: -.04em;
@@ -1564,8 +1565,9 @@
 
           <div class="field">
             <label for="fPlaca">Placa do veículo</label>
-            <input id="fPlaca" class="placa" type="text" maxlength="8"
-                   placeholder="ABC1D23" autocomplete="off" spellcheck="false">
+            <input id="fPlaca" class="placa" type="text" maxlength="7"
+                   placeholder="ABC1D23" autocomplete="off" spellcheck="false"
+                   inputmode="text">
             <span id="placaError" style="display:none;font-size:11.5px;font-weight:600;color:var(--red);margin-top:3px;"></span>
           </div>
 
@@ -1926,7 +1928,7 @@
     </div>
   </div>
 
-  <script src="caixa.js?v=6"></script>
+  <script src="caixa.js?v=7"></script>
   <script>
     // Valida placa em tempo real
     document.addEventListener("DOMContentLoaded", () => {

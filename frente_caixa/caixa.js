@@ -414,11 +414,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById(id).addEventListener("input", validarFormulario);
   });
 
-  // Uppercase placa em tempo real
+  // Placa: apenas A-Z 0-9, maiúsculo, máx 7 chars — cobre digitação e paste
   document.getElementById("fPlaca").addEventListener("input", function () {
-    const pos = this.selectionStart;
-    this.value = this.value.toUpperCase();
-    this.setSelectionRange(pos, pos);
+    const clean = this.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
+    if (this.value !== clean) this.value = clean;
   });
 
   document.getElementById("ePlaca").addEventListener("input", function () {
