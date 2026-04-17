@@ -858,22 +858,26 @@ def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
 # Rotas: caixa do dia (PDV)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _nocache(resp):
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 @app.route("/u/<unit>/caixa")
 @unit_access_required
 def unit_caixa(unit: str):
-    return send_from_directory(UI_DIR, "caixa.html")
+    return _nocache(send_from_directory(UI_DIR, "caixa.html"))
 
 
 @app.route("/u/<unit>/caixa2")
 @unit_access_required
 def unit_caixa2(unit: str):
-    return send_from_directory(UI_DIR, "caixa2.html")
+    return _nocache(send_from_directory(UI_DIR, "caixa2.html"))
 
 
 @app.route("/u/<unit>/fechamento")
 @unit_access_required
 def unit_fechamento(unit: str):
-    return send_from_directory(UI_DIR, "fechamento.html")
+    return _nocache(send_from_directory(UI_DIR, "fechamento.html"))
 
 
 @app.route("/u/<unit>/api/astro", methods=["POST"])
