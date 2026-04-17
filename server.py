@@ -44,6 +44,7 @@ UNITS_CONFIG (JSON):
 from __future__ import annotations
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 import hashlib
 import json
 import os
@@ -579,7 +580,7 @@ def api_send(unit: str):
                     imported[rec.chave_deduplicacao] = {
                         "arquivo": rec.origem_arquivo,
                         "linha": rec.linha_origem,
-                        "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                        "enviado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
                         "resposta": resp,
                     }
                     results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
@@ -589,7 +590,7 @@ def api_send(unit: str):
                         imported[rec.chave_deduplicacao] = {
                             "arquivo": rec.origem_arquivo,
                             "linha": rec.linha_origem,
-                            "enviado_em": dt.datetime.now().isoformat(timespec="seconds"),
+                            "enviado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
                             "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
                         }
                         results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
@@ -991,7 +992,7 @@ def api_caixa_lancar(unit: str):
         if fp not in ("dinheiro", "debito", "credito", "pix", "faturado"):
             return _json({"success": False, "error": "Forma de pagamento invalida."}, 400)
 
-        now = dt.datetime.now()
+        now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
         lancamento = {
             "id": secrets.token_hex(8),
             "hora": now.strftime("%H:%M"),
