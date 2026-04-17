@@ -357,7 +357,10 @@ def unit_index(unit: str):
 @app.route("/u/<unit>/<path:filename>")
 @unit_access_required
 def unit_static(unit: str, filename: str):
-    return send_from_directory(UI_DIR, filename)
+    resp = send_from_directory(UI_DIR, filename)
+    if filename.endswith((".js", ".html", ".css")):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 # ══════════════════════════════════════════════════════════════════════════════
