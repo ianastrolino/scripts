@@ -78,8 +78,7 @@ async function carregarEstado() {
     if (res.success) {
       state.lancamentos = res.lancamentos || [];
       state.totais = res.totais || {};
-      renderTabela();
-      renderTotais();
+      setTimeout(() => { renderTabela(); renderTotais(); }, 0);
     }
   } catch (e) {
     if (e.message !== "session_expired") console.error("Erro ao carregar estado:", e);
@@ -228,15 +227,19 @@ async function lancar() {
     // Atualiza estado local
     state.lancamentos.push(res.lancamento);
     state.totais = res.totais;
-    try { renderTabela(); } catch(e) { console.error("[renderTabela]", e); }
-    try { renderTotais(res.totais, state.lancamentos.length); } catch(e) { console.error("[renderTotais]", e); }
 
-    // Feedback visual
+    // Feedback visual imediato
     msg.style.color = "var(--accent)";
     msg.textContent = `Lancado: ${payload.placa} — ${brl(payload.valor)} (${fpLabel(payload.fp)})`;
     setTimeout(() => { msg.textContent = ""; msg.style.color = ""; }, 3000);
 
-    try { limparFormulario(); } catch(e) { console.error("[limparFormulario]", e); }
+    limparFormulario();
+
+    // Renders em frame separado — evita stack overflow por cadeia de inicialização
+    setTimeout(() => {
+      renderTabela();
+      renderTotais(res.totais, state.lancamentos.length);
+    }, 0);
 
     // Scroll para a ultima linha
     setTimeout(() => {
