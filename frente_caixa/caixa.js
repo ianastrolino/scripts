@@ -131,6 +131,7 @@ function renderTotais(totais, count) {
   if (_renderTotaisActive) { console.warn("renderTotais: chamada recursiva bloqueada"); return; }
   _renderTotaisActive = true;
   const t = totais || state.totais;
+  console.log("[renderTotais] t=", JSON.stringify(t), "lancamentos=", state.lancamentos.length);
   const n = count !== undefined ? count : state.lancamentos.length;
   document.getElementById("totDinheiro").textContent = brl(t.dinheiro    || 0);
   document.getElementById("totDebito").textContent   = brl(t.debito      || 0);
