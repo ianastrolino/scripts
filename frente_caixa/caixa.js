@@ -180,9 +180,14 @@ function limparFormulario() {
   document.getElementById("fServico").value = "";
   document.getElementById("fValor").value   = "";
   state.fpSelecionado = "";
-  document.querySelectorAll(".pdv-form-panel .fp-btn").forEach(b => b.classList.remove("selected"));
+  // Suporta layout 1 (.fp-btn) e layout 2 (.fp-card)
+  document.querySelectorAll(".fp-btn, .fp-card").forEach(b => b.classList.remove("selected"));
   document.getElementById("btnLancar").disabled = true;
   document.getElementById("formMsg").textContent = "";
+  // Limpa erro de placa
+  const placaErr = document.getElementById("placaError");
+  if (placaErr) { placaErr.textContent = ""; placaErr.style.display = "none"; }
+  document.getElementById("fPlaca").style.borderColor = "";
   document.getElementById("fPlaca").focus();
 }
 

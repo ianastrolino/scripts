@@ -1836,16 +1836,7 @@
       if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
     };
 
-    // Patch limparFormulario — limpa fp-card selecionado no layout 2
-    const _origLimparFormulario = limparFormulario;
-    window.limparFormulario = function() {
-      _origLimparFormulario();
-      document.getElementById("fpGrid").querySelectorAll(".fp-card")
-        .forEach(b => b.classList.remove("selected"));
-      state.fpSelecionado = "";
-    };
-
-    const _origAbrirEditar = abrirEditar;
+const _origAbrirEditar = abrirEditar;
     window.abrirEditar = function(id) {
       _origAbrirEditar(id);
       const lc = state.lancamentos.find(l => l.id === id);
