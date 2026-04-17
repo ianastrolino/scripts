@@ -297,6 +297,7 @@ function renderTable() {
   rows.forEach((record) => {
     const tr = document.createElement("tr");
     const issues = recordIssues(record);
+    if (record.pdvExtra) tr.classList.add("row-pdv-extra");
     tr.innerHTML = `
       <td>${formatDateBr(record.data)}</td>
       <td>
@@ -305,7 +306,7 @@ function renderTable() {
       </td>
       <td>
         <strong>${record.tipoServico}</strong>
-        <div class="cell-muted">${record.origemArquivo}</div>
+        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${record.origemArquivo.replace("PDV ", "")}</span>` : record.origemArquivo}</div>
       </td>
       <td>${record.placa}</td>
       <td>${record.servico}</td>
@@ -484,9 +485,8 @@ function renderIssues() {
 async function conferirComPDV() {
   if (!apiBase || !state.records.length) return;
   const avRecords = state.records
-    .filter((r) => r.fp === "AV")
+    .filter((r) => r.fp === "AV" && !r.pdvExtra)
     .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp }));
-  if (!avRecords.length) return;
   try {
     const result = await apiFetch(`${apiBase}/api/caixa/conferir`, {
       method: "POST",
@@ -495,6 +495,7 @@ async function conferirComPDV() {
     });
     if (!result.success) return;
     state.conferencia = result.conferencia;
+
     // Auto-preenche avPagamento para registros confirmados no PDV ("ok")
     for (const [id, conf] of Object.entries(result.conferencia)) {
       if (conf.status === "ok" && conf.pdv_fp) {
@@ -504,6 +505,33 @@ async function conferirComPDV() {
         }
       }
     }
+
+    // Injeta lançamentos do PDV que não têm correspondência na planilha
+    // (serviços que nunca vêm no Excel: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
+    const extras = (result.pdv_sem_planilha || []);
+    // Remove extras anteriores para não duplicar em chamadas subsequentes
+    state.records = state.records.filter((r) => !r.pdvExtra);
+    for (const lc of extras) {
+      const hoje = lc.timestamp ? lc.timestamp.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      state.records.push({
+        id: `pdv-${lc.pdv_id}`,
+        data: hoje,
+        modelo: "",
+        placa: lc.placa || "",
+        cliente: (lc.cliente || "").toUpperCase(),
+        servico: (lc.servico || "").toUpperCase(),
+        tipoServico: serviceType(lc.servico || ""),
+        fp: lc.fp === "faturado" ? "FA" : "AV",
+        preco: Number(lc.valor) || 0,
+        origemArquivo: `PDV ${lc.hora || ""}`.trim(),
+        linhaOrigem: 0,
+        avPagamento: lc.fp === "faturado" ? "pendente" : (lc.fp || "pendente"),
+        tinyClienteId: knownTinyClients.get(normalizeKey(lc.cliente || "")) || null,
+        ignorar: false,
+        pdvExtra: true,   // marca para identificação visual e limpeza
+      });
+    }
+
     render();
   } catch (e) {
     // conferencia e opcional — falha silenciosa

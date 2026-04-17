@@ -1100,6 +1100,8 @@ def api_caixa_conferir(unit: str):
             key = (_norm_placa(lc.get("placa", "")), _norm_servico(lc.get("servico", "")))
             pdv_map[key] = lc
 
+        # Chaves da planilha AV (para detectar PDV sem planilha)
+        planilha_keys: set[tuple] = set()
         conferencia: dict[str, dict] = {}
         for r in records:
             if r.get("fp") != "AV":
@@ -1110,6 +1112,7 @@ def api_caixa_conferir(unit: str):
             servico = _norm_servico(r.get("servico", ""))
             preco   = float(r.get("preco", 0))
             key     = (placa, servico)
+            planilha_keys.add(key)
 
             if key not in pdv_map:
                 conferencia[rec_id] = {
@@ -1129,7 +1132,23 @@ def api_caixa_conferir(unit: str):
                     "pdv_hora": lc.get("hora"),
                 }
 
-        return _json({"success": True, "conferencia": conferencia})
+        # Lançamentos do PDV que nao aparecem em nenhum registro AV da planilha
+        # (servicos que nunca vem na planilha: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
+        pdv_sem_planilha = []
+        for (placa_key, servico_key), lc in pdv_map.items():
+            if (placa_key, servico_key) not in planilha_keys:
+                pdv_sem_planilha.append({
+                    "pdv_id":   lc.get("id"),
+                    "hora":     lc.get("hora"),
+                    "placa":    lc.get("placa"),
+                    "cliente":  lc.get("cliente"),
+                    "servico":  lc.get("servico"),
+                    "valor":    lc.get("valor"),
+                    "fp":       lc.get("fp"),
+                    "timestamp": lc.get("timestamp"),
+                })
+
+        return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
     except Exception as exc:
         return _json({"success": False, "error": str(exc)}, 500)
 

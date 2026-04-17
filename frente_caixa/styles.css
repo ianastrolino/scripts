@@ -389,6 +389,20 @@ tbody tr:hover {
 .pdv-confirm-btn:hover { opacity: .75; }
 .pdv-confirmed { font-style: italic; opacity: .7; }
 
+/* Linhas vindas do PDV sem correspondência na planilha */
+.row-pdv-extra { background: #f0f7ff; }
+.row-pdv-extra:hover { background: #e3f0ff; }
+.pdv-origin-badge {
+  display: inline-block;
+  background: #1a6fbf;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: .03em;
+}
+
 select,
 .client-select {
   width: 150px;
