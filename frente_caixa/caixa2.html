@@ -1240,6 +1240,185 @@
       flex-shrink: 0; box-shadow: 0 2px 8px rgba(220,38,38,.3);
     }
     .chat-send-btn:hover { background: var(--red-dk); transform: scale(1.12); }
+
+    /* ═══════════════════════════════════════════════════════
+       PRÉ-CONFERÊNCIA
+    ═══════════════════════════════════════════════════════ */
+    .conf-header {
+      padding: 13px 18px 12px;
+      border-bottom: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .conf-back-btn {
+      border: none;
+      background: transparent;
+      color: var(--t5);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color .12s, background .12s;
+      font-family: inherit;
+      letter-spacing: -.01em;
+    }
+    .conf-back-btn:hover { background: var(--sf3); color: var(--t2); }
+    .conf-body { padding: 16px 18px 18px; }
+
+    .conf-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .conf-table th {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--t5);
+      padding: 0 6px 8px;
+      text-align: left;
+      border-bottom: 1.5px solid var(--border);
+    }
+    .conf-table th.right { text-align: right; }
+    .conf-row td {
+      padding: 9px 6px;
+      border-bottom: 1px solid var(--border2);
+      vertical-align: middle;
+    }
+    .conf-row:last-child td { border-bottom: none; }
+    .conf-fp-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--t2);
+    }
+    .conf-pdv-val {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--t3);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .conf-input-wrap { position: relative; display: flex; justify-content: flex-end; }
+    .conf-prefix {
+      position: absolute;
+      left: 8px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--t4);
+      pointer-events: none;
+    }
+    .conf-input {
+      width: 110px;
+      height: 34px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r);
+      padding: 0 10px 0 26px;
+      font-size: 13.5px;
+      font-weight: 700;
+      font-family: inherit;
+      color: var(--t1);
+      background: var(--sf2);
+      outline: none;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      transition: border-color .12s, box-shadow .12s, background .12s;
+      appearance: none;
+    }
+    .conf-input:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px var(--focus-r);
+      background: #fff;
+    }
+    .conf-diff {
+      font-size: 11.5px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+      color: var(--t5);
+    }
+    .conf-diff.ok   { color: var(--din); }
+    .conf-diff.warn { color: var(--fat); }
+    .conf-diff.err  { color: var(--red); }
+    .conf-total-row td {
+      padding: 10px 6px 2px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--t2);
+      border-top: 2px solid var(--border);
+    }
+    .conf-alert {
+      border-radius: var(--r);
+      padding: 10px 13px;
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.5;
+      margin-bottom: 13px;
+      display: none;
+      letter-spacing: -.01em;
+    }
+    .conf-alert.show { display: block; }
+    .conf-alert.ok   { background: var(--din-bg); border: 1px solid var(--din-bd); color: #065f46; }
+    .conf-alert.warn { background: var(--fat-bg); border: 1px solid var(--fat-bd); color: #92400e; }
+    .conf-alert.err  { background: var(--red-lt); border: 1px solid #fca5a5;       color: #991b1b; }
+
+    .btn-conferir {
+      width: 100%;
+      height: 44px;
+      border: none;
+      border-radius: var(--r);
+      background: var(--focus);
+      color: #fff;
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      cursor: pointer;
+      box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 3px 12px rgba(79,70,229,.35);
+      transition: background .15s, box-shadow .15s, transform .12s;
+      font-family: inherit;
+    }
+    .btn-conferir:hover:not(:disabled) {
+      background: #4338ca;
+      box-shadow: 0 1px 0 rgba(0,0,0,.14), 0 6px 20px rgba(79,70,229,.42);
+      transform: translateY(-1px);
+    }
+    .btn-conferir:active:not(:disabled) { transform: none; }
+    .btn-conferir:disabled {
+      background: var(--sf3);
+      color: var(--t6);
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* Botão Conferir no hero */
+    #btnAbrirConferencia {
+      display: none;
+      margin-top: 12px;
+      height: 34px;
+      padding: 0 16px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.75);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all .15s;
+      letter-spacing: -.01em;
+      white-space: nowrap;
+    }
+    #btnAbrirConferencia:hover {
+      background: rgba(255,255,255,.16);
+      border-color: rgba(255,255,255,.3);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    #btnAbrirConferencia.visible { display: block; }
   </style>
 </head>
 <body>
@@ -1290,9 +1469,9 @@
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════ -->
   <div class="workspace">
 
-    <!-- Coluna esquerda: formulário -->
+    <!-- Coluna esquerda: formulário / conferência -->
     <div>
-      <div class="card">
+      <div class="card" id="formCard">
         <div class="card-header">
           <div class="card-icon">➕</div>
           <span class="card-title">Novo lançamento</span>
@@ -1357,6 +1536,87 @@
 
         </div>
       </div>
+
+      <!-- Pré-Conferência (wizard step) -->
+      <div class="card" id="confCard" style="display:none;">
+        <div class="conf-header">
+          <button class="conf-back-btn" id="confBackBtn">← Voltar</button>
+          <div class="card-icon" style="background:#ede9fe;color:#7c3aed;">✓</div>
+          <span class="card-title">Conferência de caixa</span>
+        </div>
+        <div class="conf-body">
+          <table class="conf-table">
+            <thead>
+              <tr>
+                <th>Forma</th>
+                <th class="right">PDV</th>
+                <th class="right">Físico</th>
+                <th class="right">Dif.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="conf-row">
+                <td><span class="conf-fp-label">💵 Dinheiro</span></td>
+                <td class="conf-pdv-val" id="cPdvDin">R$ 0,00</td>
+                <td>
+                  <div class="conf-input-wrap">
+                    <span class="conf-prefix">R$</span>
+                    <input class="conf-input" id="cFisDin" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
+                  </div>
+                </td>
+                <td class="conf-diff" id="cDiffDin">—</td>
+              </tr>
+              <tr class="conf-row">
+                <td><span class="conf-fp-label">💳 Débito</span></td>
+                <td class="conf-pdv-val" id="cPdvDeb">R$ 0,00</td>
+                <td>
+                  <div class="conf-input-wrap">
+                    <span class="conf-prefix">R$</span>
+                    <input class="conf-input" id="cFisDeb" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
+                  </div>
+                </td>
+                <td class="conf-diff" id="cDiffDeb">—</td>
+              </tr>
+              <tr class="conf-row">
+                <td><span class="conf-fp-label">💳 Crédito</span></td>
+                <td class="conf-pdv-val" id="cPdvCrd">R$ 0,00</td>
+                <td>
+                  <div class="conf-input-wrap">
+                    <span class="conf-prefix">R$</span>
+                    <input class="conf-input" id="cFisCrd" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
+                  </div>
+                </td>
+                <td class="conf-diff" id="cDiffCrd">—</td>
+              </tr>
+              <tr class="conf-row">
+                <td><span class="conf-fp-label">⚡ PIX</span></td>
+                <td class="conf-pdv-val" id="cPdvPix">R$ 0,00</td>
+                <td>
+                  <div class="conf-input-wrap">
+                    <span class="conf-prefix">R$</span>
+                    <input class="conf-input" id="cFisPix" type="number" min="0" step="0.01" placeholder="0,00" autocomplete="off">
+                  </div>
+                </td>
+                <td class="conf-diff" id="cDiffPix">—</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr class="conf-total-row">
+                <td>Total à Vista</td>
+                <td class="conf-pdv-val right" id="cPdvTotal">R$ 0,00</td>
+                <td></td>
+                <td class="conf-diff" id="cDiffTotal">—</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <div class="conf-alert" id="confAlert"></div>
+
+          <button class="btn-conferir" id="btnConferir" type="button">
+            Confirmar e ir para o Fechamento →
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Coluna direita -->
@@ -1371,6 +1631,7 @@
         </div>
         <div class="hero-right">
           <div class="hero-count" id="totCount">0 lançamentos</div>
+          <button id="btnAbrirConferencia" type="button">Conferir Caixa ✓</button>
         </div>
       </div>
 
@@ -1561,6 +1822,13 @@
         });
       });
     });
+
+    // Patch renderTotais para acionar btn de conferência
+    const _origRenderTotais = renderTotais;
+    function renderTotais(totais, count) {
+      _origRenderTotais(totais, count);
+      if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
+    }
 
     const _origAbrirEditar = abrirEditar;
     function abrirEditar(id) {

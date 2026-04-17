@@ -257,6 +257,115 @@ async function sendMessage() {
   showQuickReplies();
 }
 
+// ── Pré-Conferência ───────────────────────────────────────────────────────────
+
+const fmtConf = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function parseConfVal(elId) {
+  const txt = document.getElementById(elId).textContent;
+  return parseFloat(txt.replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0;
+}
+
+function atualizarBtnConferir() {
+  const btn = document.getElementById("btnAbrirConferencia");
+  if (!btn) return;
+  btn.classList.toggle("visible", state.lancamentos.length > 0);
+}
+
+function abrirConferencia() {
+  const r = calcularResumo();
+  const pdvDin = r.porFp.dinheiro;
+  const pdvDeb = r.porFp.debito;
+  const pdvCrd = r.porFp.credito;
+  const pdvPix = r.porFp.pix;
+
+  document.getElementById("cPdvDin").textContent   = fmtConf(pdvDin);
+  document.getElementById("cPdvDeb").textContent   = fmtConf(pdvDeb);
+  document.getElementById("cPdvCrd").textContent   = fmtConf(pdvCrd);
+  document.getElementById("cPdvPix").textContent   = fmtConf(pdvPix);
+  document.getElementById("cPdvTotal").textContent = fmtConf(pdvDin + pdvDeb + pdvCrd + pdvPix);
+
+  ["cFisDin","cFisDeb","cFisCrd","cFisPix"].forEach(id => { document.getElementById(id).value = ""; });
+  ["cDiffDin","cDiffDeb","cDiffCrd","cDiffPix","cDiffTotal"].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = "—";
+    el.className = "conf-diff";
+  });
+  const alert = document.getElementById("confAlert");
+  alert.className = "conf-alert";
+  alert.textContent = "";
+
+  document.getElementById("formCard").style.display = "none";
+  document.getElementById("confCard").style.display = "";
+  document.getElementById("cFisDin").focus();
+}
+
+function voltarLancamentos() {
+  document.getElementById("confCard").style.display = "none";
+  document.getElementById("formCard").style.display = "";
+}
+
+function calcularConferencia() {
+  const pdvDin   = parseConfVal("cPdvDin");
+  const pdvDeb   = parseConfVal("cPdvDeb");
+  const pdvCrd   = parseConfVal("cPdvCrd");
+  const pdvPix   = parseConfVal("cPdvPix");
+  const totalPdv = pdvDin + pdvDeb + pdvCrd + pdvPix;
+
+  const fisDin = parseFloat(document.getElementById("cFisDin").value) || 0;
+  const fisDeb = parseFloat(document.getElementById("cFisDeb").value) || 0;
+  const fisCrd = parseFloat(document.getElementById("cFisCrd").value) || 0;
+  const fisPix = parseFloat(document.getElementById("cFisPix").value) || 0;
+  const totalFis = fisDin + fisDeb + fisCrd + fisPix;
+
+  const inputs = ["cFisDin","cFisDeb","cFisCrd","cFisPix"];
+  const anyFilled = inputs.some(id => document.getElementById(id).value !== "");
+
+  const renderDiff = (elId, pdv, fis, filled) => {
+    const el = document.getElementById(elId);
+    if (!filled) { el.textContent = "—"; el.className = "conf-diff"; return; }
+    const diff = fis - pdv;
+    const abs  = Math.abs(diff);
+    el.textContent = (diff >= 0 ? "+" : "−") + fmtConf(abs);
+    el.className   = "conf-diff " + (abs < 0.01 ? "ok" : abs <= 5 ? "warn" : "err");
+  };
+
+  renderDiff("cDiffDin",   pdvDin,   fisDin,   document.getElementById("cFisDin").value !== "");
+  renderDiff("cDiffDeb",   pdvDeb,   fisDeb,   document.getElementById("cFisDeb").value !== "");
+  renderDiff("cDiffCrd",   pdvCrd,   fisCrd,   document.getElementById("cFisCrd").value !== "");
+  renderDiff("cDiffPix",   pdvPix,   fisPix,   document.getElementById("cFisPix").value !== "");
+  renderDiff("cDiffTotal", totalPdv, totalFis, anyFilled);
+
+  const alertEl = document.getElementById("confAlert");
+  const absTotal = Math.abs(totalFis - totalPdv);
+  if (!anyFilled) {
+    alertEl.className = "conf-alert";
+    alertEl.textContent = "";
+  } else if (absTotal < 0.01) {
+    alertEl.className = "conf-alert ok show";
+    alertEl.textContent = "✅ Caixa conferido! Os valores físicos conferem com o PDV.";
+  } else if (absTotal <= 10) {
+    alertEl.className = "conf-alert warn show";
+    alertEl.textContent = `⚠️ Diferença de ${fmtConf(absTotal)}. Verifique antes de prosseguir.`;
+  } else {
+    alertEl.className = "conf-alert err show";
+    alertEl.textContent = `❌ Divergência de ${fmtConf(absTotal)}. Revise os valores antes de fechar o caixa.`;
+  }
+
+  return { pdvDin, pdvDeb, pdvCrd, pdvPix, totalPdv, fisDin, fisDeb, fisCrd, fisPix, totalFis };
+}
+
+function confirmarConferencia() {
+  const c = calcularConferencia();
+  sessionStorage.setItem("conferencia_pdv", JSON.stringify({
+    pdv:    { dinheiro: c.pdvDin, debito: c.pdvDeb, credito: c.pdvCrd, pix: c.pdvPix, total: c.totalPdv },
+    fisico: { dinheiro: c.fisDin, debito: c.fisDeb, credito: c.fisCrd, pix: c.fisPix, total: c.totalFis },
+    diff: c.totalFis - c.totalPdv,
+    lockedAt: new Date().toISOString(),
+  }));
+  window.location.href = `${apiBase}/fechamento`;
+}
+
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 function atualizarStatusBar() {
@@ -288,12 +397,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (apiBase) {
         const linkFechamento = document.getElementById("linkFechamento");
-        if (linkFechamento) linkFechamento.href = `${apiBase}/`;
+        if (linkFechamento) linkFechamento.href = `${apiBase}/fechamento`;
         const linkCaixaL2 = document.getElementById("linkCaixaL2");
         if (linkCaixaL2) linkCaixaL2.href = `${apiBase}/caixa2`;
       }
     }).catch(() => {});
   }
+
+  // Conferência
+  document.getElementById("btnAbrirConferencia")?.addEventListener("click", abrirConferencia);
+  document.getElementById("confBackBtn")?.addEventListener("click", voltarLancamentos);
+  document.getElementById("btnConferir")?.addEventListener("click", confirmarConferencia);
+  ["cFisDin","cFisDeb","cFisCrd","cFisPix"].forEach(id => {
+    document.getElementById(id)?.addEventListener("input", calcularConferencia);
+  });
 
   // Botão resumo
   document.getElementById("btnResumo")?.addEventListener("click", abrirResumo);

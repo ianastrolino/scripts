@@ -50,7 +50,9 @@ import os
 import secrets
 import sys
 import threading
+import time
 import traceback
+
 import urllib.parse
 from dataclasses import asdict
 from functools import wraps
@@ -756,6 +758,8 @@ def api_auto_map_clients(unit: str):
             if len(items) < 100:
                 break
             page += 1
+            time.sleep(0.5) # Throttling para evitar 503/429 no Tiny
+
 
         mapped       = []
         needs_review = []
@@ -860,6 +864,12 @@ def unit_caixa(unit: str):
 @unit_access_required
 def unit_caixa2(unit: str):
     return send_from_directory(UI_DIR, "caixa2.html")
+
+
+@app.route("/u/<unit>/fechamento")
+@unit_access_required
+def unit_fechamento(unit: str):
+    return send_from_directory(UI_DIR, "fechamento.html")
 
 
 @app.route("/u/<unit>/api/astro", methods=["POST"])

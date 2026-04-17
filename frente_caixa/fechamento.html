@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Astro Ops · Fechamento</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #e8ecf2;
+      --surface: #ffffff;
+      --sf2:     #f5f7fa;
+      --sf3:     #eef1f6;
+      --t1: #07101f;
+      --t2: #162032;
+      --t3: #2c3f55;
+      --t4: #536a84;
+      --t5: #7f97b0;
+      --t6: #b0c2d4;
+      --border:  #d5dde8;
+      --border2: #e8edf4;
+      --s0: 0 1px 2px rgba(7,16,31,.05);
+      --s1: 0 1px 4px rgba(7,16,31,.08), 0 1px 2px rgba(7,16,31,.05);
+      --s2: 0 4px 16px rgba(7,16,31,.12), 0 1px 6px rgba(7,16,31,.06);
+      --s3: 0 20px 60px rgba(7,16,31,.2), 0 6px 24px rgba(7,16,31,.1);
+      --r:   8px;
+      --rm:  10px;
+      --rl:  12px;
+      --rxl: 16px;
+      --red:    #dc2626;
+      --red-dk: #b91c1c;
+      --red-lt: #fef2f2;
+      --focus:   #4f46e5;
+      --focus-r: rgba(79,70,229,.18);
+      --din:    #059669; --din-bg: #ecfdf5; --din-bd: #6ee7b7;
+      --deb:    #2563eb; --deb-bg: #eff6ff; --deb-bd: #93c5fd;
+      --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
+      --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
+      --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--t2);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══ HEADER ═══════════════════════════════════════════════════════════════ */
+    .header {
+      background: #080f1c;
+      height: 54px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      box-shadow: 0 1px 0 rgba(255,255,255,.05), 0 4px 24px rgba(0,0,0,.25);
+    }
+    .header-brand {
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0; padding-right: 20px; margin-right: 20px;
+      border-right: 1px solid rgba(255,255,255,.07);
+    }
+    .header-logo-pill {
+      background: #fff; border-radius: 6px; padding: 4px 7px;
+      height: 30px; display: flex; align-items: center;
+    }
+    .header-logo-pill img { height: 20px; width: auto; }
+    .brand-name { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: -.025em; }
+    .brand-sub  { font-size: 9.5px; font-weight: 500; color: rgba(255,255,255,.2); letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
+
+    .header-status { flex: 1; display: flex; align-items: center; gap: 6px; }
+    .hstat {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.5);
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 20px; padding: 3px 10px 3px 8px;
+      letter-spacing: -.01em; transition: background .2s, color .2s;
+    }
+    .hstat:hover { background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); }
+    .hstat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .hstat-dot.green { background: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.2); animation: pulse-dot 3s ease infinite; }
+    .hstat-dot.amber { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,.2); }
+    @keyframes pulse-dot { 0%,100%{box-shadow:0 0 0 2px rgba(34,197,94,.2)} 50%{box-shadow:0 0 0 5px rgba(34,197,94,.04)} }
+    .hstat strong { color: rgba(255,255,255,.75); font-weight: 700; }
+    .hstat-date { color: rgba(255,255,255,.22); font-size: 11px; margin-left: auto; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+    .header-right { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .header-nav {
+      display: flex; align-items: center; gap: 1px;
+      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06);
+      padding: 3px; border-radius: 9px; margin-right: 4px;
+    }
+    .nav-pill {
+      padding: 4px 14px; border-radius: 6px; border: none;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      text-decoration: none; color: rgba(255,255,255,.36);
+      background: transparent; transition: color .15s, background .15s;
+      white-space: nowrap; letter-spacing: -.015em; font-family: inherit;
+    }
+    .nav-pill:hover { color: rgba(255,255,255,.72); }
+    .nav-pill.active { background: var(--red); color: #fff; box-shadow: 0 1px 6px rgba(220,38,38,.45); }
+
+    .user-chip {
+      display: flex; align-items: center; gap: 6px;
+      height: 30px; padding: 0 10px 0 5px; border-radius: 20px;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
+      color: rgba(255,255,255,.45); font-size: 11.5px; font-weight: 500;
+    }
+    .user-avatar {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--red); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; flex-shrink: 0;
+    }
+    .btn-logout {
+      height: 30px; padding: 0 10px; border-radius: 7px; border: none;
+      background: transparent; color: rgba(255,255,255,.22); font-size: 12px;
+      font-weight: 500; cursor: pointer; text-decoration: none; transition: color .15s;
+    }
+    .btn-logout:hover { color: rgba(255,255,255,.6); }
+
+    /* ═══ WORKSPACE ════════════════════════════════════════════════════════════ */
+    .workspace {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 20px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ═══ BANNER PDV CONFERIDO ══════════════════════════════════════════════════ */
+    .pdv-banner {
+      display: none;
+      background: linear-gradient(135deg, #0a1020, #111827);
+      border-radius: var(--rl);
+      padding: 14px 20px;
+      border: 1px solid rgba(255,255,255,.06);
+      box-shadow: 0 4px 20px rgba(0,0,0,.18);
+      align-items: center;
+      gap: 20px;
+    }
+    .pdv-banner.show { display: flex; }
+    .pdv-banner-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: rgba(255,255,255,.3);
+      white-space: nowrap;
+    }
+    .pdv-banner-values {
+      display: flex; gap: 18px; flex-wrap: wrap; flex: 1;
+    }
+    .pdv-bv {
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .pdv-bv-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,.3); letter-spacing: .04em; text-transform: uppercase; }
+    .pdv-bv-val   { font-size: 15px; font-weight: 800; color: #fff; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+    .pdv-banner-chip {
+      padding: 4px 12px; border-radius: 20px;
+      background: #ecfdf5; border: 1px solid var(--din-bd);
+      color: var(--din); font-size: 11px; font-weight: 700;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .pdv-banner-chip.warn { background: var(--fat-bg); border-color: var(--fat-bd); color: var(--fat); }
+
+    /* ═══ IMPORT BAR ════════════════════════════════════════════════════════════ */
+    .import-bar {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+      border-radius: var(--rl);
+      padding: 10px 16px;
+      border: 1px solid rgba(7,16,31,.08);
+      box-shadow: var(--s1);
+    }
+    .import-bar-label {
+      font-size: 11.5px; font-weight: 600; color: var(--t4);
+      letter-spacing: -.01em; margin-right: 4px;
+    }
+    .btn-import {
+      position: relative;
+      height: 34px; padding: 0 16px;
+      border-radius: var(--r); border: none;
+      background: var(--focus); color: #fff;
+      font-size: 12.5px; font-weight: 700;
+      cursor: pointer; font-family: inherit;
+      letter-spacing: -.015em;
+      box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 2px 8px rgba(79,70,229,.3);
+      transition: background .15s, box-shadow .15s, transform .12s;
+      overflow: hidden;
+    }
+    .btn-import:hover { background: #4338ca; transform: translateY(-1px); box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 4px 14px rgba(79,70,229,.38); }
+    .btn-import input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+    .btn-ghost-sm {
+      height: 34px; padding: 0 13px;
+      border-radius: var(--r); border: 1px solid var(--border);
+      background: var(--surface); color: var(--t4);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      font-family: inherit; letter-spacing: -.015em;
+      transition: border-color .12s, background .12s, color .12s;
+    }
+    .btn-ghost-sm:hover { border-color: #b8c6d6; background: var(--sf2); color: var(--t2); }
+    .import-bar-spacer { flex: 1; }
+    .source-info {
+      font-size: 12px; color: var(--t5); letter-spacing: -.01em;
+      font-weight: 500;
+    }
+    .source-info strong { color: var(--t3); font-weight: 700; }
+
+    /* ═══ KPI STRIP ═════════════════════════════════════════════════════════════ */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border-radius: var(--rm);
+      padding: 13px 14px 12px;
+      border: 1px solid rgba(7,16,31,.08);
+      box-shadow: var(--s1);
+      position: relative; overflow: hidden;
+    }
+    .kpi-card::before {
+      content: ''; position: absolute;
+      left: 0; top: 0; bottom: 0; width: 3px;
+      border-radius: var(--rm) 0 0 var(--rm);
+      background: var(--border);
+    }
+    .kpi-card.kc-date::before  { background: var(--t4); }
+    .kpi-card.kc-fa::before    { background: var(--fat); }
+    .kpi-card.kc-av::before    { background: var(--din); }
+    .kpi-card.kc-pend::before  { background: var(--red); }
+    .kpi-card.kc-total::before { background: var(--focus); }
+    .kpi-card.kc-file::before  { background: var(--pix); }
+    .kpi-card-label {
+      font-size: 10px; font-weight: 700; color: var(--t5);
+      margin-bottom: 6px; padding-left: 8px;
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .kpi-card-val {
+      font-size: 15px; font-weight: 800; color: var(--t1);
+      letter-spacing: -.03em; padding-left: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-card-val.muted { opacity: .45; }
+
+    /* ═══ PANELS GRID ═══════════════════════════════════════════════════════════ */
+    .panels-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .panel-card {
+      background: var(--surface);
+      border-radius: var(--rl);
+      border: 1px solid rgba(7,16,31,.08);
+      box-shadow: var(--s1);
+      overflow: hidden;
+    }
+    .panel-card-header {
+      padding: 11px 16px 10px;
+      border-bottom: 1px solid var(--border2);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--sf2);
+    }
+    .panel-card-header h3 {
+      font-size: 12px; font-weight: 700; color: var(--t2);
+      letter-spacing: -.015em;
+    }
+    .panel-tag {
+      font-size: 9.5px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .tag-edit  { background: #dbeafe; color: #1d4ed8; }
+    .tag-calc  { background: var(--sf3); color: var(--t4); }
+    .tag-tiny  { background: var(--fat-bg); color: var(--fat); border: 1px solid var(--fat-bd); }
+
+    .panel-card-body { padding: 12px 16px 14px; }
+    .money-lines { display: flex; flex-direction: column; gap: 0; }
+    .money-line {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border2);
+      gap: 8px;
+    }
+    .money-line:last-child { border-bottom: none; }
+    .money-line > span, .money-line > label > span {
+      font-size: 12px; color: var(--t4); font-weight: 500; letter-spacing: -.01em;
+      white-space: nowrap;
+    }
+    .money-line > strong {
+      font-size: 13px; font-weight: 800; color: var(--t1);
+      letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .money-line label {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; gap: 8px;
+    }
+    .money-input {
+      width: 100px; height: 30px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 0 8px;
+      font-size: 13px; font-weight: 700;
+      font-family: inherit; color: var(--t1);
+      background: var(--sf2); outline: none;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      transition: border-color .12s, box-shadow .12s, background .12s;
+      appearance: none;
+    }
+    .money-input:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px var(--focus-r);
+      background: #fff;
+    }
+    .total-line {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0 2px;
+      border-top: 2px solid var(--border);
+      margin-top: 2px;
+    }
+    .total-line > span { font-size: 11px; font-weight: 700; color: var(--t4); text-transform: uppercase; letter-spacing: .04em; }
+    .total-line > strong { font-size: 14px; font-weight: 800; color: var(--t1); font-variant-numeric: tabular-nums; letter-spacing: -.025em; }
+
+    /* ═══ MAIN AREA ═════════════════════════════════════════════════════════════ */
+    .main-area {
+      display: grid;
+      grid-template-columns: 1fr 240px;
+      gap: 12px;
+      align-items: start;
+    }
+
+    /* ═══ TABLE CARD ════════════════════════════════════════════════════════════ */
+    .table-card {
+      background: var(--surface);
+      border-radius: var(--rl);
+      border: 1px solid rgba(7,16,31,.08);
+      box-shadow: var(--s1);
+      overflow: hidden;
+    }
+    .table-toolbar {
+      padding: 11px 16px 10px;
+      border-bottom: 1px solid var(--border2);
+      background: var(--sf2);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .table-toolbar-left { display: flex; align-items: center; gap: 10px; }
+    .table-card-title { font-size: 12px; font-weight: 700; color: var(--t2); letter-spacing: -.015em; }
+    .table-subtitle { font-size: 11.5px; color: var(--t5); letter-spacing: -.01em; }
+
+    .filters { display: flex; gap: 3px; }
+    .filter {
+      height: 26px; padding: 0 10px;
+      border-radius: 6px; border: 1px solid transparent;
+      background: transparent; color: var(--t5);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      font-family: inherit; letter-spacing: -.01em;
+      transition: all .12s;
+    }
+    .filter:hover { background: var(--sf3); color: var(--t3); }
+    .filter.active {
+      background: var(--t1); color: #fff;
+      border-color: var(--t1);
+    }
+
+    .table-scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+    table.conf-ledger { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .conf-ledger th {
+      position: sticky; top: 0;
+      background: #f0f4f9;
+      border-bottom: 2px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 9.5px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--t4); white-space: nowrap; z-index: 2;
+    }
+    .conf-ledger td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border2);
+      vertical-align: middle;
+    }
+    .conf-ledger tr:last-child td { border-bottom: none; }
+    .conf-ledger tbody tr { transition: background .1s; }
+    .conf-ledger tbody tr:hover td { background: #f7f9fc; }
+    .conf-ledger tbody tr:hover td:first-child { border-left: 2px solid var(--focus); padding-left: 10px; }
+
+    /* ═══ SIDE PANEL ════════════════════════════════════════════════════════════ */
+    .side-col { display: flex; flex-direction: column; gap: 10px; }
+    .action-card {
+      background: var(--surface);
+      border-radius: var(--rl);
+      border: 1px solid rgba(7,16,31,.08);
+      box-shadow: var(--s1);
+      overflow: hidden;
+    }
+    .action-card-header {
+      padding: 10px 14px 9px;
+      border-bottom: 1px solid var(--border2);
+      background: var(--sf2);
+    }
+    .action-card-header h3 { font-size: 11.5px; font-weight: 700; color: var(--t2); letter-spacing: -.015em; }
+    .action-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+
+    .btn-action {
+      width: 100%; height: 36px; border: none;
+      border-radius: var(--r); padding: 0 14px;
+      font-size: 12.5px; font-weight: 700; cursor: pointer;
+      font-family: inherit; letter-spacing: -.015em;
+      transition: background .12s, box-shadow .12s, transform .1s, opacity .15s;
+      text-align: center;
+    }
+    .btn-action.primary {
+      background: var(--red); color: #fff;
+      box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 2px 10px rgba(220,38,38,.28);
+    }
+    .btn-action.primary:hover:not(:disabled) {
+      background: var(--red-dk);
+      box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 4px 16px rgba(220,38,38,.36);
+      transform: translateY(-1px);
+    }
+    .btn-action.indigo {
+      background: var(--focus); color: #fff;
+      box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 2px 10px rgba(79,70,229,.28);
+    }
+    .btn-action.indigo:hover:not(:disabled) {
+      background: #4338ca; transform: translateY(-1px);
+      box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 4px 14px rgba(79,70,229,.36);
+    }
+    .btn-action.secondary {
+      background: var(--surface); color: var(--t3);
+      border: 1.5px solid var(--border);
+    }
+    .btn-action.secondary:hover:not(:disabled) { border-color: #b8c6d6; background: var(--sf2); color: var(--t2); }
+    .btn-action.warn {
+      background: var(--fat-bg); color: var(--fat);
+      border: 1.5px solid var(--fat-bd);
+    }
+    .btn-action.warn:hover:not(:disabled) { background: #fef3c7; transform: translateY(-1px); }
+    .btn-action:disabled { opacity: .4; cursor: not-allowed; transform: none !important; }
+    [hidden] { display: none !important; }
+
+    .issues-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .issues-list li {
+      font-size: 11.5px; color: var(--t4); line-height: 1.4;
+      padding: 5px 8px; border-radius: 6px; background: var(--sf2);
+      letter-spacing: -.01em;
+    }
+    .issues-list li.err { background: var(--red-lt); color: #991b1b; }
+    .issues-list li.warn { background: var(--fat-bg); color: #92400e; }
+
+    .info-dl { font-size: 11.5px; }
+    .info-dl dt { font-weight: 700; color: var(--t3); margin-top: 8px; letter-spacing: -.01em; }
+    .info-dl dd { color: var(--t5); line-height: 1.5; margin-left: 0; letter-spacing: -.01em; }
+
+    /* ═══ MODAIS ════════════════════════════════════════════════════════════════ */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(7,16,31,.52);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay:not(.hidden) { display: flex; }
+
+    .modal-card {
+      background: var(--surface);
+      border-radius: var(--rxl);
+      width: 520px;
+      max-width: calc(100vw - 32px);
+      max-height: 88vh;
+      overflow-y: auto;
+      box-shadow: var(--s3);
+      border: 1px solid rgba(7,16,31,.06);
+      animation: modal-in .18s cubic-bezier(.34,1.4,.64,1);
+    }
+    @keyframes modal-in {
+      from { opacity: 0; transform: translateY(12px) scale(.98); }
+      to   { opacity: 1; transform: none; }
+    }
+    .modal-header {
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border2);
+      display: flex; align-items: flex-start; justify-content: space-between;
+      position: sticky; top: 0; background: var(--surface); z-index: 2;
+      border-radius: var(--rxl) var(--rxl) 0 0;
+    }
+    .modal-header h2 { font-size: 14px; font-weight: 800; color: var(--t1); letter-spacing: -.025em; }
+    .modal-subtitle { font-size: 12px; color: var(--t5); margin-top: 2px; letter-spacing: -.01em; }
+    .btn-ghost {
+      border: none; background: transparent;
+      color: var(--t5); font-size: 15px; cursor: pointer;
+      padding: 4px 7px; border-radius: 7px; line-height: 1;
+      transition: background .12s, color .12s; flex-shrink: 0;
+    }
+    .btn-ghost:hover { background: var(--sf3); color: var(--t2); }
+
+    .modal-body { padding: 16px 20px; }
+    .modal-footer {
+      padding: 12px 20px 16px;
+      border-top: 1px solid var(--border2);
+      display: flex; gap: 8px; justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .modal-footer button {
+      height: 36px; padding: 0 16px;
+      border-radius: var(--r);
+      font-size: 12.5px; font-weight: 700;
+      cursor: pointer; font-family: inherit; letter-spacing: -.015em;
+      transition: all .12s;
+    }
+    .modal-footer .btn-secondary {
+      border: 1.5px solid var(--border); background: var(--surface); color: var(--t3);
+    }
+    .modal-footer .btn-secondary:hover { border-color: #b8c6d6; background: var(--sf2); }
+    .modal-footer button:not(.btn-secondary) {
+      border: none; background: var(--red); color: #fff;
+      box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 2px 10px rgba(220,38,38,.28);
+    }
+    .modal-footer button:not(.btn-secondary):hover {
+      background: var(--red-dk);
+      box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 4px 14px rgba(220,38,38,.34);
+    }
+    .modal-footer button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .modal-summary {
+      background: var(--sf2); border-radius: var(--r);
+      padding: 11px 14px; margin-bottom: 14px;
+      font-size: 12.5px; color: var(--t3); line-height: 1.6;
+      border: 1px solid var(--border2);
+    }
+
+    /* Modal mapeamento */
+    .map-cliente-nome {
+      font-size: 16px; font-weight: 800; color: var(--t1);
+      letter-spacing: -.025em; margin-bottom: 14px;
+      padding: 12px 16px; background: var(--sf2);
+      border-radius: var(--r); border: 1px solid var(--border2);
+    }
+    .map-buscar-box {
+      display: flex; gap: 8px; margin-bottom: 12px;
+    }
+    .map-buscar-box input {
+      flex: 1; height: 36px;
+      border: 1.5px solid var(--border); border-radius: var(--r);
+      padding: 0 12px; font-size: 13px; font-family: inherit;
+      background: var(--sf2); color: var(--t1); outline: none;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .map-buscar-box input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-r); background: #fff; }
+    .map-buscar-box button {
+      height: 36px; padding: 0 14px;
+      border: none; border-radius: var(--r);
+      background: var(--focus); color: #fff;
+      font-size: 12.5px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: background .12s;
+    }
+    .map-buscar-box button:hover { background: #4338ca; }
+
+    /* Preview table */
+    .table-wrap { overflow-x: auto; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .preview-table th {
+      background: #f0f4f9; border-bottom: 2px solid var(--border);
+      padding: 7px 10px; text-align: left;
+      font-size: 9.5px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase; color: var(--t4);
+      white-space: nowrap;
+    }
+    .preview-table td {
+      padding: 8px 10px; border-bottom: 1px solid var(--border2);
+      vertical-align: middle;
+    }
+    .preview-table tr:last-child td { border-bottom: none; }
+
+    /* Badges do app.js */
+    .badge-pdv-ok   { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:#ecfdf5; color:#065f46; border:1px solid var(--din-bd); }
+    .badge-pdv-warn { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:var(--fat-bg); color:#92400e; border:1px solid var(--fat-bd); }
+    .badge-pdv-err  { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:var(--red-lt); color:#991b1b; border:1px solid #fca5a5; }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ HEADER ══════════════════════════════════════════════════════════════ -->
+  <header class="header">
+
+    <div class="header-brand">
+      <div class="header-logo-pill">
+        <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+      </div>
+      <div>
+        <div class="brand-name">Astro Ops</div>
+        <div class="brand-sub">Rede Astrovistorias</div>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <div class="hstat">
+        <span class="hstat-dot amber"></span>
+        Fechamento
+      </div>
+      <div class="hstat">
+        📍 <strong id="unidadeLabel">—</strong>
+      </div>
+      <div class="hstat-date" id="statusDate">—</div>
+    </div>
+
+    <div class="header-right">
+      <nav class="header-nav">
+        <a class="nav-pill" id="linkCaixa" href="">Caixa do Dia</a>
+        <span class="nav-pill active">Fechamento</span>
+      </nav>
+      <div class="user-chip">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <span id="userLabel"></span>
+      </div>
+      <a class="btn-logout" id="logoutLink" href="/logout" style="display:flex;align-items:center;">Sair</a>
+    </div>
+
+  </header>
+
+  <!-- ═══ WORKSPACE ═══════════════════════════════════════════════════════════ -->
+  <div class="workspace">
+
+    <!-- Banner PDV conferido (lido do sessionStorage) -->
+    <div class="pdv-banner" id="pdvBanner">
+      <div class="pdv-banner-label">PDV Conferido</div>
+      <div class="pdv-banner-values" id="pdvBannerValues"></div>
+      <div class="pdv-banner-chip" id="pdvBannerChip"></div>
+    </div>
+
+    <!-- Barra de importação -->
+    <div class="import-bar">
+      <span class="import-bar-label">Planilha diária</span>
+      <label class="btn-import">
+        ↑ Importar planilhas
+        <input id="fileInput" type="file" accept=".xls,.html,.htm" multiple>
+      </label>
+      <button id="loadSampleBtn" class="btn-ghost-sm" type="button">Carregar exemplo</button>
+      <button id="clearBtn" class="btn-ghost-sm" type="button">Limpar lote</button>
+      <button id="exportBtn" class="btn-ghost-sm" type="button">Exportar conferência</button>
+      <div class="import-bar-spacer"></div>
+      <div class="source-info">
+        <strong id="sourceFile">Nenhum arquivo</strong>
+        &nbsp;·&nbsp; Data: <strong id="cashDate">--/--/----</strong>
+      </div>
+    </div>
+
+    <!-- KPI strip -->
+    <div class="kpi-row">
+      <div class="kpi-card kc-total">
+        <div class="kpi-card-label">Total planilha</div>
+        <div class="kpi-card-val" id="totalSheet">R$ 0,00</div>
+      </div>
+      <div class="kpi-card kc-av">
+        <div class="kpi-card-label">AV para caixa</div>
+        <div class="kpi-card-val" id="totalAv">R$ 0,00</div>
+      </div>
+      <div class="kpi-card kc-fa">
+        <div class="kpi-card-label">FA para Tiny</div>
+        <div class="kpi-card-val" id="totalFa">R$ 0,00</div>
+      </div>
+      <div class="kpi-card kc-pend">
+        <div class="kpi-card-label">Pendências</div>
+        <div class="kpi-card-val" id="pendingCount">0</div>
+      </div>
+      <div class="kpi-card kc-file" style="grid-column: span 2;">
+        <div class="kpi-card-label">Arquivo importado</div>
+        <div class="kpi-card-val" style="font-size:13px;font-weight:600;" id="sourceFileKpi">Nenhum arquivo carregado</div>
+      </div>
+    </div>
+
+    <!-- Painéis de valores -->
+    <div class="panels-grid">
+
+      <!-- Entradas -->
+      <div class="panel-card">
+        <div class="panel-card-header">
+          <h3>Entradas</h3>
+          <span class="panel-tag tag-edit">editável</span>
+        </div>
+        <div class="panel-card-body">
+          <div class="money-lines" id="cashInputs">
+            <div class="money-line">
+              <label>
+                <span>Dinheiro</span>
+                <input class="money-input" data-cash="dinheiro" value="100,00">
+              </label>
+            </div>
+            <div class="money-line">
+              <label>
+                <span>Débito</span>
+                <input class="money-input" data-cash="debito" value="100,00">
+              </label>
+            </div>
+            <div class="money-line">
+              <label>
+                <span>Crédito</span>
+                <input class="money-input" data-cash="credito" value="120,00">
+              </label>
+            </div>
+            <div class="money-line">
+              <label>
+                <span>PIX / Transf.</span>
+                <input class="money-input" data-cash="pix" value="850,00">
+              </label>
+            </div>
+            <div class="total-line">
+              <span>Total entradas</span>
+              <strong id="cashInputTotal">R$ 0,00</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- À vista -->
+      <div class="panel-card">
+        <div class="panel-card-header">
+          <h3>À Vista</h3>
+          <span class="panel-tag tag-calc">calculado</span>
+        </div>
+        <div class="panel-card-body">
+          <div class="money-lines">
+            <div class="money-line"><span>Dinheiro</span><strong id="avDinheiro">R$ 0,00</strong></div>
+            <div class="money-line"><span>Débito</span><strong id="avDebito">R$ 0,00</strong></div>
+            <div class="money-line"><span>Crédito</span><strong id="avCredito">R$ 0,00</strong></div>
+            <div class="money-line"><span>PIX</span><strong id="avPix">R$ 0,00</strong></div>
+            <div class="money-line"><span>A definir</span><strong id="avPendente">R$ 0,00</strong></div>
+            <div class="total-line"><span>Total AV</span><strong id="avTotalPanel">R$ 0,00</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- A faturar -->
+      <div class="panel-card">
+        <div class="panel-card-header">
+          <h3>A Faturar</h3>
+          <span class="panel-tag tag-tiny">Tiny</span>
+        </div>
+        <div class="panel-card-body">
+          <div class="money-lines">
+            <div class="money-line"><span>Lançamentos FA</span><strong id="faCountPanel">0</strong></div>
+            <div class="money-line"><span>Total FA</span><strong id="faTotalPanel">R$ 0,00</strong></div>
+            <div class="money-line"><span>Vencimento</span><strong id="faDueDate">--/--/----</strong></div>
+            <div class="money-line"><span>Clientes pendentes</span><strong id="missingClientsPanel">0</strong></div>
+            <div class="total-line"><span>Status</span><strong id="tinyReady">Pendente</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumo -->
+      <div class="panel-card">
+        <div class="panel-card-header">
+          <h3>Resumo</h3>
+          <span class="panel-tag tag-calc">calculado</span>
+        </div>
+        <div class="panel-card-body">
+          <div class="money-lines">
+            <div class="money-line"><span>Bruto planilha</span><strong id="grossTotal">R$ 0,00</strong></div>
+            <div class="money-line">
+              <label>
+                <span>Retorno cliente</span>
+                <input class="money-input" id="returnAmount" value="750,00">
+              </label>
+            </div>
+            <div class="money-line"><span>Líquido esperado</span><strong id="netTotal">R$ 0,00</strong></div>
+            <div class="money-line"><span>Dif. entradas</span><strong id="cashDiff">R$ 0,00</strong></div>
+            <div class="total-line"><span>Fechamento</span><strong id="closingStatus">Conferir</strong></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Área principal: tabela + ações -->
+    <div class="main-area">
+
+      <!-- Tabela de conferência -->
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <span class="table-card-title">Conferência diária</span>
+            <span class="table-subtitle" id="tableSubtitle">Importe a planilha ou carregue o exemplo.</span>
+          </div>
+          <div class="filters" role="group">
+            <button class="filter active" data-filter="todos" type="button">Todos</button>
+            <button class="filter" data-filter="FA" type="button">FA</button>
+            <button class="filter" data-filter="AV" type="button">AV</button>
+            <button class="filter" data-filter="pendencias" type="button">Pendências</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="conf-ledger">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Cliente</th>
+                <th>Origem</th>
+                <th>Placa</th>
+                <th>Serviço</th>
+                <th>FP</th>
+                <th>Pagamento AV</th>
+                <th style="text-align:right">Valor</th>
+                <th>Tiny</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Coluna lateral -->
+      <div class="side-col">
+
+        <!-- Envio Tiny -->
+        <div class="action-card">
+          <div class="action-card-header">
+            <h3>Envio Tiny</h3>
+          </div>
+          <div class="action-card-body">
+            <button id="validateBtn" class="btn-action primary" type="button">Validar lote</button>
+            <button id="autoMapBtn" class="btn-action secondary" type="button" hidden>Auto-mapear clientes (≥90%)</button>
+            <button id="mapClientesBtn" class="btn-action warn" type="button" hidden>Mapear clientes</button>
+            <button id="previewBtn" class="btn-action secondary" type="button" disabled>Simular envio</button>
+            <button id="sendBtn" class="btn-action indigo" type="button" disabled>Enviar para Tiny</button>
+            <button id="clearImportedBtn" class="btn-action secondary" type="button"
+              style="font-size:11px;opacity:.7;margin-top:4px;"
+              title="Remove o histórico local de lançamentos já enviados">
+              Limpar histórico de envios
+            </button>
+          </div>
+        </div>
+
+        <!-- Pendências -->
+        <div class="action-card">
+          <div class="action-card-header">
+            <h3>Pendências</h3>
+          </div>
+          <div class="action-card-body" style="padding-bottom:14px;">
+            <ul class="issues-list" id="issuesList"></ul>
+          </div>
+        </div>
+
+        <!-- Padrões -->
+        <div class="action-card">
+          <div class="action-card-header">
+            <h3>Padrões ativos</h3>
+          </div>
+          <div class="action-card-body">
+            <dl class="info-dl">
+              <dt>FA</dt>
+              <dd>Contas a receber, vencimento no último dia do mês.</dd>
+              <dt>AV</dt>
+              <dd>Define pagamento e envia ao Tiny com vencimento no dia.</dd>
+              <dt>Particular</dt>
+              <dd>Tratado no caixa, sem faturamento Tiny.</dd>
+            </dl>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ MODAL MAPEAMENTO DE CLIENTES ════════════════════════════════════════ -->
+  <div id="mapClientesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="mapClientesTitle">
+    <div class="modal-card" style="max-width:560px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="mapClientesTitle">Mapear cliente</h2>
+          <div class="modal-subtitle" id="mapProgress"></div>
+        </div>
+        <button id="mapClientesClose" class="btn-ghost" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="mapClienteAtual" class="map-cliente-nome"></div>
+        <div id="mapBuscarBox" class="map-buscar-box hidden">
+          <input id="mapBuscarInput" type="text" placeholder="Buscar no Tiny...">
+          <button id="mapBuscarBtn" type="button">Buscar</button>
+        </div>
+        <div id="mapCandidatos"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="mapNaoExisteBtn" class="btn-secondary" type="button">Não existe no Tiny</button>
+        <button id="mapBuscarOutroBtn" class="btn-secondary" type="button">Buscar outro nome</button>
+        <button id="mapPularBtn" class="btn-secondary" type="button">Pular por agora</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL CONFIRMAÇÃO DE ENVIO ══════════════════════════════════════════ -->
+  <div id="confirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-card" style="max-width:860px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="confirmModalTitle">Confirmar envio ao Tiny</h2>
+          <div class="modal-subtitle">Revise os lançamentos antes de confirmar.</div>
+        </div>
+        <button id="confirmModalClose" class="btn-ghost" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body" id="confirmModalBody">
+        <div class="modal-summary" id="confirmSummary"></div>
+        <div class="table-wrap">
+          <table class="preview-table" id="confirmTable">
+            <thead>
+              <tr>
+                <th>Cliente</th><th>FP</th><th>Pagamento</th><th>Valor</th>
+                <th>Vencimento</th><th>Forma Receb.</th><th>Nº Doc.</th>
+                <th>Serviço</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="confirmBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="confirmExportPdf" class="btn-secondary" type="button">📎 Exportar PDF</button>
+        <button id="confirmExportCsv" class="btn-secondary" type="button">📄 Exportar CSV</button>
+        <button id="confirmModalCancel" class="btn-secondary" type="button">Cancelar</button>
+        <button id="confirmSendBtn" type="button">Confirmar e Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL SIMULAÇÃO ══════════════════════════════════════════════════════ -->
+  <div id="previewModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+    <div class="modal-card" style="max-width:860px;">
+      <div class="modal-header">
+        <h2 id="previewModalTitle">Simulação de envio ao Tiny</h2>
+        <button id="previewModalClose" class="btn-ghost" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-summary" id="previewSummary"></div>
+        <div class="table-wrap">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th>Cliente</th><th>FP</th><th>Pagamento</th><th>Valor</th>
+                <th>Vencimento</th><th>Forma Receb.</th><th>Nº Doc.</th>
+                <th>Serviço</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="previewModalCloseBtn" class="btn-secondary" type="button">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // ── Header info ──────────────────────────────────────────────────────────
+    (function () {
+      const apiBase = (function () {
+        const m = window.location.pathname.match(/^(\/u\/[^/]+)/);
+        return m ? m[1] : '';
+      })();
+
+      // Data no header
+      const dateEl = document.getElementById('statusDate');
+      if (dateEl) {
+        const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        dateEl.textContent = d.charAt(0).toUpperCase() + d.slice(1);
+      }
+
+      // Info da unidade / usuário
+      fetch(apiBase + '/api/info').then(r => r.json()).then(info => {
+        if (info.unidade) document.getElementById('unidadeLabel').textContent = info.unidade;
+        if (info.usuario) {
+          document.getElementById('userLabel').textContent  = info.usuario;
+          document.getElementById('userAvatar').textContent = info.usuario.charAt(0).toUpperCase();
+        }
+        const linkCaixa = document.getElementById('linkCaixa');
+        if (linkCaixa) linkCaixa.href = apiBase + '/caixa2';
+        // KPI de arquivo duplicado no header
+        const sk = document.getElementById('sourceFileKpi');
+        const sf = document.getElementById('sourceFile');
+        if (sk && sf) {
+          const obs = new MutationObserver(() => { sk.textContent = sf.textContent; });
+          obs.observe(sf, { childList: true, characterData: true, subtree: true });
+        }
+      }).catch(() => {});
+
+      // ── Banner PDV conferido ───────────────────────────────────────────────
+      try {
+        const raw = sessionStorage.getItem('conferencia_pdv');
+        if (raw) {
+          const c   = JSON.parse(raw);
+          const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const banner = document.getElementById('pdvBanner');
+          const vals   = document.getElementById('pdvBannerValues');
+          const chip   = document.getElementById('pdvBannerChip');
+
+          const items = [
+            ['Total AV',  c.pdv.total],
+            ['Dinheiro',  c.pdv.dinheiro],
+            ['Débito',    c.pdv.debito],
+            ['Crédito',   c.pdv.credito],
+            ['PIX',       c.pdv.pix],
+          ];
+          vals.innerHTML = items.filter(([, v]) => v > 0).map(([l, v]) =>
+            `<div class="pdv-bv"><div class="pdv-bv-label">${l}</div><div class="pdv-bv-val">${fmt(v)}</div></div>`
+          ).join('');
+
+          const absD = Math.abs(c.diff || 0);
+          if (absD < 0.01) {
+            chip.textContent = '✅ Caixa conferido';
+            chip.className = 'pdv-banner-chip';
+          } else {
+            chip.textContent = `⚠️ Dif. ${fmt(absD)}`;
+            chip.className = 'pdv-banner-chip warn';
+          }
+
+          banner.classList.add('show');
+
+          // Pré-preenche os inputs de entradas com os valores físicos
+          if (c.fisico) {
+            const map = { dinheiro: 'dinheiro', debito: 'debito', credito: 'credito', pix: 'pix' };
+            Object.entries(map).forEach(([fp, cash]) => {
+              const el = document.querySelector(`.money-input[data-cash="${cash}"]`);
+              if (el && c.fisico[fp] > 0) {
+                el.value = c.fisico[fp].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+            });
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>
