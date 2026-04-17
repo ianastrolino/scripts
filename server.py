@@ -50,7 +50,9 @@ import os
 import secrets
 import sys
 import threading
+import time
 import traceback
+
 import urllib.parse
 from dataclasses import asdict
 from functools import wraps
@@ -406,11 +408,31 @@ def api_auth_callback(unit: str):
 def api_info(unit: str):
     ud = UNITS.get(unit, {})
     user = _current_user()
+    # Deriva lista de servicos dos categoria_ids configurados
+    # servicos_pdv tem prioridade; se nao definido, usa chaves de categoria_ids; se vazio, usa fallback
+    servicos_pdv = ud.get("servicos_pdv")
+    if servicos_pdv:
+        servicos = servicos_pdv
+    else:
+        categoria_ids = ud.get("categoria_ids", {})
+        servicos = list(categoria_ids.keys()) if categoria_ids else [
+            "LAUDO DE TRANSFERENCIA",
+            "LAUDO CAUTELAR",
+            "CAUTELAR COM ANALISE DE PINTURA",
+            "REVISTORIA",
+            "BAIXA PERMANENTE",
+            "CONSULTA GRAVAME",
+            "EMISSAO CRLV",
+            "PESQUISA AVULSA",
+            "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
+        ]
     return _json({
         "unidade": ud.get("nome", unit),
         "usuario": session.get("name", ""),
         "email": session.get("email", ""),
         "master": bool(user and user.get("master")),
+        "servicos": servicos,
+        "pin_configurado": bool(ud.get("master_pin")),
     })
 
 
@@ -736,6 +758,8 @@ def api_auto_map_clients(unit: str):
             if len(items) < 100:
                 break
             page += 1
+            time.sleep(0.5) # Throttling para evitar 503/429 no Tiny
+
 
         mapped       = []
         needs_review = []
@@ -778,6 +802,363 @@ def api_auto_map_clients(unit: str):
             _save_extra_cliente_ids(unit, ids)
 
         return _json({"success": True, "mapped": mapped, "needs_review": needs_review})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Helpers: caixa do dia (PDV)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _load_caixa_dia(unit: str) -> dict[str, Any]:
+    p = _unit_state_dir(unit) / "caixa_dia.json"
+    today = dt.date.today().isoformat()
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+            if data.get("data") == today:
+                return data
+        except Exception:
+            pass
+    return {"data": today, "lancamentos": []}
+
+
+def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
+    p = _unit_state_dir(unit) / "caixa_dia.json"
+    tmp = p.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+        tmp.replace(p)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _verify_unit_pin(unit: str, pin: str) -> bool:
+    stored = str(UNITS.get(unit, {}).get("master_pin", ""))
+    return bool(stored) and secrets.compare_digest(pin.strip(), stored)
+
+
+def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
+    totals: dict[str, float] = {"dinheiro": 0.0, "debito": 0.0, "credito": 0.0, "pix": 0.0, "faturado": 0.0}
+    for lc in lancamentos:
+        fp = lc.get("fp", "")
+        if fp in totals:
+            totals[fp] += float(lc.get("valor", 0))
+    totals["total"] = sum(totals.values())
+    totals["total_avista"] = totals["total"] - totals["faturado"]
+    return totals
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: caixa do dia (PDV)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/caixa")
+@unit_access_required
+def unit_caixa(unit: str):
+    return send_from_directory(UI_DIR, "caixa.html")
+
+
+@app.route("/u/<unit>/caixa2")
+@unit_access_required
+def unit_caixa2(unit: str):
+    return send_from_directory(UI_DIR, "caixa2.html")
+
+
+@app.route("/u/<unit>/fechamento")
+@unit_access_required
+def unit_fechamento(unit: str):
+    return send_from_directory(UI_DIR, "fechamento.html")
+
+
+@app.route("/u/<unit>/api/astro", methods=["POST"])
+@unit_access_required
+def api_astro(unit: str):
+    """Assistente virtual Astro — powered by Claude Haiku."""
+    try:
+        import anthropic as _anthropic
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return _json({"success": False, "error": "Assistente nao configurado. Adicione ANTHROPIC_API_KEY nas variaveis do Railway."}, 503)
+
+        data     = request.get_json(force=True, silent=True) or {}
+        messages = data.get("messages", [])
+        if not messages:
+            return _json({"success": False, "error": "messages obrigatorio."}, 400)
+
+        ud        = UNITS.get(unit, {})
+        unit_nome = ud.get("nome", unit)
+        servicos  = list(ud.get("categoria_ids", {}).keys()) or ud.get("servicos_pdv", [])
+
+        system_prompt = f"""Voce e o Astro, assistente virtual da Astrovistorias — rede de vistorias automotivas.
+Voce esta ajudando os atendentes da unidade {unit_nome} a usar o sistema Frente de Caixa.
+Responda sempre em portugues brasileiro, de forma direta e simples. Maximo 3 paragrafos curtos.
+
+SISTEMA FRENTE DE CAIXA — VISAO GERAL:
+O sistema tem duas telas principais:
+1. CAIXA DO DIA (PDV): lancamento de pagamentos em tempo real enquanto o cliente esta na recepcao.
+2. FECHAMENTO: importacao da planilha diaria + cruzamento com os lancamentos do PDV + envio para o Tiny ERP.
+
+COMO FAZER UM LANCAMENTO (CAIXA DO DIA):
+- Preencha: Placa, Nome do cliente, Servico, Valor
+- Clique no botao da forma de pagamento (Dinheiro, Debito, Credito, PIX ou Faturado)
+- Clique em "Registrar lancamento"
+- O lancamento aparece na tabela abaixo com hora, placa e valor
+- Use Tab para navegar entre campos e Enter para avancar
+
+FORMAS DE PAGAMENTO:
+- Dinheiro: pagamento em especie
+- Debito: cartao de debito
+- Credito: cartao de credito
+- PIX: transferencia instantanea
+- Faturado: sera cobrado depois via nota fiscal (para empresas clientes)
+Os lancamentos ficam salvos localmente — NAO vao para o Tiny ainda.
+
+EDITAR OU EXCLUIR LANCAMENTO:
+- Clique no icone de lapis (✏️) para editar ou lixeira (🗑️) para excluir
+- Sera solicitado o PIN master definido pelo administrador
+- Sem PIN configurado, edicao e exclusao ficam bloqueadas
+
+RESUMO DO DIA:
+- Clique no botao "Resumo" no topo da tela
+- Mostra total por servico, por cliente, por forma de pagamento
+- Botao "Copiar" formata o resumo para WhatsApp
+
+FECHAMENTO DO DIA:
+- Acesse a tela "Fechamento" pelo botao no topo
+- Importe a planilha do dia (arquivo .xls)
+- O sistema cruza automaticamente com os lancamentos do PDV
+- Divergencias aparecem em vermelho para correcao manual
+- Apos correcoes, clique "Enviar para Tiny"
+
+SERVICOS DA UNIDADE {unit_nome.upper()}:
+{chr(10).join(f'- {s}' for s in servicos) if servicos else '- Consulte o administrador da unidade'}
+
+DICAS IMPORTANTES:
+- Se esquecer o PIN, o administrador pode redefinir nas configuracoes do Railway
+- Em caso de erro de conexao com o Tiny, tente novamente em alguns minutos
+- Nao feche o navegador no meio de um envio para o Tiny
+- Cada lancamento e salvo automaticamente — nao ha botao de "salvar"
+
+Se nao souber responder algo especifico sobre precos ou politicas da empresa, oriente o atendente a perguntar ao administrador/franqueador."""
+
+        client   = _anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            system=system_prompt,
+            messages=messages,
+        )
+        reply = response.content[0].text if response.content else "Desculpe, nao consegui processar. Tente novamente."
+        return _json({"success": True, "reply": reply})
+
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/estado")
+@unit_access_required
+def api_caixa_estado(unit: str):
+    state = _load_caixa_dia(unit)
+    return _json({
+        "success": True,
+        "data": state["data"],
+        "lancamentos": state["lancamentos"],
+        "totais": _caixa_totals(state["lancamentos"]),
+    })
+
+
+@app.route("/u/<unit>/api/caixa/lancar", methods=["POST"])
+@unit_access_required
+def api_caixa_lancar(unit: str):
+    try:
+        data    = request.get_json(force=True, silent=True) or {}
+        placa   = clean_text(data.get("placa", "")).upper()
+        cliente = clean_text(data.get("cliente", ""))
+        servico = clean_text(data.get("servico", "")).upper()
+        valor   = float(data.get("valor", 0))
+        fp      = data.get("fp", "")
+
+        if not placa:
+            return _json({"success": False, "error": "Placa obrigatoria."}, 400)
+        if not cliente:
+            return _json({"success": False, "error": "Cliente obrigatorio."}, 400)
+        if not servico:
+            return _json({"success": False, "error": "Servico obrigatorio."}, 400)
+        if valor <= 0:
+            return _json({"success": False, "error": "Valor deve ser maior que zero."}, 400)
+        if fp not in ("dinheiro", "debito", "credito", "pix", "faturado"):
+            return _json({"success": False, "error": "Forma de pagamento invalida."}, 400)
+
+        now = dt.datetime.now()
+        lancamento = {
+            "id": secrets.token_hex(8),
+            "hora": now.strftime("%H:%M"),
+            "timestamp": now.isoformat(),
+            "placa": placa,
+            "cliente": cliente,
+            "servico": servico,
+            "valor": round(valor, 2),
+            "fp": fp,
+        }
+        state = _load_caixa_dia(unit)
+        state["lancamentos"].append(lancamento)
+        _save_caixa_dia(unit, state)
+
+        return _json({
+            "success": True,
+            "lancamento": lancamento,
+            "totais": _caixa_totals(state["lancamentos"]),
+            "total_lancamentos": len(state["lancamentos"]),
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/editar/<lancamento_id>", methods=["PUT"])
+@unit_access_required
+def api_caixa_editar(unit: str, lancamento_id: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not _verify_unit_pin(unit, data.get("pin", "")):
+            return _json({"success": False, "error": "PIN incorreto."}, 403)
+
+        placa   = clean_text(data.get("placa", "")).upper()
+        cliente = clean_text(data.get("cliente", ""))
+        servico = clean_text(data.get("servico", "")).upper()
+        valor   = float(data.get("valor", 0))
+        fp      = data.get("fp", "")
+
+        if not all([placa, cliente, servico]) or valor <= 0 or fp not in ("dinheiro", "debito", "credito", "pix"):
+            return _json({"success": False, "error": "Dados invalidos."}, 400)
+
+        state = _load_caixa_dia(unit)
+        for lc in state["lancamentos"]:
+            if lc["id"] == lancamento_id:
+                lc.update({"placa": placa, "cliente": cliente, "servico": servico,
+                            "valor": round(valor, 2), "fp": fp})
+                _save_caixa_dia(unit, state)
+                return _json({"success": True, "totais": _caixa_totals(state["lancamentos"])})
+
+        return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/excluir/<lancamento_id>", methods=["DELETE"])
+@unit_access_required
+def api_caixa_excluir(unit: str, lancamento_id: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if not _verify_unit_pin(unit, data.get("pin", "")):
+            return _json({"success": False, "error": "PIN incorreto."}, 403)
+
+        state = _load_caixa_dia(unit)
+        antes = len(state["lancamentos"])
+        state["lancamentos"] = [lc for lc in state["lancamentos"] if lc["id"] != lancamento_id]
+        if len(state["lancamentos"]) == antes:
+            return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
+
+        _save_caixa_dia(unit, state)
+        return _json({
+            "success": True,
+            "totais": _caixa_totals(state["lancamentos"]),
+            "total_lancamentos": len(state["lancamentos"]),
+        })
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/caixa/conferir", methods=["POST"])
+@unit_access_required
+def api_caixa_conferir(unit: str):
+    """Cruza registros AV da planilha com lancamentos do PDV do dia.
+
+    Input:  { records: [{id, placa, servico, preco, fp}] }
+    Output: { conferencia: { <record_id>: { status, pdv_valor, pdv_fp, pdv_hora } } }
+
+    status:
+      "ok"               — placa+servico encontrado no PDV, valor igual
+      "divergencia_valor" — encontrado no PDV mas valor difere
+      "sem_pdv"          — placa+servico nao encontrado no PDV hoje
+    """
+    try:
+        import re
+        import unicodedata as _ud
+
+        data    = request.get_json(force=True, silent=True) or {}
+        records = data.get("records", [])
+        config  = _build_unit_config(unit)
+        caixa   = _load_caixa_dia(unit)
+        lancamentos = caixa.get("lancamentos", [])
+
+        def _norm_placa(value: str) -> str:
+            return re.sub(r"[^A-Z0-9]", "", clean_text(value).upper())
+
+        def _norm_servico(value: str) -> str:
+            v = clean_text(value).upper()
+            v = apply_alias(config, "servico", v)
+            v = _ud.normalize("NFD", v)
+            v = "".join(c for c in v if _ud.category(c) != "Mn")
+            return " ".join(v.split())
+
+        # Indice PDV: (placa_norm, servico_norm) → lancamento
+        # Se houver duplicatas no PDV (nao deveria, mas por seguranca), mantemos o ultimo
+        pdv_map: dict[tuple, dict] = {}
+        for lc in lancamentos:
+            key = (_norm_placa(lc.get("placa", "")), _norm_servico(lc.get("servico", "")))
+            pdv_map[key] = lc
+
+        # Chaves da planilha AV (para detectar PDV sem planilha)
+        planilha_keys: set[tuple] = set()
+        conferencia: dict[str, dict] = {}
+        for r in records:
+            if r.get("fp") != "AV":
+                continue  # apenas AV precisa de cruzamento com PDV
+
+            rec_id  = r.get("id", "")
+            placa   = _norm_placa(r.get("placa", ""))
+            servico = _norm_servico(r.get("servico", ""))
+            preco   = float(r.get("preco", 0))
+            key     = (placa, servico)
+            planilha_keys.add(key)
+
+            if key not in pdv_map:
+                conferencia[rec_id] = {
+                    "status": "sem_pdv",
+                    "pdv_valor": None,
+                    "pdv_fp": None,
+                    "pdv_hora": None,
+                }
+            else:
+                lc        = pdv_map[key]
+                pdv_valor = float(lc.get("valor", 0))
+                status    = "ok" if abs(pdv_valor - preco) < 0.01 else "divergencia_valor"
+                conferencia[rec_id] = {
+                    "status": status,
+                    "pdv_valor": pdv_valor,
+                    "pdv_fp": lc.get("fp"),
+                    "pdv_hora": lc.get("hora"),
+                }
+
+        # Lançamentos do PDV que nao aparecem em nenhum registro AV da planilha
+        # (servicos que nunca vem na planilha: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
+        pdv_sem_planilha = []
+        for (placa_key, servico_key), lc in pdv_map.items():
+            if (placa_key, servico_key) not in planilha_keys:
+                pdv_sem_planilha.append({
+                    "pdv_id":   lc.get("id"),
+                    "hora":     lc.get("hora"),
+                    "placa":    lc.get("placa"),
+                    "cliente":  lc.get("cliente"),
+                    "servico":  lc.get("servico"),
+                    "valor":    lc.get("valor"),
+                    "fp":       lc.get("fp"),
+                    "timestamp": lc.get("timestamp"),
+                })
+
+        return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
     except Exception as exc:
         return _json({"success": False, "error": str(exc)}, 500)
 

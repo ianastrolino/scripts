@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Caixa do Dia</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+      /* ── Layout PDV ────────────────────────────────────────── */
+      .pdv-workspace {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        grid-template-rows: auto 1fr;
+        gap: 0;
+        height: calc(100vh - 57px);
+      }
+
+      /* Painel esquerdo: formulário */
+      .pdv-form-panel {
+        grid-row: 1 / 3;
+        border-right: 1px solid var(--line);
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+
+      .pdv-form-header {
+        padding: 16px 20px 10px;
+        border-bottom: 1px solid var(--line);
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .pdv-form-body {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        flex: 1;
+      }
+
+      .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .field-group label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .field-group input,
+      .field-group select {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+        font-size: 15px;
+        background: var(--bg);
+        width: 100%;
+        transition: border-color .15s;
+      }
+
+      .field-group input:focus,
+      .field-group select:focus {
+        outline: none;
+        border-color: var(--focus);
+        background: #fff;
+      }
+
+      .field-group input.placa {
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        font-weight: 600;
+      }
+
+      .valor-wrap {
+        position: relative;
+      }
+
+      .valor-wrap span {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted);
+        font-size: 14px;
+        pointer-events: none;
+      }
+
+      .valor-wrap input {
+        padding-left: 34px !important;
+      }
+
+      /* Botões FP */
+      .fp-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+      }
+
+      /* Faturado ocupa as 2 ultimas colunas da segunda linha */
+      .fp-btn[data-fp="pix"]      { grid-column: 1; }
+      .fp-btn[data-fp="faturado"] { grid-column: 2 / 4; }
+
+      .fp-btn {
+        border: 2px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg);
+        color: var(--ink);
+        padding: 12px 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+        transition: all .15s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .fp-btn .fp-icon {
+        font-size: 20px;
+        line-height: 1;
+      }
+
+      .fp-btn:hover {
+        border-color: var(--accent);
+        background: #fff5f5;
+      }
+
+      .fp-btn.selected {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .fp-btn:focus {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+
+      .btn-lancar {
+        margin-top: 4px;
+        padding: 14px;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: .03em;
+        width: 100%;
+      }
+
+      /* ── Painel direito superior: totais ──────────────────── */
+      .pdv-totals-panel {
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 0;
+      }
+
+      .total-card {
+        flex: 1;
+        text-align: center;
+        padding: 8px 12px;
+        border-right: 1px solid var(--line);
+      }
+
+      .total-card:last-child {
+        border-right: none;
+      }
+
+      .total-card .tc-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .total-card .tc-value {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .total-card.total-geral {
+        background: var(--bg);
+        border-radius: var(--radius);
+      }
+
+      .total-card.total-geral .tc-value {
+        color: var(--accent);
+        font-size: 20px;
+      }
+
+      .tc-count {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 2px;
+        display: block;
+      }
+
+      /* ── Painel direito inferior: tabela ──────────────────── */
+      .pdv-table-panel {
+        overflow-y: auto;
+        background: var(--bg);
+      }
+
+      .pdv-table-header {
+        padding: 14px 20px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+
+      .pdv-table-header h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      table.pdv-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .pdv-table th {
+        background: var(--surface);
+        border-bottom: 2px solid var(--line);
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .pdv-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--surface);
+        vertical-align: middle;
+      }
+
+      .pdv-table tr:hover td {
+        background: #f9fbfc;
+      }
+
+      .pdv-table .td-placa {
+        font-weight: 700;
+        letter-spacing: .06em;
+        font-size: 13px;
+      }
+
+      .pdv-table .td-valor {
+        font-weight: 600;
+        text-align: right;
+      }
+
+      .fp-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+
+      .fp-badge.dinheiro  { background: #e8f5e9; color: #2e7d32; }
+      .fp-badge.debito    { background: #e3f2fd; color: #1565c0; }
+      .fp-badge.credito   { background: #fff3e0; color: #e65100; }
+      .fp-badge.pix       { background: #e8f5e9; color: #00695c; }
+      .fp-badge.faturado  { background: #f3e5f5; color: #6a1b9a; }
+
+      .td-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+
+      .btn-icon {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--muted);
+        padding: 5px 9px;
+        border-radius: var(--radius);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      .btn-icon:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: #fff5f5;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--muted);
+      }
+
+      .empty-state .empty-icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+      }
+
+      .empty-state p {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      /* ── Modal PIN ────────────────────────────────────────── */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-overlay.open {
+        display: flex;
+      }
+
+      .modal-box {
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 28px 32px;
+        width: 340px;
+        max-width: calc(100vw - 32px);
+        box-shadow: 0 8px 32px rgba(0,0,0,.18);
+      }
+
+      .modal-box h3 {
+        margin: 0 0 6px;
+        font-size: 17px;
+      }
+
+      .modal-box p {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .modal-box input {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 10px 14px;
+        font-size: 20px;
+        letter-spacing: .25em;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 16px;
+      }
+
+      .modal-box input:focus {
+        outline: none;
+        border-color: var(--focus);
+      }
+
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .modal-actions button {
+        flex: 1;
+      }
+
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--ink);
+        border-color: var(--line);
+      }
+
+      .btn-secondary:hover {
+        background: var(--bg);
+      }
+
+      /* ── Nav PDV ─────────────────────────────────────────── */
+      .nav-pdv {
+        display: flex;
+        gap: 6px;
+      }
+
+      .nav-tab {
+        padding: 7px 16px;
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: var(--bg);
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s;
+      }
+
+      .nav-tab:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: #fff5f5;
+      }
+
+      .nav-tab.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      /* ── Responsivo ──────────────────────────────────────── */
+      @media (max-width: 900px) {
+        .pdv-workspace {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto auto auto 1fr;
+          height: auto;
+        }
+        .pdv-form-panel {
+          grid-row: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+        }
+        .pdv-totals-panel {
+          flex-wrap: wrap;
+        }
+        .total-card {
+          min-width: 120px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" alt="Astro Vistorias" src="logo/PNG/ASTRO%20Logo_Full%20Color.png">
+        <div>
+          <strong>Caixa do Dia</strong>
+          <span id="unidadeLabel">Lancamentos a vista</span>
+        </div>
+      </div>
+
+      <nav class="nav-pdv">
+        <a class="nav-tab active" href="">Caixa do Dia</a>
+        <a class="nav-tab" id="linkFechamento" href="">Fechamento</a>
+      </nav>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="userLabel" style="font-size:13px;color:var(--muted);"></span>
+        <a id="logoutLink" href="/logout"
+           style="border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:var(--muted);
+                  padding:7px 14px;text-decoration:none;font-size:14px;">Sair</a>
+      </div>
+    </header>
+
+    <div class="pdv-workspace">
+      <!-- Painel esquerdo: formulário de lançamento -->
+      <aside class="pdv-form-panel">
+        <div class="pdv-form-header">Novo lancamento</div>
+        <div class="pdv-form-body">
+
+          <div class="field-group">
+            <label for="fPlaca">Placa</label>
+            <input id="fPlaca" class="placa" type="text" maxlength="8"
+                   placeholder="ABC1D23" autocomplete="off" spellcheck="false">
+          </div>
+
+          <div class="field-group">
+            <label for="fCliente">Cliente</label>
+            <input id="fCliente" type="text" placeholder="Nome do cliente"
+                   autocomplete="off">
+          </div>
+
+          <div class="field-group">
+            <label for="fServico">Servico</label>
+            <select id="fServico">
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+
+          <div class="field-group">
+            <label for="fValor">Valor</label>
+            <div class="valor-wrap">
+              <span>R$</span>
+              <input id="fValor" type="number" min="0" step="0.01"
+                     placeholder="0,00" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Pagamento</label>
+            <div class="fp-buttons">
+              <button type="button" class="fp-btn" data-fp="dinheiro" tabindex="0">
+                <span class="fp-icon">💵</span>
+                Dinheiro
+              </button>
+              <button type="button" class="fp-btn" data-fp="debito" tabindex="0">
+                <span class="fp-icon">💳</span>
+                Debito
+              </button>
+              <button type="button" class="fp-btn" data-fp="credito" tabindex="0">
+                <span class="fp-icon">💳</span>
+                Credito
+              </button>
+              <button type="button" class="fp-btn" data-fp="pix" tabindex="0">
+                <span class="fp-icon">⚡</span>
+                PIX
+              </button>
+              <button type="button" class="fp-btn" data-fp="faturado" tabindex="0">
+                <span class="fp-icon">🧾</span>
+                Faturado
+              </button>
+            </div>
+          </div>
+
+          <button id="btnLancar" class="btn-lancar" type="button" disabled>
+            Lancar
+          </button>
+
+          <div id="formMsg" style="font-size:13px;color:var(--accent);min-height:18px;text-align:center;"></div>
+        </div>
+      </aside>
+
+      <!-- Painel direito superior: totais do dia -->
+      <div class="pdv-totals-panel">
+        <div class="total-card">
+          <span class="tc-label">Dinheiro</span>
+          <span class="tc-value" id="totDinheiro">R$ 0,00</span>
+        </div>
+        <div class="total-card">
+          <span class="tc-label">Debito</span>
+          <span class="tc-value" id="totDebito">R$ 0,00</span>
+        </div>
+        <div class="total-card">
+          <span class="tc-label">Credito</span>
+          <span class="tc-value" id="totCredito">R$ 0,00</span>
+        </div>
+        <div class="total-card">
+          <span class="tc-label">PIX</span>
+          <span class="tc-value" id="totPix">R$ 0,00</span>
+        </div>
+        <div class="total-card" style="border-right-color:var(--line);">
+          <span class="tc-label" style="color:#6a1b9a;">Faturado</span>
+          <span class="tc-value" id="totFaturado" style="color:#6a1b9a;">R$ 0,00</span>
+        </div>
+        <div class="total-card total-geral">
+          <span class="tc-label">A vista</span>
+          <span class="tc-value" id="totAvista">R$ 0,00</span>
+          <span class="tc-count" id="totCount">0 lancamentos</span>
+        </div>
+      </div>
+
+      <!-- Painel direito inferior: tabela de lançamentos -->
+      <div class="pdv-table-panel">
+        <div class="pdv-table-header">
+          <h2 id="tableTitle">Lancamentos de hoje</h2>
+        </div>
+
+        <div id="tableWrap">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">🧾</div>
+            <p>Nenhum lancamento registrado hoje.</p>
+            <p style="margin-top:6px;font-size:13px;">Preencha o formulario ao lado para comecar.</p>
+          </div>
+          <table class="pdv-table" id="pdvTable" style="display:none;">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Hora</th>
+                <th>Placa</th>
+                <th>Cliente</th>
+                <th>Servico</th>
+                <th style="text-align:right;">Valor</th>
+                <th>Pagamento</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="pdvBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal PIN -->
+    <div class="modal-overlay" id="pinModal">
+      <div class="modal-box">
+        <h3 id="pinModalTitle">Autorizar acao</h3>
+        <p id="pinModalDesc">Digite o PIN master para continuar.</p>
+        <input id="pinInput" type="password" maxlength="8" placeholder="••••" autocomplete="off">
+        <div id="pinError" style="color:var(--accent);font-size:13px;margin:-10px 0 12px;min-height:18px;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="pinCancelBtn">Cancelar</button>
+          <button type="button" id="pinConfirmBtn">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Editar -->
+    <div class="modal-overlay" id="editModal">
+      <div class="modal-box" style="width:420px;">
+        <h3>Editar lancamento</h3>
+        <p style="color:var(--muted);font-size:14px;margin:0 0 16px;">Altere os dados e confirme com o PIN master.</p>
+        <input type="hidden" id="editId">
+
+        <div class="field-group" style="margin-bottom:12px;">
+          <label for="ePlaca">Placa</label>
+          <input id="ePlaca" class="placa" type="text" maxlength="8" autocomplete="off">
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label for="eCliente">Cliente</label>
+          <input id="eCliente" type="text" autocomplete="off">
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label for="eServico">Servico</label>
+          <select id="eServico"></select>
+        </div>
+        <div class="field-group" style="margin-bottom:12px;">
+          <label for="eValor">Valor</label>
+          <div class="valor-wrap">
+            <span>R$</span>
+            <input id="eValor" type="number" min="0" step="0.01" autocomplete="off">
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:16px;">
+          <label>Pagamento</label>
+          <div class="fp-buttons" id="editFpButtons">
+            <button type="button" class="fp-btn" data-fp="dinheiro">
+              <span class="fp-icon">💵</span>Dinheiro
+            </button>
+            <button type="button" class="fp-btn" data-fp="debito">
+              <span class="fp-icon">💳</span>Debito
+            </button>
+            <button type="button" class="fp-btn" data-fp="credito">
+              <span class="fp-icon">💳</span>Credito
+            </button>
+            <button type="button" class="fp-btn" data-fp="pix">
+              <span class="fp-icon">⚡</span>PIX
+            </button>
+            <button type="button" class="fp-btn" data-fp="faturado">
+              <span class="fp-icon">🧾</span>Faturado
+            </button>
+          </div>
+        </div>
+
+        <div class="field-group" style="margin-bottom:8px;">
+          <label for="ePinInput">PIN master</label>
+          <input id="ePinInput" type="password" maxlength="8" placeholder="••••" autocomplete="off">
+        </div>
+        <div id="editError" style="color:var(--accent);font-size:13px;margin:0 0 12px;min-height:18px;"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="editCancelBtn">Cancelar</button>
+          <button type="button" id="editConfirmBtn">Salvar alteracao</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="caixa.js"></script>
+  </body>
+</html>

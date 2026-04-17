@@ -360,6 +360,49 @@ tbody tr:hover {
   background: var(--bad);
 }
 
+/* ── Badges de cruzamento PDV ─────────────────────────────────── */
+.pdv-badge {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 4px;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pdv-ok   { background: #e6f9ee; color: #1a7a42; }
+.pdv-warn { background: #fff8e1; color: #7a5a00; }
+.pdv-err  { background: #fdecea; color: #8b1a1a; }
+
+.pdv-confirm-btn {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pdv-confirm-btn:hover { opacity: .75; }
+.pdv-confirmed { font-style: italic; opacity: .7; }
+
+/* Linhas vindas do PDV sem correspondência na planilha */
+.row-pdv-extra { background: #f0f7ff; }
+.row-pdv-extra:hover { background: #e3f0ff; }
+.pdv-origin-badge {
+  display: inline-block;
+  background: #1a6fbf;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: .03em;
+}
+
 select,
 .client-select {
   width: 150px;
