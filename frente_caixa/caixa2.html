@@ -1482,6 +1482,7 @@
             <label for="fPlaca">Placa do veículo</label>
             <input id="fPlaca" class="placa" type="text" maxlength="8"
                    placeholder="ABC1D23" autocomplete="off" spellcheck="false">
+            <span id="placaError" style="display:none;font-size:11.5px;font-weight:600;color:var(--red);margin-top:3px;"></span>
           </div>
 
           <div class="field">
@@ -1804,6 +1805,11 @@
 
   <script src="caixa.js"></script>
   <script>
+    // Valida placa em tempo real
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("fPlaca").addEventListener("input", validarFormulario);
+    });
+
     // Rebind FP para Layout 2
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fpGrid").querySelectorAll(".fp-card").forEach(btn => {

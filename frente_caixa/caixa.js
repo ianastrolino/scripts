@@ -150,12 +150,27 @@ function selecionarFp(fp, container, stateKey) {
   validarFormulario();
 }
 
+const PLACA_RE = /^[A-Z]{3}[0-9]([A-Z][0-9]{2}|[0-9]{3})$/;
+
+function validarPlaca(placa) {
+  return PLACA_RE.test(placa.toUpperCase().replace(/[-\s]/g, ""));
+}
+
 function validarFormulario() {
   const placa   = document.getElementById("fPlaca").value.trim();
   const cliente = document.getElementById("fCliente").value.trim();
   const servico = document.getElementById("fServico").value;
   const valor   = parseFloat(document.getElementById("fValor").value);
-  const ok = placa && cliente && servico && valor > 0 && state.fpSelecionado;
+
+  const placaOk = !placa || validarPlaca(placa);
+  const errEl   = document.getElementById("placaError");
+  if (errEl) {
+    errEl.textContent = placa && !placaOk ? "Placa inválida. Use AAA0000 ou AAA0A00." : "";
+    errEl.style.display = placa && !placaOk ? "block" : "none";
+    document.getElementById("fPlaca").style.borderColor = placa && !placaOk ? "var(--red)" : "";
+  }
+
+  const ok = placa && placaOk && cliente && servico && valor > 0 && state.fpSelecionado;
   document.getElementById("btnLancar").disabled = !ok;
 }
 
