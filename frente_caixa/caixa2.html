@@ -1963,9 +1963,10 @@
       });
 
       // Confirmar → executa lançamento
-      document.getElementById("confirmLancarOkBtn").addEventListener("click", () => {
+      document.getElementById("confirmLancarOkBtn").addEventListener("click", (e) => {
+        e.currentTarget.disabled = true;
         document.getElementById("confirmLancarModal").classList.remove("open");
-        lancar();
+        lancar().finally(() => { e.currentTarget.disabled = false; });
       });
 
       // Cancelar → fecha sem limpar
@@ -2004,12 +2005,6 @@
       });
     });
 
-    // Patch renderTotais — usa assignment para evitar hoisting circular
-    const _origRenderTotais = renderTotais;
-    window.renderTotais = function(totais, count) {
-      _origRenderTotais(totais, count);
-      if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
-    };
 
 const _origAbrirEditar = abrirEditar;
     window.abrirEditar = function(id) {

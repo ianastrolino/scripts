@@ -138,6 +138,7 @@ function renderTotais(totais, count) {
   document.getElementById("totAvista").textContent   = brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0));
   document.getElementById("totCount").textContent    =
     `${n} lancamento${n !== 1 ? "s" : ""}`;
+  if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
 }
 
 // ── Formulário de lançamento ──────────────────────────────────────────────────
@@ -192,6 +193,8 @@ function limparFormulario() {
 }
 
 async function lancar() {
+  if (state.launching) return;
+  state.launching = true;
   const btn = document.getElementById("btnLancar");
   const msg = document.getElementById("formMsg");
   btn.disabled = true;
@@ -244,6 +247,8 @@ async function lancar() {
       msg.textContent = e.message || "Erro inesperado.";
     }
     btn.disabled = false;
+  } finally {
+    state.launching = false;
   }
 }
 
