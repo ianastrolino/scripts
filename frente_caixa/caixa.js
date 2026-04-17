@@ -127,7 +127,10 @@ function escHtml(s) {
 
 // ── Render totais ─────────────────────────────────────────────────────────────
 
+let _renderTotaisActive = false;
 function renderTotais(totais, count) {
+  if (_renderTotaisActive) { console.warn("renderTotais: chamada recursiva bloqueada"); return; }
+  _renderTotaisActive = true;
   const t = totais || state.totais;
   const n = count !== undefined ? count : state.lancamentos.length;
   document.getElementById("totDinheiro").textContent = brl(t.dinheiro    || 0);
@@ -138,6 +141,7 @@ function renderTotais(totais, count) {
   document.getElementById("totAvista").textContent   = brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0));
   document.getElementById("totCount").textContent    =
     `${n} lancamento${n !== 1 ? "s" : ""}`;
+  _renderTotaisActive = false;
   if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
 }
 
@@ -224,15 +228,15 @@ async function lancar() {
     // Atualiza estado local
     state.lancamentos.push(res.lancamento);
     state.totais = res.totais;
-    renderTabela();
-    renderTotais(res.totais, state.lancamentos.length);
+    try { renderTabela(); } catch(e) { console.error("[renderTabela]", e); }
+    try { renderTotais(res.totais, state.lancamentos.length); } catch(e) { console.error("[renderTotais]", e); }
 
     // Feedback visual
     msg.style.color = "var(--accent)";
     msg.textContent = `Lancado: ${payload.placa} — ${brl(payload.valor)} (${fpLabel(payload.fp)})`;
     setTimeout(() => { msg.textContent = ""; msg.style.color = ""; }, 3000);
 
-    limparFormulario();
+    try { limparFormulario(); } catch(e) { console.error("[limparFormulario]", e); }
 
     // Scroll para a ultima linha
     setTimeout(() => {
