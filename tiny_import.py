@@ -14,7 +14,9 @@ import re
 import secrets
 import shutil
 import sys
+import threading
 import time
+
 import unicodedata
 import urllib.parse
 import webbrowser
@@ -657,6 +659,7 @@ class TinyClient:
         self.timeout = int(tiny_config.get("timeout_seconds", 30))
         self.token_file = state_dir / "tiny_tokens.json"
         self._access_token: str | None = None
+        self._lock = threading.Lock()
 
     def _load_tokens(self) -> dict[str, Any]:
         if self.token_file.exists():
@@ -670,21 +673,22 @@ class TinyClient:
             json.dump(tokens, file, ensure_ascii=False, indent=2)
 
     def access_token(self) -> str:
-        if self._access_token:
-            return self._access_token
-
-        env_token = os.getenv("TINY_ACCESS_TOKEN")
-        if env_token:
-            self._access_token = env_token
-            return env_token
-
-        tokens = self._load_tokens()
-        expires_at = float(tokens.get("expires_at", 0))
-        if tokens.get("access_token") and expires_at > time.time() + 60:
-            self._access_token = tokens["access_token"]
-            return self._access_token
-
-        return self.refresh_access_token(tokens)
+        with self._lock:
+            if self._access_token:
+                return self._access_token
+    
+            env_token = os.getenv("TINY_ACCESS_TOKEN")
+            if env_token:
+                self._access_token = env_token
+                return env_token
+    
+            tokens = self._load_tokens()
+            expires_at = float(tokens.get("expires_at", 0))
+            if tokens.get("access_token") and expires_at > time.time() + 60:
+                self._access_token = tokens["access_token"]
+                return self._access_token
+    
+            return self.refresh_access_token(tokens)
 
     def refresh_access_token(self, tokens: dict[str, Any] | None = None) -> str:
         try:
@@ -693,8 +697,8 @@ class TinyClient:
             raise TinyApiError("A biblioteca requests e necessaria para enviar ao Tiny.") from exc
 
         tokens = tokens or self._load_tokens()
-        client_id = os.getenv("TINY_CLIENT_ID") or self.config.get("client_id")
-        client_secret = os.getenv("TINY_CLIENT_SECRET") or self.config.get("client_secret")
+        client_id = self.config.get("client_id") or os.getenv("TINY_CLIENT_ID")
+        client_secret = self.config.get("client_secret") or os.getenv("TINY_CLIENT_SECRET")
         refresh_token = (
             os.getenv("TINY_REFRESH_TOKEN")
             or tokens.get("refresh_token")
@@ -796,8 +800,8 @@ class TinyClient:
         except ImportError as exc:
             raise TinyApiError("A biblioteca requests e necessaria para autenticar no Tiny.") from exc
 
-        client_id = os.getenv("TINY_CLIENT_ID") or self.config.get("client_id")
-        client_secret = os.getenv("TINY_CLIENT_SECRET") or self.config.get("client_secret")
+        client_id = self.config.get("client_id") or os.getenv("TINY_CLIENT_ID")
+        client_secret = self.config.get("client_secret") or os.getenv("TINY_CLIENT_SECRET")
         if not client_id or not client_secret:
             raise TinyApiError("Informe TINY_CLIENT_ID e TINY_CLIENT_SECRET para trocar o codigo OAuth.")
 
@@ -833,16 +837,18 @@ class TinyImporter:
         self.client = TinyClient(self.config, state_dir)
         self.contact_cache: dict[str, int] = {}
         self.payment_cache: dict[str, int] = {}
+        self._lock = threading.Lock()
 
     def resolve_contact(self, name: str) -> int:
         key = normalize_key(name)
-        if key in self.contact_cache:
-            return self.contact_cache[key]
-
-        mapped = lookup_config_id(self.config.get("cliente_ids", {}), name)
-        if mapped:
-            self.contact_cache[key] = mapped
-            return mapped
+        with self._lock:
+            if key in self.contact_cache:
+                return self.contact_cache[key]
+    
+            mapped = lookup_config_id(self.config.get("cliente_ids", {}), name)
+            if mapped:
+                self.contact_cache[key] = mapped
+                return mapped
 
         # Busca sem filtro de situacao para nao perder contatos com status diferente de "B"
         result = self.client.request("GET", "contatos", params={"nome": name, "limit": 100})
@@ -852,7 +858,8 @@ class TinyImporter:
         if not contact_id:
             contact_id = self._find_exact(items, "fantasia", name)
         if contact_id:
-            self.contact_cache[key] = contact_id
+            with self._lock:
+                self.contact_cache[key] = contact_id
             return contact_id
 
         if not self.config.get("auto_create_contacts"):
@@ -873,7 +880,8 @@ class TinyImporter:
             },
         )
         contact_id = int(created["id"])
-        self.contact_cache[key] = contact_id
+        with self._lock:
+            self.contact_cache[key] = contact_id
         return contact_id
 
     def resolve_payment(self, fp: str) -> int | None:
