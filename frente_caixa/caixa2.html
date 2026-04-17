@@ -1942,6 +1942,7 @@
       const btnLancar = document.getElementById("btnLancar");
       btnLancar.removeEventListener("click", lancar);
       btnLancar.addEventListener("click", () => {
+        btnLancar.disabled = true;
         const placa   = document.getElementById("fPlaca").value.trim().toUpperCase();
         const cliente = document.getElementById("fCliente").value.trim();
         const servico = document.getElementById("fServico").value;
@@ -1969,14 +1970,18 @@
         lancar().finally(() => { e.currentTarget.disabled = false; });
       });
 
-      // Cancelar → fecha sem limpar
+      // Cancelar → fecha sem limpar, reabilita botão
       document.getElementById("confirmLancarCancelBtn").addEventListener("click", () => {
         document.getElementById("confirmLancarModal").classList.remove("open");
+        document.getElementById("btnLancar").disabled = false;
       });
 
-      // Clique fora fecha
+      // Clique fora fecha, reabilita botão
       document.getElementById("confirmLancarModal").addEventListener("click", e => {
-        if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
+        if (e.target === e.currentTarget) {
+          e.currentTarget.classList.remove("open");
+          document.getElementById("btnLancar").disabled = false;
+        }
       });
 
       // Enter no modal confirma
