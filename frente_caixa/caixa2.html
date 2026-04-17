@@ -1242,6 +1242,90 @@
     .chat-send-btn:hover { background: var(--red-dk); transform: scale(1.12); }
 
     /* ═══════════════════════════════════════════════════════
+       MODAL CONFIRMAR LANÇAMENTO
+    ═══════════════════════════════════════════════════════ */
+    .confirm-modal {
+      background: var(--surface);
+      border-radius: var(--rxl);
+      width: 400px;
+      max-width: calc(100vw - 32px);
+      box-shadow: var(--s3);
+      border: 1px solid rgba(7,16,31,.06);
+      animation: modal-in .18s cubic-bezier(.34,1.4,.64,1);
+      overflow: hidden;
+    }
+    .confirm-modal-header {
+      background: #080f1c;
+      padding: 16px 20px 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .confirm-modal-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(220,38,38,.18); border: 1px solid rgba(220,38,38,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; flex-shrink: 0;
+    }
+    .confirm-modal-header h3 {
+      font-size: 13px; font-weight: 700; color: #fff;
+      letter-spacing: -.02em;
+    }
+    .confirm-modal-header p {
+      font-size: 11px; color: rgba(255,255,255,.35);
+      letter-spacing: -.01em; margin-top: 1px;
+    }
+    .confirm-modal-body { padding: 20px; }
+    .confirm-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border2);
+      gap: 12px;
+    }
+    .confirm-row:last-child { border-bottom: none; }
+    .confirm-row-label {
+      font-size: 11px; font-weight: 600; color: var(--t5);
+      letter-spacing: .04em; text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .confirm-row-val {
+      font-size: 13px; font-weight: 700; color: var(--t1);
+      letter-spacing: -.02em; text-align: right;
+    }
+    .confirm-row-val.placa {
+      font-size: 15px; font-weight: 800; letter-spacing: .1em;
+      background: var(--t1); color: #fff;
+      padding: 3px 10px; border-radius: 5px;
+    }
+    .confirm-row-val.valor {
+      font-size: 20px; font-weight: 800; letter-spacing: -.04em;
+      color: var(--din); font-variant-numeric: tabular-nums;
+    }
+    .confirm-modal-footer {
+      padding: 14px 20px 18px;
+      display: flex; gap: 8px;
+      border-top: 1px solid var(--border2);
+      background: var(--sf2);
+    }
+    .btn-confirm-cancel {
+      flex: 1; height: 42px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r); background: #fff;
+      color: var(--t3); font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: inherit; letter-spacing: -.015em;
+      transition: border-color .12s, background .12s;
+    }
+    .btn-confirm-cancel:hover { border-color: #b8c6d6; background: var(--sf2); }
+    .btn-confirm-ok {
+      flex: 2; height: 42px; border: none;
+      border-radius: var(--r); background: var(--red); color: #fff;
+      font-size: 13.5px; font-weight: 700; cursor: pointer;
+      font-family: inherit; letter-spacing: -.02em;
+      box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 3px 12px rgba(220,38,38,.35);
+      transition: background .12s, box-shadow .12s, transform .1s;
+    }
+    .btn-confirm-ok:hover { background: var(--red-dk); transform: translateY(-1px); box-shadow: 0 1px 0 rgba(0,0,0,.14), 0 6px 20px rgba(220,38,38,.42); }
+    .btn-confirm-ok:active { transform: none; }
+
+    /* ═══════════════════════════════════════════════════════
        PRÉ-CONFERÊNCIA
     ═══════════════════════════════════════════════════════ */
     .conf-header {
@@ -1695,6 +1779,45 @@
     </div>
   </div>
 
+  <!-- ═══ MODAL CONFIRMAR LANÇAMENTO ════════════════════════════ -->
+  <div class="overlay" id="confirmLancarModal">
+    <div class="confirm-modal">
+      <div class="confirm-modal-header">
+        <div class="confirm-modal-icon">📋</div>
+        <div>
+          <h3>Confirmar lançamento</h3>
+          <p>Verifique os dados antes de registrar</p>
+        </div>
+      </div>
+      <div class="confirm-modal-body">
+        <div class="confirm-row">
+          <span class="confirm-row-label">Placa</span>
+          <span class="confirm-row-val placa" id="cfPlaca">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-row-label">Cliente</span>
+          <span class="confirm-row-val" id="cfCliente">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-row-label">Serviço</span>
+          <span class="confirm-row-val" id="cfServico">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-row-label">Pagamento</span>
+          <span class="confirm-row-val" id="cfFp">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-row-label">Valor</span>
+          <span class="confirm-row-val valor" id="cfValor">—</span>
+        </div>
+      </div>
+      <div class="confirm-modal-footer">
+        <button class="btn-confirm-cancel" id="confirmLancarCancelBtn">Cancelar</button>
+        <button class="btn-confirm-ok" id="confirmLancarOkBtn">Confirmar lançamento</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ MODAL RESUMO ═════════════════════════════════════════ -->
   <div class="overlay" id="resumoModal">
     <div class="resumo-modal">
@@ -1808,6 +1931,58 @@
     // Valida placa em tempo real
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fPlaca").addEventListener("input", validarFormulario);
+    });
+
+    // Modal de confirmação de lançamento
+    document.addEventListener("DOMContentLoaded", () => {
+      const FP_LABELS = { dinheiro: "💵 Dinheiro", debito: "💳 Débito", credito: "💳 Crédito", pix: "⚡ PIX", faturado: "🧾 Faturado" };
+      const brlFmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // Redireciona clique do btnLancar para abrir modal
+      const btnLancar = document.getElementById("btnLancar");
+      btnLancar.removeEventListener("click", lancar);
+      btnLancar.addEventListener("click", () => {
+        const placa   = document.getElementById("fPlaca").value.trim().toUpperCase();
+        const cliente = document.getElementById("fCliente").value.trim();
+        const servico = document.getElementById("fServico").value;
+        const valor   = parseFloat(document.getElementById("fValor").value) || 0;
+        const fp      = state.fpSelecionado;
+
+        document.getElementById("cfPlaca").textContent   = placa;
+        document.getElementById("cfCliente").textContent = cliente;
+        document.getElementById("cfServico").textContent = servico;
+        document.getElementById("cfFp").textContent      = FP_LABELS[fp] || fp;
+        document.getElementById("cfValor").textContent   = brlFmt(valor);
+
+        // Colore chip de FP
+        const fpEl = document.getElementById("cfFp");
+        fpEl.className = "confirm-row-val fp-chip " + (fp || "");
+
+        document.getElementById("confirmLancarModal").classList.add("open");
+        document.getElementById("confirmLancarOkBtn").focus();
+      });
+
+      // Confirmar → executa lançamento
+      document.getElementById("confirmLancarOkBtn").addEventListener("click", () => {
+        document.getElementById("confirmLancarModal").classList.remove("open");
+        lancar();
+      });
+
+      // Cancelar → fecha sem limpar
+      document.getElementById("confirmLancarCancelBtn").addEventListener("click", () => {
+        document.getElementById("confirmLancarModal").classList.remove("open");
+      });
+
+      // Clique fora fecha
+      document.getElementById("confirmLancarModal").addEventListener("click", e => {
+        if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
+      });
+
+      // Enter no modal confirma
+      document.getElementById("confirmLancarModal").addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("confirmLancarOkBtn").click(); }
+        if (e.key === "Escape") document.getElementById("confirmLancarCancelBtn").click();
+      });
     });
 
     // Rebind FP para Layout 2
