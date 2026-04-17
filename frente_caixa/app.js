@@ -31,7 +31,9 @@ const sampleRows = [
 const state = {
   records: [],
   sourceFiles: [],
-  filter: "todos"
+  filter: "todos",
+  conferencia: {},     // { recordId: { status, pdv_valor, pdv_fp, pdv_hora } }
+  conferido: new Set(), // IDs confirmados manualmente apesar de divergencia/sem_pdv
 };
 
 const knownTinyClients = new Map();
@@ -202,12 +204,17 @@ function makeRecord(row, index, sourceFile) {
 function loadSample() {
   state.records = sampleRows.map((row, index) => makeRecord(row, index, "14_04_2026.xls"));
   state.sourceFiles = ["14_04_2026.xls"];
+  state.conferencia = {};
+  state.conferido = new Set();
   render();
+  conferirComPDV();
 }
 
 function clearBatch() {
   state.records = [];
   state.sourceFiles = [];
+  state.conferencia = {};
+  state.conferido = new Set();
   els.fileInput.value = "";
   render();
 }
@@ -264,6 +271,13 @@ function recordIssues(record) {
   if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
+  // Cruzamento PDV: bloqueia envio ate usuario confirmar manualmente divergencias
+  if (record.fp === "AV") {
+    const conf = state.conferencia[record.id];
+    if (conf && conf.status !== "ok" && !state.conferido.has(record.id)) {
+      issues.push("conferencia PDV");
+    }
+  }
   return issues;
 }
 
@@ -332,6 +346,19 @@ function renderTable() {
     });
   });
 
+  els.recordsBody.querySelectorAll("button[data-confirm]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      const id  = event.target.dataset.confirm;
+      const rec = state.records.find((r) => r.id === id);
+      if (rec && rec.avPagamento === "pendente") {
+        alert("Defina a forma de pagamento antes de confirmar.");
+        return;
+      }
+      state.conferido.add(id);
+      render();
+    });
+  });
+
   els.tableSubtitle.textContent = `${rows.length} linha(s) em exibicao`;
 }
 
@@ -344,11 +371,33 @@ function paymentControl(record) {
     ["credito", "Credito"],
     ["pix", "Pix"]
   ];
-  return `
+  const select = `
     <select data-record="${record.id}" aria-label="Pagamento AV">
       ${options.map(([value, label]) => `<option value="${value}" ${record.avPagamento === value ? "selected" : ""}>${label}</option>`).join("")}
     </select>
   `;
+  const conf = state.conferencia[record.id];
+  if (!conf) return select;
+
+  const fmt = v => v != null ? "R$\u00a0" + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+  const fp_label = { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" };
+
+  if (conf.status === "ok") {
+    const label = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora}`;
+    return select + `<div class="pdv-badge pdv-ok">&#x2705; PDV: ${label}</div>`;
+  }
+  const confirmed = state.conferido.has(record.id);
+  if (conf.status === "divergencia_valor") {
+    const confirmBtn = confirmed
+      ? `<span class="pdv-confirmed">confirmado</span>`
+      : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
+    return select + `<div class="pdv-badge pdv-warn">&#x26A0;&#xFE0F; PDV: ${fmt(conf.pdv_valor)} (${fp_label[conf.pdv_fp] || conf.pdv_fp}) · planilha: ${fmt(record.preco)} ${confirmBtn}</div>`;
+  }
+  // sem_pdv
+  const confirmBtn = confirmed
+    ? `<span class="pdv-confirmed">confirmado</span>`
+    : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
+  return select + `<div class="pdv-badge pdv-err">&#x274C; Sem registro no PDV ${confirmBtn}</div>`;
 }
 
 function tinyControl(record, issues) {
@@ -415,11 +464,50 @@ function renderIssues() {
   const issues = [];
   const faMissing = state.records.filter((record) => record.fp === "FA" && !record.tinyClienteId);
   const avPending = state.records.filter((record) => record.fp === "AV" && record.avPagamento === "pendente");
+  const pdvDiverg = state.records.filter((r) => {
+    const conf = state.conferencia[r.id];
+    return r.fp === "AV" && conf && conf.status === "divergencia_valor" && !state.conferido.has(r.id);
+  });
+  const pdvMissing = state.records.filter((r) => {
+    const conf = state.conferencia[r.id];
+    return r.fp === "AV" && conf && conf.status === "sem_pdv" && !state.conferido.has(r.id);
+  });
   if (faMissing.length) issues.push(`${faMissing.length} cliente(s) FA sem vinculo Tiny.`);
-  if (avPending.length) issues.push(`${avPending.length} item(ns) AV sem forma real de pagamento.`);
+  if (avPending.length) issues.push(`${avPending.length} item(ns) AV sem forma de pagamento.`);
+  if (pdvDiverg.length) issues.push(`${pdvDiverg.length} item(ns) AV com valor divergente do PDV.`);
+  if (pdvMissing.length) issues.push(`${pdvMissing.length} item(ns) AV sem registro no PDV de hoje.`);
   if (!state.records.length) issues.push("Nenhuma planilha carregada.");
   if (!issues.length) issues.push("Lote pronto para conferencia final.");
   els.issuesList.innerHTML = issues.map((issue) => `<li>${issue}</li>`).join("");
+}
+
+async function conferirComPDV() {
+  if (!apiBase || !state.records.length) return;
+  const avRecords = state.records
+    .filter((r) => r.fp === "AV")
+    .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp }));
+  if (!avRecords.length) return;
+  try {
+    const result = await apiFetch(`${apiBase}/api/caixa/conferir`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ records: avRecords }),
+    });
+    if (!result.success) return;
+    state.conferencia = result.conferencia;
+    // Auto-preenche avPagamento para registros confirmados no PDV ("ok")
+    for (const [id, conf] of Object.entries(result.conferencia)) {
+      if (conf.status === "ok" && conf.pdv_fp) {
+        const rec = state.records.find((r) => r.id === id);
+        if (rec && rec.avPagamento === "pendente") {
+          rec.avPagamento = conf.pdv_fp;
+        }
+      }
+    }
+    render();
+  } catch (e) {
+    // conferencia e opcional — falha silenciosa
+  }
 }
 
 function sum(records) {
@@ -471,7 +559,10 @@ els.fileInput.addEventListener("change", async (event) => {
     }
   }
   state.records = [...state.records, ...imported];
+  state.conferencia = {};
+  state.conferido = new Set();
   render();
+  conferirComPDV();
   if (errors.length) {
     alert(errors.join("\n"));
   }

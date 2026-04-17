@@ -1060,6 +1060,80 @@ def api_caixa_excluir(unit: str, lancamento_id: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/caixa/conferir", methods=["POST"])
+@unit_access_required
+def api_caixa_conferir(unit: str):
+    """Cruza registros AV da planilha com lancamentos do PDV do dia.
+
+    Input:  { records: [{id, placa, servico, preco, fp}] }
+    Output: { conferencia: { <record_id>: { status, pdv_valor, pdv_fp, pdv_hora } } }
+
+    status:
+      "ok"               — placa+servico encontrado no PDV, valor igual
+      "divergencia_valor" — encontrado no PDV mas valor difere
+      "sem_pdv"          — placa+servico nao encontrado no PDV hoje
+    """
+    try:
+        import re
+        import unicodedata as _ud
+
+        data    = request.get_json(force=True, silent=True) or {}
+        records = data.get("records", [])
+        config  = _build_unit_config(unit)
+        caixa   = _load_caixa_dia(unit)
+        lancamentos = caixa.get("lancamentos", [])
+
+        def _norm_placa(value: str) -> str:
+            return re.sub(r"[^A-Z0-9]", "", clean_text(value).upper())
+
+        def _norm_servico(value: str) -> str:
+            v = clean_text(value).upper()
+            v = apply_alias(config, "servico", v)
+            v = _ud.normalize("NFD", v)
+            v = "".join(c for c in v if _ud.category(c) != "Mn")
+            return " ".join(v.split())
+
+        # Indice PDV: (placa_norm, servico_norm) → lancamento
+        # Se houver duplicatas no PDV (nao deveria, mas por seguranca), mantemos o ultimo
+        pdv_map: dict[tuple, dict] = {}
+        for lc in lancamentos:
+            key = (_norm_placa(lc.get("placa", "")), _norm_servico(lc.get("servico", "")))
+            pdv_map[key] = lc
+
+        conferencia: dict[str, dict] = {}
+        for r in records:
+            if r.get("fp") != "AV":
+                continue  # apenas AV precisa de cruzamento com PDV
+
+            rec_id  = r.get("id", "")
+            placa   = _norm_placa(r.get("placa", ""))
+            servico = _norm_servico(r.get("servico", ""))
+            preco   = float(r.get("preco", 0))
+            key     = (placa, servico)
+
+            if key not in pdv_map:
+                conferencia[rec_id] = {
+                    "status": "sem_pdv",
+                    "pdv_valor": None,
+                    "pdv_fp": None,
+                    "pdv_hora": None,
+                }
+            else:
+                lc        = pdv_map[key]
+                pdv_valor = float(lc.get("valor", 0))
+                status    = "ok" if abs(pdv_valor - preco) < 0.01 else "divergencia_valor"
+                conferencia[rec_id] = {
+                    "status": status,
+                    "pdv_valor": pdv_valor,
+                    "pdv_fp": lc.get("fp"),
+                    "pdv_hora": lc.get("hora"),
+                }
+
+        return _json({"success": True, "conferencia": conferencia})
+    except Exception as exc:
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Ponto de entrada
 # ══════════════════════════════════════════════════════════════════════════════
