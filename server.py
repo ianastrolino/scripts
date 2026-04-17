@@ -813,7 +813,7 @@ def api_auto_map_clients(unit: str):
 
 def _load_caixa_dia(unit: str) -> dict[str, Any]:
     p = _unit_state_dir(unit) / "caixa_dia.json"
-    today = dt.date.today().isoformat()
+    today = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
     if p.exists():
         try:
             data = json.loads(p.read_text())
