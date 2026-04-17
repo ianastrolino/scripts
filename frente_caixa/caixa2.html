@@ -1823,21 +1823,30 @@
       });
     });
 
-    // Patch renderTotais para acionar btn de conferência
+    // Patch renderTotais — usa assignment para evitar hoisting circular
     const _origRenderTotais = renderTotais;
-    function renderTotais(totais, count) {
+    window.renderTotais = function(totais, count) {
       _origRenderTotais(totais, count);
       if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
-    }
+    };
+
+    // Patch limparFormulario — limpa fp-card selecionado no layout 2
+    const _origLimparFormulario = limparFormulario;
+    window.limparFormulario = function() {
+      _origLimparFormulario();
+      document.getElementById("fpGrid").querySelectorAll(".fp-card")
+        .forEach(b => b.classList.remove("selected"));
+      state.fpSelecionado = "";
+    };
 
     const _origAbrirEditar = abrirEditar;
-    function abrirEditar(id) {
+    window.abrirEditar = function(id) {
       _origAbrirEditar(id);
       const lc = state.lancamentos.find(l => l.id === id);
       if (!lc) return;
       document.getElementById("editFpMini").querySelectorAll(".fp-mini")
         .forEach(b => b.classList.toggle("sel", b.dataset.fp === lc.fp));
-    }
+    };
   </script>
   <script src="caixa2.js"></script>
 </body>
