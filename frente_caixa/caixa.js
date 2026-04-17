@@ -398,23 +398,27 @@ document.addEventListener("DOMContentLoaded", () => {
     this.setSelectionRange(pos, pos);
   });
 
-  // FP buttons (formulário principal)
+  // FP buttons (formulário principal — Layout 1 usa .pdv-form-panel .fp-buttons)
   const fpContainer = document.querySelector(".pdv-form-panel .fp-buttons");
-  fpContainer.querySelectorAll(".fp-btn").forEach(btn => {
-    btn.addEventListener("click", () => selecionarFp(btn.dataset.fp, fpContainer, "fpSelecionado"));
-    btn.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        selecionarFp(btn.dataset.fp, fpContainer, "fpSelecionado");
-      }
+  if (fpContainer) {
+    fpContainer.querySelectorAll(".fp-btn").forEach(btn => {
+      btn.addEventListener("click", () => selecionarFp(btn.dataset.fp, fpContainer, "fpSelecionado"));
+      btn.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selecionarFp(btn.dataset.fp, fpContainer, "fpSelecionado");
+        }
+      });
     });
-  });
+  }
 
-  // FP buttons (modal editar)
+  // FP buttons (modal editar — Layout 1 usa #editFpButtons)
   const editFpContainer = document.getElementById("editFpButtons");
-  editFpContainer.querySelectorAll(".fp-btn").forEach(btn => {
-    btn.addEventListener("click", () => selecionarFp(btn.dataset.fp, editFpContainer, "editFpSelecionado"));
-  });
+  if (editFpContainer) {
+    editFpContainer.querySelectorAll(".fp-btn").forEach(btn => {
+      btn.addEventListener("click", () => selecionarFp(btn.dataset.fp, editFpContainer, "editFpSelecionado"));
+    });
+  }
 
   // Botao lancar
   document.getElementById("btnLancar").addEventListener("click", lancar);
@@ -434,7 +438,7 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       // Se FP nao selecionado, foca no primeiro botao FP
       if (!state.fpSelecionado) {
-        fpContainer.querySelector(".fp-btn").focus();
+        if (fpContainer) fpContainer.querySelector(".fp-btn").focus();
       } else if (!document.getElementById("btnLancar").disabled) {
         lancar();
       }
