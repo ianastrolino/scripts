@@ -268,7 +268,8 @@ function recordsForFilter() {
 function recordIssues(record) {
   const issues = [];
   // "sem-vinculo" = usuario confirmou que cliente nao existe no Tiny → nao pode enviar
-  if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
+  // pdvExtra FA: cliente digitado no PDV → servidor faz resolve_contact por nome, nao bloqueia aqui
+  if (record.fp === "FA" && !record.pdvExtra && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
   // Cruzamento PDV: bloqueia envio ate usuario confirmar manualmente divergencias
@@ -421,7 +422,7 @@ function renderSummary() {
   const avRecords = state.records.filter((record) => record.fp === "AV");
   const totalFa = sum(faRecords);
   const totalAv = sum(avRecords);
-  const missingClients = faRecords.filter((record) => !record.tinyClienteId).length;
+  const missingClients = faRecords.filter((record) => !record.tinyClienteId && !record.pdvExtra).length;
   const pending = state.records.filter((record) => recordIssues(record).length > 0).length;
   const firstDate = state.records[0]?.data || "";
   const dueDate = firstDate ? lastDayOfMonth(firstDate) : "";
@@ -483,7 +484,8 @@ function renderIssues() {
 }
 
 async function conferirComPDV() {
-  if (!apiBase || !state.records.length) return;
+  if (!apiBase) return;
+  const temPlanilha = state.records.some((r) => !r.pdvExtra);
   const avRecords = state.records
     .filter((r) => r.fp === "AV" && !r.pdvExtra)
     .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp }));
@@ -508,7 +510,8 @@ async function conferirComPDV() {
 
     // Injeta lançamentos do PDV que não têm correspondência na planilha
     // (serviços que nunca vêm no Excel: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
-    const extras = (result.pdv_sem_planilha || []);
+    // Sem planilha: injeta apenas faturados (AV sem planilha não faz sentido aqui)
+    const extras = (result.pdv_sem_planilha || []).filter((lc) => temPlanilha || lc.fp === "faturado");
     // Remove extras anteriores para não duplicar em chamadas subsequentes
     state.records = state.records.filter((r) => !r.pdvExtra);
     for (const lc of extras) {
@@ -827,7 +830,7 @@ const mapState = {
 function openMapClientesModal() {
   mapState.queue = [...new Set(
     state.records
-      .filter((r) => r.fp === "FA" && !r.tinyClienteId)
+      .filter((r) => r.fp === "FA" && !r.tinyClienteId && !r.pdvExtra)
       .map((r) => r.cliente)
   )];
   if (!mapState.queue.length) return;
@@ -848,7 +851,7 @@ function mapNext() {
     return;
   }
   mapState.current = mapState.queue.shift();
-  const total = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId).length;
+  const total = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId && !r.pdvExtra).length;
   document.querySelector("#mapProgress").textContent =
     `${mapState.queue.length + 1} de ${total + mapState.queue.length} cliente(s) nao mapeado(s)`;
   document.querySelector("#mapClienteAtual").innerHTML =
@@ -1016,6 +1019,9 @@ fetch(`${apiBase}/api/info`)
     }
   })
   .catch(() => {});
+
+// Carrega faturados do PDV na abertura da página (mesmo sem planilha importada)
+if (apiBase) conferirComPDV();
 
 // Em modo local (sem Railway) carrega exemplo para facilitar testes
 if (!apiBase) loadSample();
