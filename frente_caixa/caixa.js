@@ -88,36 +88,45 @@ async function carregarEstado() {
 // ── Render tabela ─────────────────────────────────────────────────────────────
 
 function renderTabela() {
-  const tbody = document.getElementById("pdvBody");
-  const table = document.getElementById("pdvTable");
-  const empty = document.getElementById("emptyState");
+  try {
+    const tbody = document.getElementById("pdvBody");
+    const table = document.getElementById("pdvTable");
+    const empty = document.getElementById("emptyState");
 
-  if (state.lancamentos.length === 0) {
-    table.style.display = "none";
-    empty.style.display = "block";
-    return;
+    if (!tbody || !table || !empty) {
+      console.warn("[renderTabela] Elementos da tabela nao encontrados no DOM.");
+      return;
+    }
+
+    if (state.lancamentos.length === 0) {
+      table.style.display = "none";
+      empty.style.display = "block";
+      return;
+    }
+
+    table.style.display = "";
+    empty.style.display = "none";
+
+    tbody.innerHTML = state.lancamentos.map((lc, i) => `
+      <tr data-id="${lc.id}">
+        <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
+        <td style="color:var(--muted);font-size:13px;">${lc.hora}</td>
+        <td class="td-placa">${lc.placa}</td>
+        <td>${escHtml(lc.cliente)}</td>
+        <td style="font-size:13px;">${escHtml(lc.servico)}</td>
+        <td class="td-valor">${brl(lc.valor)}</td>
+        <td><span class="fp-badge ${lc.fp}">${fpLabel(lc.fp)}</span></td>
+        <td>
+          <div class="td-actions">
+            <button class="btn-icon" title="Editar" onclick="abrirEditar('${lc.id}')">✏️</button>
+            <button class="btn-icon" title="Excluir" onclick="confirmarExcluir('${lc.id}')">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    console.error("[renderTabela] Erro ao renderizar:", e);
   }
-
-  table.style.display = "";
-  empty.style.display = "none";
-
-  tbody.innerHTML = state.lancamentos.map((lc, i) => `
-    <tr data-id="${lc.id}">
-      <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
-      <td style="color:var(--muted);font-size:13px;">${lc.hora}</td>
-      <td class="td-placa">${lc.placa}</td>
-      <td>${escHtml(lc.cliente)}</td>
-      <td style="font-size:13px;">${escHtml(lc.servico)}</td>
-      <td class="td-valor">${brl(lc.valor)}</td>
-      <td><span class="fp-badge ${lc.fp}">${fpLabel(lc.fp)}</span></td>
-      <td>
-        <div class="td-actions">
-          <button class="btn-icon" title="Editar" onclick="abrirEditar('${lc.id}')">✏️</button>
-          <button class="btn-icon" title="Excluir" onclick="confirmarExcluir('${lc.id}')">🗑️</button>
-        </div>
-      </td>
-    </tr>
-  `).join("");
 }
 
 function escHtml(s) {
@@ -130,19 +139,30 @@ let _renderTotaisActive = false;
 function renderTotais(totais, count) {
   if (_renderTotaisActive) { console.warn("renderTotais: chamada recursiva bloqueada"); return; }
   _renderTotaisActive = true;
-  const t = totais || state.totais;
-  console.log("[renderTotais] t=", JSON.stringify(t), "lancamentos=", state.lancamentos.length);
-  const n = count !== undefined ? count : state.lancamentos.length;
-  document.getElementById("totDinheiro").textContent = brl(t.dinheiro    || 0);
-  document.getElementById("totDebito").textContent   = brl(t.debito      || 0);
-  document.getElementById("totCredito").textContent  = brl(t.credito     || 0);
-  document.getElementById("totPix").textContent      = brl(t.pix         || 0);
-  document.getElementById("totFaturado").textContent = brl(t.faturado    || 0);
-  document.getElementById("totAvista").textContent   = brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0));
-  document.getElementById("totCount").textContent    =
-    `${n} lancamento${n !== 1 ? "s" : ""}`;
-  _renderTotaisActive = false;
-  if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
+  try {
+    const t = totais || state.totais || { dinheiro: 0, debito: 0, credito: 0, pix: 0, faturado: 0, total: 0 };
+    console.log("[renderTotais] t=", JSON.stringify(t), "lancamentos=", state.lancamentos.length);
+    const n = count !== undefined ? count : state.lancamentos.length;
+
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    setVal("totDinheiro", brl(t.dinheiro    || 0));
+    setVal("totDebito",   brl(t.debito      || 0));
+    setVal("totCredito",  brl(t.credito     || 0));
+    setVal("totPix",      brl(t.pix         || 0));
+    setVal("totFaturado", brl(t.faturado    || 0));
+    setVal("totAvista",   brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0)));
+    setVal("totCount",    `${n} lancamento${n !== 1 ? "s" : ""}`);
+
+    if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
+  } catch (e) {
+    console.error("[renderTotais] Erro fatal:", e);
+  } finally {
+    _renderTotaisActive = false;
+  }
 }
 
 // ── Formulário de lançamento ──────────────────────────────────────────────────

@@ -43,6 +43,7 @@ UNITS_CONFIG (JSON):
 """
 from __future__ import annotations
 
+import collections
 import datetime as dt
 from zoneinfo import ZoneInfo
 import hashlib
@@ -61,6 +62,9 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, Response, redirect, request, send_from_directory, session, url_for
+
+from caixa_helpers import FP_VALIDOS, calcular_totais, validar_lancamento
+from caixa_db import migrate_from_json as _db_migrate, load_lancamentos as _db_load, _connect as _db_connect
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -93,10 +97,45 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(os.environ.get("RAILWAY_ENVIRONMENT")),
-    PERMANENT_SESSION_LIFETIME=43200,  # 12 horas
+    PERMANENT_SESSION_LIFETIME=43200,   # 12 horas
+    MAX_CONTENT_LENGTH=1 * 1024 * 1024, # 1 MB — rejeita payloads gigantes antes de processar
 )
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
+
+# ── Rate limiting para login (5 tentativas / 60s por IP) ──────────────────────
+_LOGIN_WINDOW  = 60
+_LOGIN_MAX     = 5
+_login_attempts: dict[str, list[float]] = collections.defaultdict(list)
+_login_lock = threading.Lock()
+
+def _login_rate_check(ip: str) -> bool:
+    """Retorna True se o IP pode tentar login, False se bloqueado."""
+    now = time.monotonic()
+    with _login_lock:
+        _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW]
+        if len(_login_attempts[ip]) >= _LOGIN_MAX:
+            return False
+        _login_attempts[ip].append(now)
+        return True
+
+# ── Rate limiting para PIN (10 tentativas / 60s por IP+unidade) ───────────────
+_PIN_WINDOW  = 60
+_PIN_MAX     = 10
+_pin_attempts: dict[str, list[float]] = collections.defaultdict(list)
+_pin_lock = threading.Lock()
+
+def _pin_rate_check(unit: str, ip: str) -> bool:
+    """Retorna True se ainda pode tentar PIN, False se bloqueado."""
+    key = f"{unit}:{ip}"
+    now = time.monotonic()
+    with _pin_lock:
+        _pin_attempts[key] = [t for t in _pin_attempts[key] if now - t < _PIN_WINDOW]
+        if len(_pin_attempts[key]) >= _PIN_MAX:
+            return False
+        _pin_attempts[key].append(now)
+        return True
+
 UI_DIR   = _HERE / "frente_caixa"
 
 
@@ -110,7 +149,7 @@ def handle_unhandled_exception(exc):
         return exc  # deixa redirecionamentos e 404 funcionarem normalmente
     tb = traceback.format_exc()
     print(f"[UNHANDLED] {exc}\n{tb}", file=sys.stderr, flush=True)
-    return _json({"success": False, "error": str(exc), "traceback": tb}, 500)
+    return _json({"success": False, "error": "Erro interno do servidor."}, 500)
 
 # ── Carregamento de config ─────────────────────────────────────────────────────
 def _load_users() -> dict[str, Any]:
@@ -180,6 +219,19 @@ def unit_access_required(f):
             if "/api/" in request.path:
                 return _json({"success": False, "error": "Acesso negado a esta unidade."}, 403)
             return Response("Acesso negado", status=403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def master_required(f):
+    """Restringe rota a usuários com flag master=True. Retorna JSON 403 para os demais."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = _current_user()
+        if not user:
+            return _json({"error": "Nao autenticado."}, 401)
+        if not user.get("master"):
+            return _json({"error": "Acesso negado."}, 403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -269,12 +321,30 @@ def _json(data: Any, status: int = 200) -> Response:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Rota: health check
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/health")
+def health():
+    """Usado pelo Railway para verificar se o processo está vivo."""
+    return _json({
+        "status": "ok",
+        "units":  len(UNITS),
+        "ts":     dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Rotas: autenticacao
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     if request.method == "POST":
+        ip = request.remote_addr or "unknown"
+        if not _login_rate_check(ip):
+            return redirect(url_for("login_page") + "?erro=bloqueado")
+
         email = (request.form.get("email") or "").strip().lower()
         pw    = request.form.get("password") or ""
 
@@ -332,16 +402,42 @@ def master_page():
 
 
 @app.route("/master/api/units")
-@login_required
+@master_required
 def master_api_units():
-    user = _current_user()
-    if not user.get("master"):
-        return _json({"error": "Acesso negado"}, 403)
     units_info = [
         {"id": uid, "nome": ud.get("nome", uid)}
         for uid, ud in UNITS.items()
     ]
     return _json({"units": units_info})
+
+
+@app.route("/master/api/units/status")
+@master_required
+def master_api_units_status():
+    """Resumo operacional do caixa do dia para todas as unidades.
+
+    Retorna por unidade: total de lançamentos, valor total e hora do último
+    lançamento. Usado pelo painel master para monitorar 300 unidades de uma vez.
+    """
+    today = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+    status = []
+    for uid, ud in UNITS.items():
+        try:
+            lancamentos = _db_load(uid, _unit_state_dir(uid), today)
+        except Exception:
+            lancamentos = []
+        totais = calcular_totais(lancamentos)
+        ultima = max((lc.get("timestamp", "") for lc in lancamentos), default=None)
+        status.append({
+            "id":   uid,
+            "nome": ud.get("nome", uid),
+            "hoje": {
+                "lancamentos":    len(lancamentos),
+                "total":          totais["total"],
+                "ultima_atividade": ultima,
+            },
+        })
+    return _json({"status": status, "data": today})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -405,6 +501,7 @@ def api_auth_callback(unit: str):
         importer.client.exchange_authorization_code(code, redirect_uri)
         return f"<h1>Autenticacao concluida!</h1><p>Unidade {unit} autorizada com sucesso. Pode fechar esta aba e voltar ao app.</p>"
     except Exception as exc:
+        app.logger.exception("[server] oauth callback unit=%s", unit)
         return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
 
 @app.route("/u/<unit>/api/info")
@@ -533,6 +630,10 @@ def api_preview(unit: str):
             "resumo": {"novos": novos, "duplicatas": dups, "total": len(previews)},
         })
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -578,7 +679,22 @@ def api_send(unit: str):
                     return
 
             try:
-                resp = importer.create_accounts_receivable(rec)
+                # Retry com backoff: 3 tentativas, espera 2s e 4s entre elas
+                # Cobre quedas temporárias do Tiny sem perder o lançamento
+                last_exc: Exception | None = None
+                resp = None
+                for attempt in range(3):
+                    try:
+                        resp = importer.create_accounts_receivable(rec)
+                        break
+                    except Exception as exc:
+                        if _is_doc_already_registered(exc):
+                            raise  # não retenta duplicata — vai direto para o handler abaixo
+                        last_exc = exc
+                        if attempt < 2:
+                            time.sleep(2 ** attempt)  # 0s, 2s, 4s
+                else:
+                    raise last_exc  # esgotou tentativas
                 with lock:
                     imported[rec.chave_deduplicacao] = {
                         "arquivo": rec.origem_arquivo,
@@ -598,6 +714,7 @@ def api_send(unit: str):
                         }
                         results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
                     else:
+                        app.logger.exception("[send] falha chave=%s cliente=%s", rec.chave_deduplicacao, rec.cliente)
                         results["falhas"].append({
                             "chave": rec.chave_deduplicacao,
                             "cliente": rec.cliente,
@@ -619,6 +736,10 @@ def api_send(unit: str):
             "message": f"Processamento concluido. Enviados: {len(results['enviados'])}",
         })
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -638,6 +759,10 @@ def api_clear_imported(unit: str):
             count = 0
         return _json({"success": True, "message": f"Estado limpo. {count} registro(s) removidos."})
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -695,6 +820,10 @@ def api_suggest_clients(unit: str):
         candidates.sort(key=lambda x: x["score"], reverse=True)
         return _json({"success": True, "candidates": candidates[:6]})
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -714,6 +843,10 @@ def api_diagnostic_payment(unit: str):
             "current_config": config["tiny"].get("forma_recebimento_ids")
         })
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -732,6 +865,10 @@ def api_map_client(unit: str):
         _save_extra_cliente_ids(unit, ids)
         return _json({"success": True, "saved": True})
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -807,6 +944,10 @@ def api_auto_map_clients(unit: str):
 
         return _json({"success": True, "mapped": mapped, "needs_review": needs_review})
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -815,27 +956,46 @@ def api_auto_map_clients(unit: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _load_caixa_dia(unit: str) -> dict[str, Any]:
-    p = _unit_state_dir(unit) / "caixa_dia.json"
-    today = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
-    if p.exists():
-        try:
-            data = json.loads(p.read_text())
-            if data.get("data") == today:
-                return data
-        except Exception:
-            pass
-    return {"data": today, "lancamentos": []}
+    today    = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+    unit_dir = _unit_state_dir(unit)
+
+    try:
+        n = _db_migrate(unit, unit_dir)
+        if n:
+            app.logger.info("[caixa] migrated %d records for unit=%s", n, unit)
+    except Exception as exc:
+        app.logger.error("[caixa] migration FAILED for unit=%s: %s — falling back to JSON", unit, exc)
+        p = unit_dir / "caixa_dia.json"
+        if p.exists():
+            try:
+                data = json.loads(p.read_text())
+                if data.get("data") == today:
+                    return data
+            except Exception:
+                pass
+        return {"data": today, "lancamentos": []}
+
+    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "servico", "valor", "fp"}
+    lancamentos = [
+        {k: v for k, v in lc.items() if k in _KEEP}
+        for lc in _db_load(unit, unit_dir, today)
+    ]
+    return {"data": today, "lancamentos": lancamentos}
 
 
 def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
-    p = _unit_state_dir(unit) / "caixa_dia.json"
-    tmp = p.with_suffix(".tmp")
-    try:
-        tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2))
-        tmp.replace(p)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
+    unit_dir = _unit_state_dir(unit)
+    today    = state["data"]
+    lcs      = state["lancamentos"]
+    with _db_connect(unit_dir) as conn:
+        conn.execute("DELETE FROM lancamentos WHERE unit=? AND data=?", (unit, today))
+        if lcs:
+            conn.executemany(
+                "INSERT INTO lancamentos "
+                "(id,unit,data,hora,timestamp,placa,cliente,servico,valor,fp) "
+                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp)",
+                [{**lc, "unit": unit, "data": today} for lc in lcs],
+            )
 
 
 def _verify_unit_pin(unit: str, pin: str) -> bool:
@@ -844,14 +1004,7 @@ def _verify_unit_pin(unit: str, pin: str) -> bool:
 
 
 def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
-    totals: dict[str, float] = {"dinheiro": 0.0, "debito": 0.0, "credito": 0.0, "pix": 0.0, "faturado": 0.0}
-    for lc in lancamentos:
-        fp = lc.get("fp", "")
-        if fp in totals:
-            totals[fp] += float(lc.get("valor", 0))
-    totals["total"] = sum(totals.values())
-    totals["total_avista"] = totals["total"] - totals["faturado"]
-    return totals
+    return calcular_totais(lancamentos)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -962,19 +1115,30 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": True, "reply": reply})
 
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/u/<unit>/api/caixa/estado")
 @unit_access_required
 def api_caixa_estado(unit: str):
-    state = _load_caixa_dia(unit)
-    return _json({
-        "success": True,
-        "data": state["data"],
-        "lancamentos": state["lancamentos"],
-        "totais": _caixa_totals(state["lancamentos"]),
-    })
+    try:
+        state = _load_caixa_dia(unit)
+        return _json({
+            "success": True,
+            "data": state["data"],
+            "lancamentos": state["lancamentos"],
+            "totais": _caixa_totals(state["lancamentos"]),
+        })
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/u/<unit>/api/caixa/lancar", methods=["POST"])
@@ -988,16 +1152,10 @@ def api_caixa_lancar(unit: str):
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
 
-        if not placa:
-            return _json({"success": False, "error": "Placa obrigatoria."}, 400)
-        if not cliente:
-            return _json({"success": False, "error": "Cliente obrigatorio."}, 400)
-        if not servico:
-            return _json({"success": False, "error": "Servico obrigatorio."}, 400)
-        if valor <= 0:
-            return _json({"success": False, "error": "Valor deve ser maior que zero."}, 400)
-        if fp not in ("dinheiro", "debito", "credito", "pix", "faturado"):
-            return _json({"success": False, "error": "Forma de pagamento invalida."}, 400)
+        err = validar_lancamento({"placa": placa, "cliente": cliente, "servico": servico,
+                                   "valor": valor, "fp": fp})
+        if err:
+            return _json({"success": False, "error": err}, 400)
 
         now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
         lancamento = {
@@ -1021,6 +1179,10 @@ def api_caixa_lancar(unit: str):
             "total_lancamentos": len(state["lancamentos"]),
         })
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -1029,6 +1191,9 @@ def api_caixa_lancar(unit: str):
 def api_caixa_editar(unit: str, lancamento_id: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
+        ip = request.remote_addr or "unknown"
+        if not _pin_rate_check(unit, ip):
+            return _json({"success": False, "error": "Muitas tentativas. Aguarde 1 minuto."}, 429)
         if not _verify_unit_pin(unit, data.get("pin", "")):
             return _json({"success": False, "error": "PIN incorreto."}, 403)
 
@@ -1038,7 +1203,7 @@ def api_caixa_editar(unit: str, lancamento_id: str):
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
 
-        if not all([placa, cliente, servico]) or valor <= 0 or fp not in ("dinheiro", "debito", "credito", "pix"):
+        if not all([placa, cliente, servico]) or valor <= 0 or fp not in FP_VALIDOS:
             return _json({"success": False, "error": "Dados invalidos."}, 400)
 
         state = _load_caixa_dia(unit)
@@ -1051,6 +1216,10 @@ def api_caixa_editar(unit: str, lancamento_id: str):
 
         return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -1059,6 +1228,9 @@ def api_caixa_editar(unit: str, lancamento_id: str):
 def api_caixa_excluir(unit: str, lancamento_id: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
+        ip = request.remote_addr or "unknown"
+        if not _pin_rate_check(unit, ip):
+            return _json({"success": False, "error": "Muitas tentativas. Aguarde 1 minuto."}, 429)
         if not _verify_unit_pin(unit, data.get("pin", "")):
             return _json({"success": False, "error": "PIN incorreto."}, 403)
 
@@ -1075,6 +1247,10 @@ def api_caixa_excluir(unit: str, lancamento_id: str):
             "total_lancamentos": len(state["lancamentos"]),
         })
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 
@@ -1168,6 +1344,10 @@ def api_caixa_conferir(unit: str):
 
         return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
     except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
 
 

@@ -160,7 +160,6 @@
     .hstat-date {
       color: rgba(255,255,255,.22);
       font-size: 11px;
-      margin-left: auto;
       font-variant-numeric: tabular-nums;
       letter-spacing: -.01em;
       flex-shrink: 0;
@@ -1533,8 +1532,9 @@
       <div class="hstat">
         📍 <strong id="statusUnit">—</strong>
       </div>
+      <div style="flex:1;"></div>
       <div class="hstat-date" id="statusDate">—</div>
-      <div id="buildTag" style="font-size:10px;background:#e11;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700;">v10</div>
+      <div id="buildTag" style="font-size:10px;background:#dc2626;color:#fff;padding:2px 8px;border-radius:20px;font-weight:700;box-shadow:0 0 10px rgba(220,38,38,0.3);margin-left:4px;">v11</div>
     </div>
 
     <div class="header-right">
@@ -1929,100 +1929,8 @@
     </div>
   </div>
 
-  <script src="caixa.js?v=10"></script>
-  <script>
-    // Valida placa em tempo real
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("fPlaca").addEventListener("input", validarFormulario);
-    });
-
-    // Modal de confirmação de lançamento
-    document.addEventListener("DOMContentLoaded", () => {
-      const FP_LABELS = { dinheiro: "💵 Dinheiro", debito: "💳 Débito", credito: "💳 Crédito", pix: "⚡ PIX", faturado: "🧾 Faturado" };
-      const brlFmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-      // Redireciona clique do btnLancar para abrir modal
-      const btnLancar = document.getElementById("btnLancar");
-      btnLancar.removeEventListener("click", lancar);
-      btnLancar.addEventListener("click", () => {
-        btnLancar.disabled = true;
-        const placa   = document.getElementById("fPlaca").value.trim().toUpperCase();
-        const cliente = document.getElementById("fCliente").value.trim();
-        const servico = document.getElementById("fServico").value;
-        const valor   = parseFloat(document.getElementById("fValor").value) || 0;
-        const fp      = state.fpSelecionado;
-
-        document.getElementById("cfPlaca").textContent   = placa;
-        document.getElementById("cfCliente").textContent = cliente;
-        document.getElementById("cfServico").textContent = servico;
-        document.getElementById("cfFp").textContent      = FP_LABELS[fp] || fp;
-        document.getElementById("cfValor").textContent   = brlFmt(valor);
-
-        // Colore chip de FP
-        const fpEl = document.getElementById("cfFp");
-        fpEl.className = "confirm-row-val fp-chip " + (fp || "");
-
-        document.getElementById("confirmLancarModal").classList.add("open");
-        document.getElementById("confirmLancarOkBtn").focus();
-      });
-
-      // Confirmar → executa lançamento
-      document.getElementById("confirmLancarOkBtn").addEventListener("click", (e) => {
-        e.currentTarget.disabled = true;
-        document.getElementById("confirmLancarModal").classList.remove("open");
-        lancar().finally(() => { e.currentTarget.disabled = false; });
-      });
-
-      // Cancelar → fecha sem limpar, reabilita botão
-      document.getElementById("confirmLancarCancelBtn").addEventListener("click", () => {
-        document.getElementById("confirmLancarModal").classList.remove("open");
-        document.getElementById("btnLancar").disabled = false;
-      });
-
-      // Clique fora fecha, reabilita botão
-      document.getElementById("confirmLancarModal").addEventListener("click", e => {
-        if (e.target === e.currentTarget) {
-          e.currentTarget.classList.remove("open");
-          document.getElementById("btnLancar").disabled = false;
-        }
-      });
-
-      // Enter no modal confirma
-      document.getElementById("confirmLancarModal").addEventListener("keydown", e => {
-        if (e.key === "Enter") { e.preventDefault(); document.getElementById("confirmLancarOkBtn").click(); }
-        if (e.key === "Escape") document.getElementById("confirmLancarCancelBtn").click();
-      });
-    });
-
-    // Rebind FP para Layout 2
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("fpGrid").querySelectorAll(".fp-card").forEach(btn => {
-        btn.addEventListener("click", () => {
-          state.fpSelecionado = btn.dataset.fp;
-          document.getElementById("fpGrid").querySelectorAll(".fp-card")
-            .forEach(b => b.classList.toggle("selected", b.dataset.fp === btn.dataset.fp));
-          validarFormulario();
-        });
-      });
-      document.getElementById("editFpMini").querySelectorAll(".fp-mini").forEach(btn => {
-        btn.addEventListener("click", () => {
-          state.editFpSelecionado = btn.dataset.fp;
-          document.getElementById("editFpMini").querySelectorAll(".fp-mini")
-            .forEach(b => b.classList.toggle("sel", b.dataset.fp === btn.dataset.fp));
-        });
-      });
-    });
-
-
-const _origAbrirEditar = abrirEditar;
-    window.abrirEditar = function(id) {
-      _origAbrirEditar(id);
-      const lc = state.lancamentos.find(l => l.id === id);
-      if (!lc) return;
-      document.getElementById("editFpMini").querySelectorAll(".fp-mini")
-        .forEach(b => b.classList.toggle("sel", b.dataset.fp === lc.fp));
-    };
-  </script>
-  <script src="caixa2.js?v=10"></script>
+  <script src="caixa.js?v=11"></script>
+  <script src="caixa2-init.js?v=11"></script>
+  <script src="caixa2.js?v=11"></script>
 </body>
 </html>
