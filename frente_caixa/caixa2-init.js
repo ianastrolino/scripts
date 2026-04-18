@@ -2,13 +2,33 @@ document.addEventListener("DOMContentLoaded", () => {
   const FP_LABELS = { dinheiro: "💵 Dinheiro", debito: "💳 Débito", credito: "💳 Crédito", pix: "⚡ PIX", faturado: "🧾 Faturado" };
   const brlFmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  function fmtCPF(digits) {
+    if (!digits || digits.length !== 11) return digits || "";
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+
+  function toggleCpfField(fp) {
+    const wrap = document.getElementById("fCpfWrap");
+    if (!wrap) return;
+    const show = fp && fp !== "faturado";
+    wrap.style.display = show ? "" : "none";
+    if (!show) {
+      const cpfEl = document.getElementById("fCpf");
+      if (cpfEl) { cpfEl.value = ""; cpfEl.style.borderColor = ""; }
+      const cpfErr = document.getElementById("cpfError");
+      if (cpfErr) { cpfErr.textContent = ""; cpfErr.style.display = "none"; }
+    }
+    validarFormulario();
+  }
+
   // Redireciona clique do btnLancar para abrir modal de confirmação
   const btnLancar = document.getElementById("btnLancar");
   btnLancar.removeEventListener("click", lancar);
   btnLancar.addEventListener("click", () => {
     btnLancar.disabled = true;
     const placa   = document.getElementById("fPlaca").value.trim().toUpperCase();
-    const cliente = document.getElementById("fCliente").value.trim();
+    const cliente = document.getElementById("fCliente").value.trim().toUpperCase();
+    const cpfRaw  = (document.getElementById("fCpf")?.value || "").replace(/\D/g, "");
     const servico = document.getElementById("fServico").value;
     const valor   = parseFloat(document.getElementById("fValor").value) || 0;
     const fp      = state.fpSelecionado;
@@ -18,6 +38,17 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("cfServico").textContent = servico;
     document.getElementById("cfFp").textContent      = FP_LABELS[fp] || fp;
     document.getElementById("cfValor").textContent   = brlFmt(valor);
+
+    const cfCpfRow = document.getElementById("cfCpfRow");
+    const cfCpf    = document.getElementById("cfCpf");
+    if (cfCpfRow && cfCpf) {
+      if (cpfRaw) {
+        cfCpf.textContent = fmtCPF(cpfRaw);
+        cfCpfRow.style.display = "";
+      } else {
+        cfCpfRow.style.display = "none";
+      }
+    }
 
     const fpEl = document.getElementById("cfFp");
     fpEl.className = "confirm-row-val fp-chip " + (fp || "");
@@ -50,13 +81,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Escape") document.getElementById("confirmLancarCancelBtn").click();
   });
 
-  // Rebind FP cards para Layout 2
+  // Rebind FP cards para Layout 2 — mostra/oculta CPF conforme FP
   document.getElementById("fpGrid").querySelectorAll(".fp-card").forEach(btn => {
     btn.addEventListener("click", () => {
       state.fpSelecionado = btn.dataset.fp;
       document.getElementById("fpGrid").querySelectorAll(".fp-card")
         .forEach(b => b.classList.toggle("selected", b.dataset.fp === btn.dataset.fp));
-      validarFormulario();
+      toggleCpfField(btn.dataset.fp);
     });
   });
 

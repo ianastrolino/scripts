@@ -181,11 +181,34 @@ function validarPlaca(placa) {
   return PLACA_RE.test(placa.toUpperCase().replace(/[-\s]/g, ""));
 }
 
+function mascaraCPF(v) {
+  v = v.replace(/\D/g, "").slice(0, 11);
+  if (v.length > 9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4");
+  if (v.length > 6) return v.replace(/(\d{3})(\d{3})(\d{1,3})/, "$1.$2.$3");
+  if (v.length > 3) return v.replace(/(\d{3})(\d{1,3})/, "$1.$2");
+  return v;
+}
+
+function validarCPF(cpf) {
+  const d = cpf.replace(/\D/g, "");
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  let s = 0;
+  for (let i = 0; i < 9; i++) s += +d[i] * (10 - i);
+  let r = (s * 10) % 11; if (r >= 10) r = 0;
+  if (r !== +d[9]) return false;
+  s = 0;
+  for (let i = 0; i < 10; i++) s += +d[i] * (11 - i);
+  r = (s * 10) % 11; if (r >= 10) r = 0;
+  return r === +d[10];
+}
+
 function validarFormulario() {
   const placa   = document.getElementById("fPlaca").value.trim();
   const cliente = document.getElementById("fCliente").value.trim();
   const servico = document.getElementById("fServico").value;
   const valor   = parseFloat(document.getElementById("fValor").value);
+  const cpfEl   = document.getElementById("fCpf");
+  const cpfErrEl = document.getElementById("cpfError");
 
   const placaOk = !placa || validarPlaca(placa);
   const errEl   = document.getElementById("placaError");
@@ -196,7 +219,20 @@ function validarFormulario() {
     document.getElementById("fPlaca").style.borderColor = showErr ? "var(--red)" : "";
   }
 
-  const ok = placa && placaOk && cliente && servico && valor > 0 && state.fpSelecionado;
+  let cpfOk = true;
+  if (cpfEl && cpfEl.closest("[style*='display:none']") === null) {
+    const cpfVal = cpfEl.value.trim();
+    if (cpfVal && !validarCPF(cpfVal)) {
+      cpfOk = false;
+      if (cpfErrEl) { cpfErrEl.textContent = "CPF inválido."; cpfErrEl.style.display = "block"; }
+      cpfEl.style.borderColor = "var(--red)";
+    } else {
+      if (cpfErrEl) { cpfErrEl.textContent = ""; cpfErrEl.style.display = "none"; }
+      if (cpfEl) cpfEl.style.borderColor = "";
+    }
+  }
+
+  const ok = placa && placaOk && cliente && servico && valor > 0 && state.fpSelecionado && cpfOk;
   document.getElementById("btnLancar").disabled = !ok;
 }
 
@@ -205,6 +241,10 @@ function limparFormulario() {
   document.getElementById("fCliente").value = "";
   document.getElementById("fServico").value = "";
   document.getElementById("fValor").value   = "";
+  const cpfEl = document.getElementById("fCpf");
+  if (cpfEl) { cpfEl.value = ""; cpfEl.style.borderColor = ""; }
+  const cpfErr = document.getElementById("cpfError");
+  if (cpfErr) { cpfErr.textContent = ""; cpfErr.style.display = "none"; }
   state.fpSelecionado = "";
   // Suporta layout 1 (.fp-btn) e layout 2 (.fp-card)
   document.querySelectorAll(".fp-btn, .fp-card").forEach(b => b.classList.remove("selected"));
@@ -227,7 +267,8 @@ async function lancar() {
 
   const payload = {
     placa:   document.getElementById("fPlaca").value.trim().toUpperCase(),
-    cliente: document.getElementById("fCliente").value.trim(),
+    cliente: document.getElementById("fCliente").value.trim().toUpperCase(),
+    cpf:     (document.getElementById("fCpf")?.value || "").replace(/\D/g, ""),
     servico: document.getElementById("fServico").value,
     valor:   parseFloat(document.getElementById("fValor").value),
     fp:      state.fpSelecionado,
@@ -435,9 +476,28 @@ document.addEventListener("DOMContentLoaded", () => {
   init();
 
   // Campos de texto: validar ao digitar
-  ["fPlaca", "fCliente", "fServico", "fValor"].forEach(id => {
-    document.getElementById(id).addEventListener("input", validarFormulario);
+  ["fPlaca", "fCliente", "fServico", "fValor", "fCpf"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", validarFormulario);
   });
+
+  // Cliente: força maiúsculo
+  document.getElementById("fCliente").addEventListener("input", function () {
+    const pos = this.selectionStart;
+    this.value = this.value.toUpperCase();
+    this.setSelectionRange(pos, pos);
+  });
+
+  // CPF: máscara e validação
+  const cpfInput = document.getElementById("fCpf");
+  if (cpfInput) {
+    cpfInput.addEventListener("input", function () {
+      const pos = this.selectionStart;
+      const masked = mascaraCPF(this.value);
+      this.value = masked;
+      this.setSelectionRange(Math.min(pos, masked.length), Math.min(pos, masked.length));
+    });
+  }
 
   // Placa: apenas A-Z 0-9, maiúsculo, máx 7 chars — cobre digitação e paste
   document.getElementById("fPlaca").addEventListener("input", function () {
@@ -481,8 +541,19 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Enter") { e.preventDefault(); document.getElementById("fCliente").focus(); }
   });
   document.getElementById("fCliente").addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); document.getElementById("fServico").focus(); }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const cpfWrap = document.getElementById("fCpfWrap");
+      if (cpfWrap && cpfWrap.style.display !== "none") document.getElementById("fCpf").focus();
+      else document.getElementById("fServico").focus();
+    }
   });
+  const cpfInputNav = document.getElementById("fCpf");
+  if (cpfInputNav) {
+    cpfInputNav.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); document.getElementById("fServico").focus(); }
+    });
+  }
   document.getElementById("fServico").addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); document.getElementById("fValor").focus(); }
   });

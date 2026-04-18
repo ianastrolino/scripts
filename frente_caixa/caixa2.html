@@ -1575,7 +1575,13 @@
 
           <div class="field">
             <label for="fCliente">Cliente</label>
-            <input id="fCliente" type="text" placeholder="Nome do cliente" autocomplete="off">
+            <input id="fCliente" type="text" placeholder="Nome do cliente" autocomplete="off" style="text-transform:uppercase">
+          </div>
+
+          <div class="field" id="fCpfWrap" style="display:none">
+            <label for="fCpf">CPF <span style="font-weight:400;color:var(--t5)">(opcional)</span></label>
+            <input id="fCpf" type="text" placeholder="000.000.000-00" autocomplete="off" maxlength="14" inputmode="numeric">
+            <span id="cpfError" style="display:none;font-size:11.5px;font-weight:600;color:var(--red);margin-top:3px;"></span>
           </div>
 
           <div class="field">
@@ -1801,6 +1807,10 @@
         <div class="confirm-row">
           <span class="confirm-row-label">Cliente</span>
           <span class="confirm-row-val" id="cfCliente">—</span>
+        </div>
+        <div class="confirm-row" id="cfCpfRow" style="display:none">
+          <span class="confirm-row-label">CPF</span>
+          <span class="confirm-row-val" id="cfCpf">—</span>
         </div>
         <div class="confirm-row">
           <span class="confirm-row-label">Serviço</span>

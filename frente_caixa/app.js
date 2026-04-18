@@ -133,6 +133,11 @@ function parseMoney(value) {
   return Number(cleaned);
 }
 
+function fmtCpf(d) {
+  if (!d || d.length !== 11) return d || "";
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+}
+
 function formatMoney(value) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -302,7 +307,7 @@ function renderTable() {
       <td>${formatDateBr(record.data)}</td>
       <td>
         <strong>${record.cliente}</strong>
-        <div class="cell-muted">${record.fp === "FA" ? "Faturado" : "Particular / caixa"}</div>
+        <div class="cell-muted">${record.cpf ? fmtCpf(record.cpf) : record.fp === "FA" ? "Faturado" : "Particular / caixa"}</div>
       </td>
       <td>
         <strong>${record.tipoServico}</strong>

@@ -134,6 +134,7 @@ class NormalizedRecord:
     linha_origem: int
     chave_deduplicacao: str
     av_pagamento: str = ""  # preenchido pela frente de caixa para registros AV (dinheiro/debito/credito/pix)
+    cpf: str = ""           # CPF do cliente B2C (opcional, usado para criar/localizar contato no Tiny)
 
 
 class HtmlTableParser(HTMLParser):
@@ -839,16 +840,28 @@ class TinyImporter:
         self.payment_cache: dict[str, int] = {}
         self._lock = threading.Lock()
 
-    def resolve_contact(self, name: str) -> int:
-        key = normalize_key(name)
+    def resolve_contact(self, name: str, cpf: str = "") -> int:
+        cpf_digits = "".join(c for c in (cpf or "") if c.isdigit())
+        # Cache key inclui CPF para que mesmo nome com CPF diferente gere contato diferente
+        key = normalize_key(name) + (f"|{cpf_digits}" if cpf_digits else "")
         with self._lock:
             if key in self.contact_cache:
                 return self.contact_cache[key]
-    
+
             mapped = lookup_config_id(self.config.get("cliente_ids", {}), name)
             if mapped:
                 self.contact_cache[key] = mapped
                 return mapped
+
+        # Se CPF fornecido, busca por cpf_cnpj primeiro (mais preciso)
+        if cpf_digits:
+            result = self.client.request("GET", "contatos", params={"cpf_cnpj": cpf_digits, "limit": 10})
+            items = result.get("itens", [])
+            if items:
+                contact_id = int(items[0]["id"])
+                with self._lock:
+                    self.contact_cache[key] = contact_id
+                return contact_id
 
         # Busca sem filtro de situacao para nao perder contatos com status diferente de "B"
         result = self.client.request("GET", "contatos", params={"nome": name, "limit": 100})
@@ -869,16 +882,18 @@ class TinyImporter:
                 "ou habilite auto_create_contacts."
             )
 
-        created = self.client.request(
-            "POST",
-            "contatos",
-            json_body={
-                "nome": name,
-                "tipoPessoa": self.config.get("default_tipo_pessoa", "J"),
-                "situacao": "B",
-                "observacoes": "Criado pela importacao automatica da planilha diaria.",
-            },
-        )
+        body: dict = {
+            "nome": name,
+            "situacao": "B",
+            "observacoes": "Criado pela importacao automatica da planilha diaria.",
+        }
+        if cpf_digits:
+            body["cpf_cnpj"] = cpf_digits
+            body["tipoPessoa"] = "F"
+        else:
+            body["tipoPessoa"] = self.config.get("default_tipo_pessoa", "J")
+
+        created = self.client.request("POST", "contatos", json_body=body)
         contact_id = int(created["id"])
         with self._lock:
             self.contact_cache[key] = contact_id
@@ -907,7 +922,7 @@ class TinyImporter:
         return None
 
     def build_accounts_receivable_payload(self, record: NormalizedRecord) -> dict[str, Any]:
-        client_id = self.resolve_contact(record.cliente)
+        client_id = self.resolve_contact(record.cliente, cpf=record.cpf)
         # AV: usa a forma real de pagamento definida na frente de caixa (dinheiro/debito/credito/pix)
         # FA: usa o codigo FP do registro (ex: "FA" → "A faturar")
         av = is_av_paid(record.av_pagamento)

@@ -600,6 +600,7 @@ def api_preview(unit: str):
                 origem_arquivo=r.get("origemArquivo", "manual_ui"),
                 linha_origem=r.get("linhaOrigem", 0),
                 chave_deduplicacao=chave, av_pagamento=av_pag,
+                cpf=r.get("cpf", ""),
             )
 
             pay_key = av_pag if av else fp
@@ -683,6 +684,7 @@ def api_send(unit: str):
                 linha_origem=r.get("linhaOrigem", 0),
                 chave_deduplicacao=r.get("id", "missing_key"),
                 av_pagamento=r.get("avPagamento", ""),
+                cpf=r.get("cpf", ""),
             )
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
@@ -1162,7 +1164,8 @@ def api_caixa_lancar(unit: str):
     try:
         data    = request.get_json(force=True, silent=True) or {}
         placa   = clean_text(data.get("placa", "")).upper()
-        cliente = clean_text(data.get("cliente", ""))
+        cliente = clean_text(data.get("cliente", "")).upper()
+        cpf     = "".join(c for c in data.get("cpf", "") if c.isdigit())[:11]
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
@@ -1179,6 +1182,7 @@ def api_caixa_lancar(unit: str):
             "timestamp": now.isoformat(),
             "placa": placa,
             "cliente": cliente,
+            "cpf": cpf,
             "servico": servico,
             "valor": round(valor, 2),
             "fp": fp,
