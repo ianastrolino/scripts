@@ -27,9 +27,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("confirmLancarOkBtn").addEventListener("click", (e) => {
-    e.currentTarget.disabled = true;
+    const okBtn = e.currentTarget;
+    okBtn.disabled = true;
     document.getElementById("confirmLancarModal").classList.remove("open");
-    lancar().finally(() => { e.currentTarget.disabled = false; });
+    lancar().finally(() => { okBtn.disabled = false; });
   });
 
   document.getElementById("confirmLancarCancelBtn").addEventListener("click", () => {
