@@ -271,12 +271,12 @@ function recordIssues(record) {
   if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
-  // Cruzamento PDV: bloqueia envio ate usuario confirmar manualmente divergencias
-  if (record.fp === "AV") {
-    const conf = state.conferencia[record.id];
-    if (conf && conf.status !== "ok" && !state.conferido.has(record.id)) {
-      issues.push("conferencia PDV");
-    }
+  // Cruzamento PDV: bloqueia envio ate usuario confirmar divergencias (valor ou FP)
+  const conf = state.conferencia[record.id];
+  if (conf && !state.conferido.has(record.id)) {
+    if (conf.status === "divergencia_valor") issues.push("valor divergente do PDV");
+    if (conf.status === "divergencia_fp")    issues.push("FP divergente do PDV");
+    if (conf.status === "sem_pdv" && record.fp === "AV") issues.push("sem registro no PDV");
   }
   return issues;
 }
@@ -364,7 +364,24 @@ function renderTable() {
 }
 
 function paymentControl(record) {
-  if (record.fp !== "AV") return `<span style="color:var(--muted)">—</span>`;
+  const conf = state.conferencia[record.id];
+  const confirmed = state.conferido.has(record.id);
+  const fp_label = { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" };
+  const fmt = v => v != null ? "R$\u00a0" + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+
+  // FA: normalmente sem controle, mas mostra badge se FP divergente
+  if (record.fp !== "AV") {
+    if (conf && conf.status === "divergencia_fp") {
+      const pdvLabel = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora || ""}`;
+      const confirmBtn = confirmed
+        ? `<span class="pdv-confirmed">confirmado</span>`
+        : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
+      return `<div class="pdv-badge pdv-warn">&#x26A0;&#xFE0F; PDV: ${pdvLabel} (planilha: FA) ${confirmBtn}</div>`;
+    }
+    return `<span style="color:var(--muted)">—</span>`;
+  }
+
+  // AV: select de forma de pagamento + badge de conferência
   const options = [
     ["pendente", "A definir"],
     ["dinheiro", "Dinheiro"],
@@ -377,27 +394,23 @@ function paymentControl(record) {
       ${options.map(([value, label]) => `<option value="${value}" ${record.avPagamento === value ? "selected" : ""}>${label}</option>`).join("")}
     </select>
   `;
-  const conf = state.conferencia[record.id];
   if (!conf) return select;
-
-  const fmt = v => v != null ? "R$\u00a0" + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-  const fp_label = { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" };
 
   if (conf.status === "ok") {
     const label = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora}`;
     return select + `<div class="pdv-badge pdv-ok">&#x2705; PDV: ${label}</div>`;
   }
-  const confirmed = state.conferido.has(record.id);
-  if (conf.status === "divergencia_valor") {
-    const confirmBtn = confirmed
-      ? `<span class="pdv-confirmed">confirmado</span>`
-      : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
-    return select + `<div class="pdv-badge pdv-warn">&#x26A0;&#xFE0F; PDV: ${fmt(conf.pdv_valor)} (${fp_label[conf.pdv_fp] || conf.pdv_fp}) · planilha: ${fmt(record.preco)} ${confirmBtn}</div>`;
-  }
-  // sem_pdv
   const confirmBtn = confirmed
     ? `<span class="pdv-confirmed">confirmado</span>`
     : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
+  if (conf.status === "divergencia_fp") {
+    const pdvLabel = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora || ""}`;
+    return select + `<div class="pdv-badge pdv-warn">&#x26A0;&#xFE0F; PDV: ${pdvLabel} (planilha: AV) ${confirmBtn}</div>`;
+  }
+  if (conf.status === "divergencia_valor") {
+    return select + `<div class="pdv-badge pdv-warn">&#x26A0;&#xFE0F; PDV: ${fmt(conf.pdv_valor)} (${fp_label[conf.pdv_fp] || conf.pdv_fp}) · planilha: ${fmt(record.preco)} ${confirmBtn}</div>`;
+  }
+  // sem_pdv
   return select + `<div class="pdv-badge pdv-err">&#x274C; Sem registro no PDV ${confirmBtn}</div>`;
 }
 
@@ -463,11 +476,15 @@ function renderSummary() {
 
 function renderIssues() {
   const issues = [];
-  const faMissing = state.records.filter((record) => record.fp === "FA" && !record.tinyClienteId);
-  const avPending = state.records.filter((record) => record.fp === "AV" && record.avPagamento === "pendente");
-  const pdvDiverg = state.records.filter((r) => {
+  const faMissing = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId);
+  const avPending = state.records.filter((r) => r.fp === "AV" && r.avPagamento === "pendente");
+  const pdvDivergFP = state.records.filter((r) => {
     const conf = state.conferencia[r.id];
-    return r.fp === "AV" && conf && conf.status === "divergencia_valor" && !state.conferido.has(r.id);
+    return conf && conf.status === "divergencia_fp" && !state.conferido.has(r.id);
+  });
+  const pdvDivergVal = state.records.filter((r) => {
+    const conf = state.conferencia[r.id];
+    return conf && conf.status === "divergencia_valor" && !state.conferido.has(r.id);
   });
   const pdvMissing = state.records.filter((r) => {
     const conf = state.conferencia[r.id];
@@ -475,24 +492,49 @@ function renderIssues() {
   });
   if (faMissing.length) issues.push(`${faMissing.length} cliente(s) FA sem vinculo Tiny.`);
   if (avPending.length) issues.push(`${avPending.length} item(ns) AV sem forma de pagamento.`);
-  if (pdvDiverg.length) issues.push(`${pdvDiverg.length} item(ns) AV com valor divergente do PDV.`);
+  if (pdvDivergFP.length) issues.push(`${pdvDivergFP.length} item(ns) com FP divergente — confirmar ou corrigir.`);
+  if (pdvDivergVal.length) issues.push(`${pdvDivergVal.length} item(ns) com valor divergente do PDV.`);
   if (pdvMissing.length) issues.push(`${pdvMissing.length} item(ns) AV sem registro no PDV de hoje.`);
   if (!state.records.length) issues.push("Nenhuma planilha carregada.");
   if (!issues.length) issues.push("Lote pronto para conferencia final.");
   els.issuesList.innerHTML = issues.map((issue) => `<li>${issue}</li>`).join("");
+
+  // Painel de correções para o administrativo
+  renderFpCorrections(pdvDivergFP);
+}
+
+function renderFpCorrections(divergentes) {
+  const panel = document.getElementById("fpCorrectionsPanel");
+  if (!panel) return;
+  if (!divergentes.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const fp_label = { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" };
+  const rows = divergentes.map((r) => {
+    const conf = state.conferencia[r.id];
+    const pdvFp = fp_label[conf.pdv_fp] || conf.pdv_fp || "—";
+    const pdvFpCat = conf.pdv_fp === "faturado" ? "FA" : "AV";
+    return `<tr>
+      <td>${r.placa}</td>
+      <td>${r.cliente}</td>
+      <td>${r.servico}</td>
+      <td><span class="corr-tag">${r.fp}</span> → <span class="corr-tag corr-pdv">${pdvFpCat} (${pdvFp})</span></td>
+      <td style="color:var(--t4);font-size:12px">${conf.pdv_hora || "—"}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("fpCorrBody").innerHTML = rows;
 }
 
 async function conferirComPDV() {
   if (!apiBase) return;
   const temPlanilha = state.records.some((r) => !r.pdvExtra);
-  const avRecords = state.records
-    .filter((r) => r.fp === "AV" && !r.pdvExtra)
+  const planilhaRecords = state.records
+    .filter((r) => !r.pdvExtra)
     .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp }));
   try {
     const result = await apiFetch(`${apiBase}/api/caixa/conferir`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ records: avRecords }),
+      body: JSON.stringify({ records: planilhaRecords }),
     });
     if (!result.success) return;
     state.conferencia = result.conferencia;

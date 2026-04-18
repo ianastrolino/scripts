@@ -595,6 +595,13 @@
     .badge-pdv-ok   { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:#ecfdf5; color:#065f46; border:1px solid var(--din-bd); }
     .badge-pdv-warn { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:var(--fat-bg); color:#92400e; border:1px solid var(--fat-bd); }
     .badge-pdv-err  { display:inline-block; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; background:var(--red-lt); color:#991b1b; border:1px solid #fca5a5; }
+
+    /* Tabela de correções PDV */
+    .corr-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .corr-table th { text-align:left; padding:5px 8px; background:var(--sf3); color:var(--t4); font-weight:600; border-bottom:1px solid var(--border); }
+    .corr-table td { padding:6px 8px; border-bottom:1px solid var(--border2); }
+    .corr-tag { display:inline-block; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:700; background:var(--sf3); color:var(--t3); border:1px solid var(--border); }
+    .corr-tag.corr-pdv { background:var(--fat-bg); color:#92400e; border-color:var(--fat-bd); }
   </style>
 </head>
 <body>
@@ -856,6 +863,25 @@
           </div>
           <div class="action-card-body" style="padding-bottom:14px;">
             <ul class="issues-list" id="issuesList"></ul>
+          </div>
+        </div>
+
+        <!-- Correções PDV -->
+        <div class="action-card" id="fpCorrectionsPanel" hidden>
+          <div class="action-card-header" style="background:#fffbeb;border-bottom:1px solid #fcd34d;">
+            <h3 style="color:#92400e;">&#x26A0;&#xFE0F; Correções solicitadas pelo PDV</h3>
+          </div>
+          <div class="action-card-body" style="padding-bottom:14px;">
+            <p style="font-size:12px;color:var(--t4);margin-bottom:10px;">
+              Os itens abaixo tiveram a forma de pagamento registrada no PDV diferente da planilha.<br>
+              Envie ao administrativo para correção no sistema de origem.
+            </p>
+            <table class="corr-table">
+              <thead>
+                <tr><th>Placa</th><th>Cliente</th><th>Serviço</th><th>Planilha → PDV</th><th>Hora</th></tr>
+              </thead>
+              <tbody id="fpCorrBody"></tbody>
+            </table>
           </div>
         </div>
 

@@ -1294,13 +1294,11 @@ def api_caixa_conferir(unit: str):
             key = (_norm_placa(lc.get("placa", "")), _norm_servico(lc.get("servico", "")))
             pdv_map[key] = lc
 
-        # Chaves da planilha AV (para detectar PDV sem planilha)
+        # Chaves da planilha (AV e FA) para detectar PDV sem planilha
         planilha_keys: set[tuple] = set()
         conferencia: dict[str, dict] = {}
         for r in records:
-            if r.get("fp") != "AV":
-                continue  # apenas AV precisa de cruzamento com PDV
-
+            planilha_fp = r.get("fp", "AV")   # "AV" ou "FA"
             rec_id  = r.get("id", "")
             placa   = _norm_placa(r.get("placa", ""))
             servico = _norm_servico(r.get("servico", ""))
@@ -1318,16 +1316,26 @@ def api_caixa_conferir(unit: str):
             else:
                 lc        = pdv_map[key]
                 pdv_valor = float(lc.get("valor", 0))
-                status    = "ok" if abs(pdv_valor - preco) < 0.01 else "divergencia_valor"
+                pdv_fp    = lc.get("fp", "")
+                # Categoriza FP do PDV em AV ou FA (faturado → FA, resto → AV)
+                pdv_fp_cat = "FA" if pdv_fp == "faturado" else "AV"
+
+                if pdv_fp_cat != planilha_fp:
+                    status = "divergencia_fp"
+                elif abs(pdv_valor - preco) >= 0.01:
+                    status = "divergencia_valor"
+                else:
+                    status = "ok"
+
                 conferencia[rec_id] = {
                     "status": status,
                     "pdv_valor": pdv_valor,
-                    "pdv_fp": lc.get("fp"),
+                    "pdv_fp": pdv_fp,
                     "pdv_hora": lc.get("hora"),
                 }
 
-        # Lançamentos do PDV que nao aparecem em nenhum registro AV da planilha
-        # (servicos que nunca vem na planilha: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
+        # Lançamentos do PDV sem nenhum correspondente na planilha (AV ou FA)
+        # — serviços avulsos: PESQUISA AVULSA, BAIXA PERMANENTE, faturados sem planilha etc.
         pdv_sem_planilha = []
         for (placa_key, servico_key), lc in pdv_map.items():
             if (placa_key, servico_key) not in planilha_keys:
