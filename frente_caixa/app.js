@@ -452,7 +452,7 @@ function renderSummary() {
   els.grossTotal.textContent = formatMoney(total);
   els.netTotal.textContent = formatMoney(netTotal);
   els.cashDiff.textContent = formatMoney(cashInputs - totalAv);
-  els.closingStatus.textContent = Math.abs(cashInputs - totalAv) < 0.01 ? "Conferido" : "Conferir";
+  els.closingStatus.textContent = pending > 0 ? "Pendente" : Math.abs(cashInputs - totalAv) < 0.01 ? "Conferido" : "Conferir";
 
   els.avDinheiro.textContent = formatMoney(sum(avRecords.filter((record) => record.avPagamento === "dinheiro")));
   els.avDebito.textContent = formatMoney(sum(avRecords.filter((record) => record.avPagamento === "debito")));

@@ -1089,7 +1089,7 @@
       if (closingEl) {
         const obs = new MutationObserver(() => {
           const txt = closingEl.textContent.trim();
-          closingEl.className = 'hero-status-badge' + (txt === 'Conferido' ? ' ok' : txt !== 'Conferir' ? ' err' : '');
+          closingEl.className = 'hero-status-badge' + (txt === 'Conferido' ? ' ok' : txt === 'Pendente' ? ' err' : '');
         });
         obs.observe(closingEl, { childList: true, characterData: true, subtree: true });
       }
