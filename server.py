@@ -501,9 +501,20 @@ def api_auth_callback(unit: str):
     redirect_uri = f"https://{request.host}/u/{unit}/callback"
 
     try:
-        # Troca o code pelos tokens e salva no tiny_tokens.json (no Volume /data)
-        importer.client.exchange_authorization_code(code, redirect_uri)
-        return f"<h1>Autenticacao concluida!</h1><p>Unidade {unit} autorizada com sucesso. Pode fechar esta aba e voltar ao app.</p>"
+        tokens = importer.client.exchange_authorization_code(code, redirect_uri)
+        rt = tokens.get("refresh_token", "")
+        rt_block = (
+            f"<p><strong>Cole este refresh_token no UNITS_CONFIG do Railway</strong> "
+            f"(campo <code>\"refresh_token\"</code> da unidade <code>{unit}</code>):</p>"
+            f"<textarea rows='3' style='width:100%;font-family:monospace;font-size:13px'>{rt}</textarea>"
+            f"<p style='color:#666;font-size:13px'>Sem um Volume Railway em /data, o token nao sobrevive ao restart. "
+            f"Salvar o refresh_token no UNITS_CONFIG resolve definitivamente.</p>"
+        ) if rt else ""
+        return (
+            f"<h1>Autenticacao concluida!</h1>"
+            f"<p>Unidade <strong>{unit}</strong> autorizada. Pode voltar ao app.</p>"
+            f"{rt_block}"
+        )
     except Exception as exc:
         app.logger.exception("[server] oauth callback unit=%s", unit)
         return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
