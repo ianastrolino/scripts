@@ -224,6 +224,19 @@
     .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border-color: var(--fat-bd); }
     .fp-chip.detran   { background: var(--det-bg); color: var(--det); border-color: var(--det-bd); }
 
+    /* ── Tabela de divergências ──────────────────────────── */
+    .div-table-wrap { background: var(--card); border: 1px solid rgba(248,113,113,.2); border-radius: var(--rl); overflow: hidden; }
+    .div-table { width: 100%; border-collapse: collapse; }
+    .div-table th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); padding: 10px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+    .div-table td { padding: 9px 16px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12.5px; }
+    .div-table tr:last-child td { border-bottom: none; }
+    .motivo-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .motivo-badge.sem_pdv           { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .motivo-badge.divergencia_valor { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+    .motivo-badge.divergencia_fp    { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
+    .div-section-title { display: flex; align-items: center; gap: 8px; }
+    .div-count-badge { background: rgba(248,113,113,.15); color: #f87171; border: 1px solid rgba(248,113,113,.3); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 700; }
+
     /* ── Estados ─────────────────────────────────────────── */
     .g-loading { text-align: center; padding: 60px 20px; color: var(--t3); font-size: 14px; }
     .g-error   { text-align: center; padding: 40px 20px; color: #f87171; font-size: 13px; }
@@ -320,6 +333,23 @@
   <div class="g-section">
     <div class="g-section-title">Lançamentos por dia</div>
     <div id="historicoList"><div class="g-loading">Carregando…</div></div>
+  </div>
+
+  <!-- Divergências -->
+  <div class="g-section" id="secaoDivergencias">
+    <div class="g-section-title div-section-title">
+      Divergências de fechamento
+      <span class="div-count-badge" id="divCount" style="display:none"></span>
+    </div>
+    <div class="div-table-wrap">
+      <table class="div-table">
+        <thead><tr>
+          <th>Data</th><th>Placa</th><th>Cliente</th><th>Serviço</th>
+          <th>Valor</th><th>FP usado</th><th>Motivo</th><th>Arquivo</th>
+        </tr></thead>
+        <tbody id="divBody"><tr><td colspan="8" class="g-loading">Carregando…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
 </main>
@@ -553,6 +583,47 @@
   }
 
   carregar();
+
+  async function carregarDivergencias() {
+    const { from, to } = getRange();
+    document.getElementById("divBody").innerHTML =
+      '<tr><td colspan="8" class="g-loading">Carregando…</td></tr>';
+    try {
+      const res  = await fetch(`${apiBase}/api/gerencial/divergencias?from=${from}&to=${to}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      renderDivergencias(data.divergencias);
+    } catch (e) {
+      document.getElementById("divBody").innerHTML =
+        `<tr><td colspan="8" class="g-error">${e.message}</td></tr>`;
+    }
+  }
+
+  function renderDivergencias(divs) {
+    const badge = document.getElementById("divCount");
+    if (!divs.length) {
+      badge.style.display = "none";
+      document.getElementById("divBody").innerHTML =
+        '<tr><td colspan="8" class="g-empty">Nenhuma divergência no período.</td></tr>';
+      return;
+    }
+    badge.textContent = divs.length;
+    badge.style.display = "";
+    const motivoLabel = { sem_pdv: "Sem registro no PDV", divergencia_valor: "Valor divergente", divergencia_fp: "FP divergente" };
+    document.getElementById("divBody").innerHTML = divs.slice().reverse().map(d => `<tr>
+      <td>${fmtDate(d.data)}</td>
+      <td><strong>${escHtml(d.placa)}</strong></td>
+      <td>${escHtml(d.cliente)}</td>
+      <td>${escHtml(d.servico)}</td>
+      <td>${brl(d.valor)}</td>
+      <td>${d.fp ? `<span class="fp-chip ${d.fp}">${fpLabel(d.fp)}</span>` : "—"}</td>
+      <td><span class="motivo-badge ${d.motivo}">${motivoLabel[d.motivo] || d.motivo}</span></td>
+      <td style="color:var(--t3);font-size:11px">${escHtml(d.arquivo || "—")}</td>
+    </tr>`).join("");
+  }
+
+  document.getElementById("btnAplicar").addEventListener("click", carregarDivergencias, { capture: false });
+  carregarDivergencias();
 </script>
 </body>
 </html>

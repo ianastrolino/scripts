@@ -67,7 +67,9 @@ from typing import Any
 from flask import Flask, Response, redirect, request, send_from_directory, session, url_for
 
 from caixa_helpers import FP_VALIDOS, calcular_totais, validar_lancamento
-from caixa_db import migrate_from_json as _db_migrate, load_lancamentos as _db_load, _connect as _db_connect, load_lancamentos_range as _db_load_range
+from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_load,
+                       _connect as _db_connect, load_lancamentos_range as _db_load_range,
+                       insert_divergencia as _db_insert_div, load_divergencias_range as _db_load_div)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -1557,6 +1559,59 @@ def api_gerencial_exportar(unit: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Rotas: divergências de fechamento
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/api/divergencias/registrar", methods=["POST"])
+@unit_access_required
+def api_divergencias_registrar(unit: str):
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        now  = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
+        div  = {
+            "id":        secrets.token_hex(8),
+            "unit":      unit,
+            "data":      now.date().isoformat(),
+            "timestamp": now.isoformat(),
+            "placa":     clean_text(data.get("placa", "")).upper(),
+            "cliente":   clean_text(data.get("cliente", "")).upper(),
+            "servico":   clean_text(data.get("servico", "")).upper(),
+            "valor":     float(data.get("valor", 0)),
+            "fp":        data.get("fp", ""),
+            "motivo":    data.get("motivo", ""),
+            "pdv_valor": data.get("pdv_valor"),
+            "pdv_fp":    data.get("pdv_fp", ""),
+            "arquivo":   data.get("arquivo", ""),
+        }
+        _db_insert_div(_unit_state_dir(unit), div)
+        return _json({"success": True})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/gerencial/divergencias")
+@gerencial_required
+def api_gerencial_divergencias(unit: str):
+    try:
+        date_from = request.args.get("from", "")
+        date_to   = request.args.get("to", "")
+        dt.date.fromisoformat(date_from)
+        dt.date.fromisoformat(date_to)
+        divs = _db_load_div(unit, _unit_state_dir(unit), date_from, date_to)
+        return _json({"success": True, "divergencias": divs})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Rotas: gerencial master (visão consolidada da rede — master: true)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1706,6 +1761,37 @@ def api_master_exportar():
             mimetype="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{fname}"'},
         )
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/gerencial/api/divergencias")
+@master_only_required
+def api_master_divergencias():
+    try:
+        date_from   = request.args.get("from", "")
+        date_to     = request.args.get("to", "")
+        unit_filter = request.args.get("unit", "all")
+        dt.date.fromisoformat(date_from)
+        dt.date.fromisoformat(date_to)
+        units_to_query = list(UNITS.keys()) if unit_filter == "all" else (
+            [unit_filter] if unit_filter in UNITS else []
+        )
+        all_divs = []
+        for uid in units_to_query:
+            try:
+                divs = _db_load_div(uid, _unit_state_dir(uid), date_from, date_to)
+                for d in divs:
+                    d["unit_nome"] = UNITS[uid].get("nome", uid)
+                all_divs.extend(divs)
+            except Exception:
+                pass
+        all_divs.sort(key=lambda x: x.get("timestamp", ""))
+        return _json({"success": True, "divergencias": all_divs})
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
         if isinstance(exc, HTTPException):

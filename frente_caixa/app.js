@@ -372,6 +372,25 @@ function renderTable() {
         alert("Defina a forma de pagamento antes de confirmar.");
         return;
       }
+      // Registra divergência antes de confirmar
+      if (rec && apiBase) {
+        const conf = state.conferencia[id] || {};
+        fetch(`${apiBase}/api/divergencias/registrar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            placa:     rec.placa     || "",
+            cliente:   rec.cliente   || "",
+            servico:   rec.servico   || "",
+            valor:     rec.preco     || 0,
+            fp:        rec.avPagamento && rec.avPagamento !== "pendente" ? rec.avPagamento : (rec.fp || ""),
+            motivo:    conf.status   || "sem_pdv",
+            pdv_valor: conf.pdv_valor ?? null,
+            pdv_fp:    conf.pdv_fp   || "",
+            arquivo:   (state.sourceFiles || []).join(", "),
+          }),
+        }).catch(() => {});
+      }
       state.conferido.add(id);
       render();
     });

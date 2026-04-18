@@ -34,6 +34,25 @@ CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
 
 _MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\""
 
+_DDL_DIV = """
+CREATE TABLE IF NOT EXISTS divergencias (
+    id        TEXT PRIMARY KEY,
+    unit      TEXT NOT NULL,
+    data      TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    placa     TEXT NOT NULL,
+    cliente   TEXT NOT NULL DEFAULT "",
+    servico   TEXT NOT NULL DEFAULT "",
+    valor     REAL NOT NULL DEFAULT 0,
+    fp        TEXT NOT NULL DEFAULT "",
+    motivo    TEXT NOT NULL,
+    pdv_valor REAL,
+    pdv_fp    TEXT NOT NULL DEFAULT "",
+    arquivo   TEXT NOT NULL DEFAULT ""
+);
+CREATE INDEX IF NOT EXISTS idx_div_unit_data ON divergencias(unit, data);
+"""
+
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
@@ -46,6 +65,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
         conn.commit()
     except sqlite3.OperationalError:
         pass  # column already exists
+    conn.executescript(_DDL_DIV)
     return conn
 
 
@@ -109,6 +129,25 @@ def update_lancamento(unit_dir: Path, lancamento_id: str, fields: dict[str, Any]
     with _connect(unit_dir) as conn:
         cur = conn.execute(f"UPDATE lancamentos SET {cols} WHERE id=?", vals)
         return cur.rowcount > 0
+
+
+def insert_divergencia(unit_dir: Path, div: dict[str, Any]) -> None:
+    with _connect(unit_dir) as conn:
+        conn.execute(
+            "INSERT INTO divergencias "
+            "(id,unit,data,timestamp,placa,cliente,servico,valor,fp,motivo,pdv_valor,pdv_fp,arquivo) "
+            "VALUES (:id,:unit,:data,:timestamp,:placa,:cliente,:servico,:valor,:fp,:motivo,:pdv_valor,:pdv_fp,:arquivo)",
+            div,
+        )
+
+
+def load_divergencias_range(unit: str, unit_dir: Path, date_from: str, date_to: str) -> list[dict[str, Any]]:
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM divergencias WHERE unit=? AND data BETWEEN ? AND ? ORDER BY data, timestamp",
+            (unit, date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def load_lancamentos_range(unit: str, unit_dir: Path, date_from: str, date_to: str) -> list[dict[str, Any]]:
