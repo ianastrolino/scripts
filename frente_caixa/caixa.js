@@ -525,10 +525,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const cpfInput = document.getElementById("fCpf");
   if (cpfInput) {
     cpfInput.addEventListener("input", function () {
-      const pos = this.selectionStart;
+      const digitsBeforeCursor = this.value.slice(0, this.selectionStart).replace(/\D/g, "").length;
       const masked = mascaraCpfCnpj(this.value);
       this.value = masked;
-      this.setSelectionRange(Math.min(pos, masked.length), Math.min(pos, masked.length));
+      let digits = 0, pos = 0;
+      for (; pos < masked.length; pos++) {
+        if (/\d/.test(masked[pos])) digits++;
+        if (digits === digitsBeforeCursor) { pos++; break; }
+      }
+      this.setSelectionRange(pos, pos);
     });
   }
 
