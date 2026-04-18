@@ -1337,7 +1337,7 @@ def api_caixa_conferir(unit: str):
                 pdv_valor = float(lc.get("valor", 0))
                 pdv_fp    = lc.get("fp", "")
                 # Categoriza FP do PDV em AV ou FA (faturado → FA, resto → AV)
-                pdv_fp_cat = "FA" if pdv_fp == "faturado" else "AV"
+                pdv_fp_cat = "FA" if pdv_fp in ("faturado", "detran") else "AV"
 
                 if pdv_fp_cat != planilha_fp:
                     status = "divergencia_fp"

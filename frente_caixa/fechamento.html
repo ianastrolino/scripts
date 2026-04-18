@@ -270,8 +270,9 @@
       color: #fff; letter-spacing: -.03em;
       font-variant-numeric: tabular-nums;
     }
-    .hero-s-value.av  { color: #6ee7b7; }
-    .hero-s-value.fa  { color: #fcd34d; }
+    .hero-s-value.av     { color: #6ee7b7; }
+    .hero-s-value.fa     { color: #fcd34d; }
+    .hero-s-value.detran { color: #a5b4fc; }
     .hero-s-sub {
       font-size: 11px; color: rgba(255,255,255,.3);
       font-weight: 500; letter-spacing: -.01em;
@@ -411,6 +412,7 @@
     .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border: 1px solid var(--crd-bd); }
     .fp-chip.pix      { background: var(--pix-bg); color: var(--pix); border: 1px solid var(--pix-bd); }
     .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border: 1px solid var(--fat-bd); }
+    .fp-chip.detran   { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; }
 
     /* Status badges (tinyControl) */
     .status { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
@@ -742,6 +744,12 @@
       </div>
       <div class="hero-divider"></div>
       <div class="hero-section">
+        <div class="hero-s-label">DETRAN</div>
+        <div class="hero-s-value detran" id="totalDetran">R$ 0,00</div>
+        <div class="hero-s-sub">Vencimento: <span id="detranDueDate">--/--/----</span></div>
+      </div>
+      <div class="hero-divider"></div>
+      <div class="hero-section">
         <div class="hero-s-label">Dif. entradas</div>
         <div class="hero-s-value" id="cashDiff">R$ 0,00</div>
         <div class="hero-s-sub">Entradas vs. planilha AV</div>
@@ -789,6 +797,7 @@
           <div class="filters" role="group">
             <button class="filter active" data-filter="todos" type="button">Todos</button>
             <button class="filter" data-filter="FA" type="button">FA</button>
+            <button class="filter" data-filter="detran" type="button">DETRAN</button>
             <button class="filter" data-filter="AV" type="button">AV</button>
             <button class="filter" data-filter="pendencias" type="button">Pendências</button>
           </div>
@@ -887,6 +896,22 @@
               <div class="fa-line"><span>Total FA</span><strong id="faTotalPanel">R$ 0,00</strong></div>
               <div class="fa-line"><span>Clientes pendentes</span><strong id="missingClientsPanel">0</strong></div>
               <div class="fa-line"><span>Status</span><strong id="tinyReady">Pendente</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DETRAN -->
+        <div class="action-card" id="detranCard" style="display:none">
+          <div class="action-card-header">
+            <h3>DETRAN</h3>
+            <span class="panel-tag tag-tiny">Tiny</span>
+          </div>
+          <div class="action-card-body" style="padding-top:10px;padding-bottom:10px;">
+            <div class="fa-lines">
+              <div class="fa-line"><span>Lançamentos</span><strong id="detranCountPanel">0</strong></div>
+              <div class="fa-line"><span>Total DETRAN</span><strong id="detranTotalPanel">R$ 0,00</strong></div>
+              <div class="fa-line"><span>Clientes pendentes</span><strong id="detranMissingPanel">0</strong></div>
+              <div class="fa-line"><span>Status</span><strong id="detranReady">Pendente</strong></div>
             </div>
           </div>
         </div>

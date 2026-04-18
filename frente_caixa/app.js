@@ -77,6 +77,8 @@ const els = {
   sourceFile: document.querySelector("#sourceFile"),
   totalSheet: document.querySelector("#totalSheet"),
   totalFa: document.querySelector("#totalFa"),
+  totalDetran: document.querySelector("#totalDetran"),
+  detranDueDate: document.querySelector("#detranDueDate"),
   totalAv: document.querySelector("#totalAv"),
   pendingCount: document.querySelector("#pendingCount"),
   cashInputTotal: document.querySelector("#cashInputTotal"),
@@ -91,6 +93,11 @@ const els = {
   faDueDate: document.querySelector("#faDueDate"),
   missingClientsPanel: document.querySelector("#missingClientsPanel"),
   tinyReady: document.querySelector("#tinyReady"),
+  detranCountPanel: document.querySelector("#detranCountPanel"),
+  detranTotalPanel: document.querySelector("#detranTotalPanel"),
+  detranMissingPanel: document.querySelector("#detranMissingPanel"),
+  detranReady: document.querySelector("#detranReady"),
+  detranCard: document.querySelector("#detranCard"),
   grossTotal: document.querySelector("#grossTotal"),
   returnAmount: document.querySelector("#returnAmount"),
   netTotal: document.querySelector("#netTotal"),
@@ -132,6 +139,8 @@ function parseMoney(value) {
   }
   return Number(cleaned);
 }
+
+function isFaturadoFP(fp) { return fp === "FA" || fp === "detran"; }
 
 function fmtCpf(d) {
   if (!d || d.length !== 11) return d || "";
@@ -265,6 +274,7 @@ function parseExportedHtml(text, sourceFile) {
 
 function recordsForFilter() {
   if (state.filter === "FA") return state.records.filter((record) => record.fp === "FA");
+  if (state.filter === "detran") return state.records.filter((record) => record.fp === "detran");
   if (state.filter === "AV") return state.records.filter((record) => record.fp === "AV");
   if (state.filter === "pendencias") return state.records.filter((record) => recordIssues(record).length > 0);
   return state.records;
@@ -273,7 +283,7 @@ function recordsForFilter() {
 function recordIssues(record) {
   const issues = [];
   // "sem-vinculo" = usuario confirmou que cliente nao existe no Tiny → nao pode enviar
-  if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
+  if (isFaturadoFP(record.fp) && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
   // Cruzamento PDV: bloqueia envio ate usuario confirmar divergencias (valor ou FP)
@@ -307,7 +317,7 @@ function renderTable() {
       <td>${formatDateBr(record.data)}</td>
       <td>
         <strong>${record.cliente}</strong>
-        <div class="cell-muted">${record.cpf ? fmtCpf(record.cpf) : record.fp === "FA" ? "Faturado" : "Particular / caixa"}</div>
+        <div class="cell-muted">${record.cpf ? fmtCpf(record.cpf) : record.fp === "FA" ? "Faturado" : record.fp === "detran" ? "Taxa DETRAN" : "Particular / caixa"}</div>
       </td>
       <td>
         <strong>${record.tipoServico}</strong>
@@ -315,7 +325,7 @@ function renderTable() {
       </td>
       <td><span class="placa-tag">${record.placa}</span></td>
       <td>${record.servico}</td>
-      <td><span class="fp-chip ${record.fp === "FA" ? "fa" : "av"}">${record.fp}</span></td>
+      <td><span class="fp-chip ${record.fp === "FA" ? "fa" : record.fp === "detran" ? "detran" : "av"}">${record.fp === "detran" ? "DETRAN" : record.fp}</span></td>
       <td>${paymentControl(record)}</td>
       <td class="amount">${formatMoney(record.preco)}</td>
       <td>${tinyControl(record, issues)}</td>
@@ -342,7 +352,7 @@ function renderTable() {
           record.cliente,
           ...new Set(
             state.records
-              .filter((r) => r.fp === "FA" && !r.tinyClienteId && r.cliente !== record.cliente)
+              .filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId && r.cliente !== record.cliente)
               .map((r) => r.cliente)
           ),
         ];
@@ -420,7 +430,7 @@ function paymentControl(record) {
 }
 
 function tinyControl(record, issues) {
-  if (record.fp === "FA") {
+  if (isFaturadoFP(record.fp)) {
     if (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo") {
       const label = record.tinyClienteId === "sem-vinculo" ? "Nao encontrado" : "Mapear cliente";
       return `<button class="client-select" type="button" data-map-client="${record.id}">${label}</button>`;
@@ -436,10 +446,13 @@ function tinyControl(record, issues) {
 function renderSummary() {
   const total = sum(state.records);
   const faRecords = state.records.filter((record) => record.fp === "FA");
+  const detranRecords = state.records.filter((record) => record.fp === "detran");
   const avRecords = state.records.filter((record) => record.fp === "AV");
   const totalFa = sum(faRecords);
+  const totalDetran = sum(detranRecords);
   const totalAv = sum(avRecords);
   const missingClients = faRecords.filter((record) => !record.tinyClienteId).length;
+  const detranMissing = detranRecords.filter((record) => !record.tinyClienteId).length;
   const pending = state.records.filter((record) => recordIssues(record).length > 0).length;
   const firstDate = state.records[0]?.data || "";
   const dueDate = firstDate ? lastDayOfMonth(firstDate) : "";
@@ -451,6 +464,8 @@ function renderSummary() {
   els.sourceFile.textContent = state.sourceFiles.length ? `${state.sourceFiles.length} arquivo(s)` : "Nenhum arquivo";
   els.totalSheet.textContent = formatMoney(total);
   els.totalFa.textContent = formatMoney(totalFa);
+  els.totalDetran.textContent = formatMoney(totalDetran);
+  if (els.detranDueDate) els.detranDueDate.textContent = formatDateBr(dueDate);
   els.totalAv.textContent = formatMoney(totalAv);
   els.pendingCount.textContent = String(pending);
   els.cashInputTotal.textContent = formatMoney(cashInputs);
@@ -471,17 +486,22 @@ function renderSummary() {
   els.faDueDate.textContent = formatDateBr(dueDate);
   els.missingClientsPanel.textContent = String(missingClients);
   els.tinyReady.textContent = missingClients === 0 && faRecords.length > 0 ? "Pronto" : "Pendente";
+  if (els.detranCard) els.detranCard.style.display = detranRecords.length ? "" : "none";
+  if (els.detranCountPanel) els.detranCountPanel.textContent = String(detranRecords.length);
+  if (els.detranTotalPanel) els.detranTotalPanel.textContent = formatMoney(totalDetran);
+  if (els.detranMissingPanel) els.detranMissingPanel.textContent = String(detranMissing);
+  if (els.detranReady) els.detranReady.textContent = detranMissing === 0 && detranRecords.length > 0 ? "Pronto" : "Pendente";
   const sendableCount = state.records.filter(isTinySendable).length;
   els.sendBtn.disabled = sendableCount === 0;
   els.previewBtn.disabled = sendableCount === 0;
-  const unmappedFa = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId);
-  els.autoMapBtn.hidden = unmappedFa.length === 0;
-  els.mapClientesBtn.hidden = unmappedFa.length === 0;
+  const unmappedFaturado = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId);
+  els.autoMapBtn.hidden = unmappedFaturado.length === 0;
+  els.mapClientesBtn.hidden = unmappedFaturado.length === 0;
 }
 
 function renderIssues() {
   const issues = [];
-  const faMissing = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId);
+  const faMissing = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId);
   const avPending = state.records.filter((r) => r.fp === "AV" && r.avPagamento === "pendente");
   const pdvDivergFP = state.records.filter((r) => {
     const conf = state.conferencia[r.id];
@@ -557,7 +577,7 @@ async function conferirComPDV() {
     // Injeta lançamentos do PDV que não têm correspondência na planilha
     // (serviços que nunca vêm no Excel: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
     // Sem planilha: injeta apenas faturados (AV sem planilha não faz sentido aqui)
-    const extras = (result.pdv_sem_planilha || []).filter((lc) => temPlanilha || lc.fp === "faturado");
+    const extras = (result.pdv_sem_planilha || []).filter((lc) => temPlanilha || lc.fp === "faturado" || lc.fp === "detran");
     // Remove extras anteriores para não duplicar em chamadas subsequentes
     state.records = state.records.filter((r) => !r.pdvExtra);
     for (const lc of extras) {
@@ -598,6 +618,7 @@ function exportConference() {
     totais: {
       planilha: sum(state.records),
       fa: sum(state.records.filter((record) => record.fp === "FA")),
+      detran: sum(state.records.filter((record) => record.fp === "detran")),
       av: sum(state.records.filter((record) => record.fp === "AV"))
     },
     registros: state.records
@@ -876,7 +897,7 @@ const mapState = {
 function openMapClientesModal() {
   mapState.queue = [...new Set(
     state.records
-      .filter((r) => r.fp === "FA" && !r.tinyClienteId)
+      .filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId)
       .map((r) => r.cliente)
   )];
   if (!mapState.queue.length) return;
@@ -897,7 +918,7 @@ function mapNext() {
     return;
   }
   mapState.current = mapState.queue.shift();
-  const total = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId).length;
+  const total = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId).length;
   document.querySelector("#mapProgress").textContent =
     `${mapState.queue.length + 1} de ${total + mapState.queue.length} cliente(s) nao mapeado(s)`;
   document.querySelector("#mapClienteAtual").innerHTML =
