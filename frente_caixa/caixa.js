@@ -492,7 +492,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!state.fpSelecionado) {
         if (fpContainer) fpContainer.querySelector(".fp-btn").focus();
       } else if (!document.getElementById("btnLancar").disabled) {
-        lancar();
+        document.getElementById("btnLancar").click();
       }
     }
   });

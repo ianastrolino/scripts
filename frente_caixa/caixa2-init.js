@@ -2,9 +2,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const FP_LABELS = { dinheiro: "💵 Dinheiro", debito: "💳 Débito", credito: "💳 Crédito", pix: "⚡ PIX", faturado: "🧾 Faturado" };
   const brlFmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // Valida placa em tempo real
-  document.getElementById("fPlaca").addEventListener("input", validarFormulario);
-
   // Redireciona clique do btnLancar para abrir modal de confirmação
   const btnLancar = document.getElementById("btnLancar");
   btnLancar.removeEventListener("click", lancar);
