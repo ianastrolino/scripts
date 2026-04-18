@@ -992,7 +992,7 @@ def _load_caixa_dia(unit: str) -> dict[str, Any]:
                 pass
         return {"data": today, "lancamentos": []}
 
-    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "servico", "valor", "fp"}
+    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp"}
     lancamentos = [
         {k: v for k, v in lc.items() if k in _KEEP}
         for lc in _db_load(unit, unit_dir, today)
@@ -1009,9 +1009,9 @@ def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
         if lcs:
             conn.executemany(
                 "INSERT INTO lancamentos "
-                "(id,unit,data,hora,timestamp,placa,cliente,servico,valor,fp) "
-                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp)",
-                [{**lc, "unit": unit, "data": today} for lc in lcs],
+                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp) "
+                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp)",
+                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", "")} for lc in lcs],
             )
 
 
@@ -1217,7 +1217,8 @@ def api_caixa_editar(unit: str, lancamento_id: str):
             return _json({"success": False, "error": "PIN incorreto."}, 403)
 
         placa   = clean_text(data.get("placa", "")).upper()
-        cliente = clean_text(data.get("cliente", ""))
+        cliente = clean_text(data.get("cliente", "")).upper()
+        cpf     = "".join(c for c in data.get("cpf", "") if c.isdigit())[:14]
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
@@ -1228,8 +1229,8 @@ def api_caixa_editar(unit: str, lancamento_id: str):
         state = _load_caixa_dia(unit)
         for lc in state["lancamentos"]:
             if lc["id"] == lancamento_id:
-                lc.update({"placa": placa, "cliente": cliente, "servico": servico,
-                            "valor": round(valor, 2), "fp": fp})
+                lc.update({"placa": placa, "cliente": cliente, "cpf": cpf,
+                            "servico": servico, "valor": round(valor, 2), "fp": fp})
                 _save_caixa_dia(unit, state)
                 return _json({"success": True, "totais": _caixa_totals(state["lancamentos"])})
 

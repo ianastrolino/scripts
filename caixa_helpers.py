@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-FP_VALIDOS = frozenset({"dinheiro", "debito", "credito", "pix", "faturado"})
+FP_VALIDOS = frozenset({"dinheiro", "debito", "credito", "pix", "faturado", "detran"})
 
 
 def calcular_totais(lancamentos: list[dict[str, Any]]) -> dict[str, Any]:
@@ -20,7 +20,7 @@ def calcular_totais(lancamentos: list[dict[str, Any]]) -> dict[str, Any]:
         if fp in totals:
             totals[fp] += float(lc.get("valor", 0))
     totals["total"] = sum(totals.values())
-    totals["total_avista"] = totals["total"] - totals["faturado"]
+    totals["total_avista"] = totals["total"] - totals["faturado"] - totals["detran"]
     return totals
 
 

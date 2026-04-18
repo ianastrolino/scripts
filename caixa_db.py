@@ -26,10 +26,13 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     cliente   TEXT NOT NULL,
     servico   TEXT NOT NULL,
     valor     REAL NOT NULL,
-    fp        TEXT NOT NULL
+    fp        TEXT NOT NULL,
+    cpf       TEXT NOT NULL DEFAULT ""
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
 """
+
+_MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\""
 
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
@@ -38,6 +41,11 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_DDL)
+    try:
+        conn.execute(_MIGRATE_CPF)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
     return conn
 
 
@@ -84,15 +92,15 @@ def insert_lancamento(unit_dir: Path, lancamento: dict[str, Any]) -> None:
     with _connect(unit_dir) as conn:
         conn.execute(
             "INSERT INTO lancamentos "
-            "(id, unit, data, hora, timestamp, placa, cliente, servico, valor, fp) "
-            "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp)",
-            lancamento,
+            "(id, unit, data, hora, timestamp, placa, cliente, servico, valor, fp, cpf) "
+            "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp,:cpf)",
+            {**lancamento, "cpf": lancamento.get("cpf", "")},
         )
 
 
 def update_lancamento(unit_dir: Path, lancamento_id: str, fields: dict[str, Any]) -> bool:
     """Atualiza campos de um lançamento. Retorna True se encontrado."""
-    allowed = {"placa", "cliente", "servico", "valor", "fp"}
+    allowed = {"placa", "cliente", "servico", "valor", "fp", "cpf"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False

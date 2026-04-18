@@ -364,6 +364,8 @@ function abrirEditar(id) {
   document.getElementById("editId").value      = lc.id;
   document.getElementById("ePlaca").value       = lc.placa;
   document.getElementById("eCliente").value     = lc.cliente;
+  const eCpfEl = document.getElementById("eCpf");
+  if (eCpfEl) eCpfEl.value = lc.cpf ? mascaraCpfCnpj(lc.cpf) : "";
   document.getElementById("eServico").value     = lc.servico;
   document.getElementById("eValor").value       = lc.valor;
   document.getElementById("ePinInput").value    = "";
@@ -409,6 +411,7 @@ async function salvarEdicao() {
     pin,
     placa:   document.getElementById("ePlaca").value.trim().toUpperCase(),
     cliente: document.getElementById("eCliente").value.trim(),
+    cpf:     (document.getElementById("eCpf")?.value || "").replace(/\D/g, ""),
     servico: document.getElementById("eServico").value,
     valor:   parseFloat(document.getElementById("eValor").value),
     fp:      state.editFpSelecionado,
@@ -521,10 +524,10 @@ document.addEventListener("DOMContentLoaded", () => {
     this.setSelectionRange(pos, pos);
   });
 
-  // CPF: máscara e validação
-  const cpfInput = document.getElementById("fCpf");
-  if (cpfInput) {
-    cpfInput.addEventListener("input", function () {
+  // CPF/CNPJ: máscara com cursor estável
+  function bindCpfMask(el) {
+    if (!el) return;
+    el.addEventListener("input", function () {
       const digitsBeforeCursor = this.value.slice(0, this.selectionStart).replace(/\D/g, "").length;
       const masked = mascaraCpfCnpj(this.value);
       this.value = masked;
@@ -536,6 +539,8 @@ document.addEventListener("DOMContentLoaded", () => {
       this.setSelectionRange(pos, pos);
     });
   }
+  bindCpfMask(document.getElementById("fCpf"));
+  bindCpfMask(document.getElementById("eCpf"));
 
   // Placa: apenas A-Z 0-9, maiúsculo, máx 7 chars — cobre digitação e paste
   document.getElementById("fPlaca").addEventListener("input", function () {
