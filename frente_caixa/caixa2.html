@@ -56,6 +56,7 @@
       --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
       --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
       --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+      --det:    #4f46e5; --det-bg: #eef2ff; --det-bd: #c7d2fe;
     }
 
     body {
@@ -465,6 +466,7 @@
     .fp-card[data-fp="credito"].selected  { border-color: var(--crd); background: var(--crd-bg); box-shadow: 0 0 0 1px var(--crd); transform: none; }
     .fp-card[data-fp="pix"].selected      { border-color: var(--pix); background: var(--pix-bg); box-shadow: 0 0 0 1px var(--pix); transform: none; }
     .fp-card[data-fp="faturado"].selected { border-color: var(--fat); background: var(--fat-bg); box-shadow: 0 0 0 1px var(--fat); transform: none; }
+    .fp-card[data-fp="detran"].selected  { border-color: var(--det); background: var(--det-bg); box-shadow: 0 0 0 1px var(--det); transform: none; }
 
     .fp-icon { font-size: 18px; line-height: 1; }
     .fp-name {
@@ -481,6 +483,7 @@
     .fp-card[data-fp="credito"].selected .fp-name  { color: var(--crd); font-weight: 700; }
     .fp-card[data-fp="pix"].selected .fp-name      { color: var(--pix); font-weight: 700; }
     .fp-card[data-fp="faturado"].selected .fp-name { color: var(--fat); font-weight: 700; }
+    .fp-card[data-fp="detran"].selected .fp-name  { color: var(--det); font-weight: 700; }
 
     /* ═══════════════════════════════════════════════════════
        BOTÃO LANÇAR — dominante, estados microinteração
@@ -809,6 +812,7 @@
     .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border: 1px solid var(--crd-bd); }
     .fp-chip.pix      { background: var(--pix-bg); color: var(--pix); border: 1px solid var(--pix-bd); }
     .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border: 1px solid var(--fat-bd); }
+    .fp-chip.detran   { background: var(--det-bg); color: var(--det); border: 1px solid var(--det-bd); }
 
     /* Botões de ação — maiores, com tooltip visual */
     .action-btn {
@@ -1028,6 +1032,7 @@
     .fp-mini[data-fp="credito"].sel  { background: var(--crd-bg); border-color: var(--crd); color: var(--crd); box-shadow: 0 0 0 1px var(--crd); font-weight: 700; }
     .fp-mini[data-fp="pix"].sel      { background: var(--pix-bg); border-color: var(--pix); color: var(--pix); box-shadow: 0 0 0 1px var(--pix); font-weight: 700; }
     .fp-mini[data-fp="faturado"].sel { background: var(--fat-bg); border-color: var(--fat); color: var(--fat); box-shadow: 0 0 0 1px var(--fat); font-weight: 700; grid-column: 1 / -1; }
+    .fp-mini[data-fp="detran"].sel  { background: var(--det-bg); border-color: var(--det); color: var(--det); box-shadow: 0 0 0 1px var(--det); font-weight: 700; }
     .fp-mini[data-fp="faturado"]     { grid-column: 1 / -1; }
 
     /* ═══════════════════════════════════════════════════════
