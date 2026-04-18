@@ -649,7 +649,11 @@ def compact_document_number(config: dict[str, Any], record: NormalizedRecord) ->
 
 
 def build_history(record: NormalizedRecord) -> str:
-    return f"Placa {record.placa} | {record.modelo}"[:250]
+    parts = [f"Placa {record.placa}", record.modelo]
+    if record.cpf and len(record.cpf) == 11:
+        cpf_fmt = f"{record.cpf[:3]}.{record.cpf[3:6]}.{record.cpf[6:9]}-{record.cpf[9:]}"
+        parts.append(f"CPF {cpf_fmt}")
+    return " | ".join(p for p in parts if p)[:250]
 
 
 class TinyClient:

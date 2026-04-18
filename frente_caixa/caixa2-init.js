@@ -7,10 +7,14 @@ document.addEventListener("DOMContentLoaded", () => {
     return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   }
 
-  function toggleCpfField(fp) {
+  const CPF_SERVICES = ["LAUDO DE TRANSFERENCIA", "REVISTORIA"];
+
+  function updateCpfField() {
+    const fp = state.fpSelecionado;
+    const servico = (document.getElementById("fServico")?.value || "").toUpperCase();
     const wrap = document.getElementById("fCpfWrap");
     if (!wrap) return;
-    const show = fp && fp !== "faturado";
+    const show = fp && fp !== "faturado" && CPF_SERVICES.some(s => servico.includes(s));
     wrap.style.display = show ? "" : "none";
     if (!show) {
       const cpfEl = document.getElementById("fCpf");
@@ -87,9 +91,12 @@ document.addEventListener("DOMContentLoaded", () => {
       state.fpSelecionado = btn.dataset.fp;
       document.getElementById("fpGrid").querySelectorAll(".fp-card")
         .forEach(b => b.classList.toggle("selected", b.dataset.fp === btn.dataset.fp));
-      toggleCpfField(btn.dataset.fp);
+      updateCpfField();
     });
   });
+
+  // Atualiza visibilidade do CPF quando o serviço muda
+  document.getElementById("fServico")?.addEventListener("change", updateCpfField);
 
   document.getElementById("editFpMini").querySelectorAll(".fp-mini").forEach(btn => {
     btn.addEventListener("click", () => {
