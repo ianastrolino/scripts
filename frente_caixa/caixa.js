@@ -220,15 +220,21 @@ function validarFormulario() {
   }
 
   let cpfOk = true;
-  if (cpfEl && cpfEl.closest("[style*='display:none']") === null) {
+  const cpfWrap = document.getElementById("fCpfWrap");
+  const cpfVisible = cpfWrap && cpfWrap.style.display !== "none";
+  if (cpfEl && cpfVisible) {
     const cpfVal = cpfEl.value.trim();
-    if (cpfVal && !validarCPF(cpfVal)) {
+    if (!cpfVal) {
+      cpfOk = false;
+      if (cpfErrEl) { cpfErrEl.textContent = ""; cpfErrEl.style.display = "none"; }
+      cpfEl.style.borderColor = "";
+    } else if (!validarCPF(cpfVal)) {
       cpfOk = false;
       if (cpfErrEl) { cpfErrEl.textContent = "CPF inválido."; cpfErrEl.style.display = "block"; }
       cpfEl.style.borderColor = "var(--red)";
     } else {
       if (cpfErrEl) { cpfErrEl.textContent = ""; cpfErrEl.style.display = "none"; }
-      if (cpfEl) cpfEl.style.borderColor = "";
+      cpfEl.style.borderColor = "";
     }
   }
 

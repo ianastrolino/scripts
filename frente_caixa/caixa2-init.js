@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function toggleCpfField(fp) {
     const wrap = document.getElementById("fCpfWrap");
     if (!wrap) return;
-    const show = fp && fp !== "faturado" && fp !== "detran";
+    const show = fp && fp !== "faturado";
     wrap.style.display = show ? "" : "none";
     if (!show) {
       const cpfEl = document.getElementById("fCpf");
