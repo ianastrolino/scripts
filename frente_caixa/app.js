@@ -143,8 +143,10 @@ function parseMoney(value) {
 function isFaturadoFP(fp) { return fp === "FA" || fp === "detran"; }
 
 function fmtCpf(d) {
-  if (!d || d.length !== 11) return d || "";
-  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  if (!d) return "";
+  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  return d;
 }
 
 function formatMoney(value) {

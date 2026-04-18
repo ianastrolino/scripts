@@ -181,11 +181,18 @@ function validarPlaca(placa) {
   return PLACA_RE.test(placa.toUpperCase().replace(/[-\s]/g, ""));
 }
 
-function mascaraCPF(v) {
-  v = v.replace(/\D/g, "").slice(0, 11);
-  if (v.length > 9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4");
-  if (v.length > 6) return v.replace(/(\d{3})(\d{3})(\d{1,3})/, "$1.$2.$3");
-  if (v.length > 3) return v.replace(/(\d{3})(\d{1,3})/, "$1.$2");
+function mascaraCpfCnpj(v) {
+  v = v.replace(/\D/g, "").slice(0, 14);
+  if (v.length <= 11) {
+    if (v.length > 9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4");
+    if (v.length > 6) return v.replace(/(\d{3})(\d{3})(\d{1,3})/, "$1.$2.$3");
+    if (v.length > 3) return v.replace(/(\d{3})(\d{1,3})/, "$1.$2");
+    return v;
+  }
+  if (v.length > 12) return v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, "$1.$2.$3/$4-$5");
+  if (v.length > 8)  return v.replace(/(\d{2})(\d{3})(\d{3})(\d{1,4})/, "$1.$2.$3/$4");
+  if (v.length > 5)  return v.replace(/(\d{2})(\d{3})(\d{1,3})/, "$1.$2.$3");
+  if (v.length > 2)  return v.replace(/(\d{2})(\d{1,3})/, "$1.$2");
   return v;
 }
 
@@ -200,6 +207,26 @@ function validarCPF(cpf) {
   for (let i = 0; i < 10; i++) s += +d[i] * (11 - i);
   r = (s * 10) % 11; if (r >= 10) r = 0;
   return r === +d[10];
+}
+
+function validarCNPJ(cnpj) {
+  const d = cnpj.replace(/\D/g, "");
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+  let s = 0, w = [5,4,3,2,9,8,7,6,5,4,3,2];
+  for (let i = 0; i < 12; i++) s += +d[i] * w[i];
+  let r = s % 11; r = r < 2 ? 0 : 11 - r;
+  if (r !== +d[12]) return false;
+  s = 0; w = [6,5,4,3,2,9,8,7,6,5,4,3,2];
+  for (let i = 0; i < 13; i++) s += +d[i] * w[i];
+  r = s % 11; r = r < 2 ? 0 : 11 - r;
+  return r === +d[13];
+}
+
+function validarCpfCnpj(val) {
+  const d = val.replace(/\D/g, "");
+  if (d.length === 11) return validarCPF(val);
+  if (d.length === 14) return validarCNPJ(val);
+  return false;
 }
 
 function validarFormulario() {
@@ -228,9 +255,9 @@ function validarFormulario() {
       cpfOk = false;
       if (cpfErrEl) { cpfErrEl.textContent = ""; cpfErrEl.style.display = "none"; }
       cpfEl.style.borderColor = "";
-    } else if (!validarCPF(cpfVal)) {
+    } else if (!validarCpfCnpj(cpfVal)) {
       cpfOk = false;
-      if (cpfErrEl) { cpfErrEl.textContent = "CPF inválido."; cpfErrEl.style.display = "block"; }
+      if (cpfErrEl) { cpfErrEl.textContent = "CPF ou CNPJ inválido."; cpfErrEl.style.display = "block"; }
       cpfEl.style.borderColor = "var(--red)";
     } else {
       if (cpfErrEl) { cpfErrEl.textContent = ""; cpfErrEl.style.display = "none"; }
@@ -499,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (cpfInput) {
     cpfInput.addEventListener("input", function () {
       const pos = this.selectionStart;
-      const masked = mascaraCPF(this.value);
+      const masked = mascaraCpfCnpj(this.value);
       this.value = masked;
       this.setSelectionRange(Math.min(pos, masked.length), Math.min(pos, masked.length));
     });

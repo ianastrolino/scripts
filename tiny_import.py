@@ -651,8 +651,9 @@ def compact_document_number(config: dict[str, Any], record: NormalizedRecord) ->
 def build_history(record: NormalizedRecord) -> str:
     parts = [f"Placa {record.placa}", record.modelo]
     if record.cpf and len(record.cpf) == 11:
-        cpf_fmt = f"{record.cpf[:3]}.{record.cpf[3:6]}.{record.cpf[6:9]}-{record.cpf[9:]}"
-        parts.append(f"CPF {cpf_fmt}")
+        parts.append(f"CPF {record.cpf[:3]}.{record.cpf[3:6]}.{record.cpf[6:9]}-{record.cpf[9:]}")
+    elif record.cpf and len(record.cpf) == 14:
+        parts.append(f"CNPJ {record.cpf[:2]}.{record.cpf[2:5]}.{record.cpf[5:8]}/{record.cpf[8:12]}-{record.cpf[12:]}")
     return " | ".join(p for p in parts if p)[:250]
 
 
@@ -893,7 +894,7 @@ class TinyImporter:
         }
         if cpf_digits:
             body["cpf_cnpj"] = cpf_digits
-            body["tipoPessoa"] = "F"
+            body["tipoPessoa"] = "F" if len(cpf_digits) == 11 else "J"
         else:
             body["tipoPessoa"] = self.config.get("default_tipo_pessoa", "J")
 

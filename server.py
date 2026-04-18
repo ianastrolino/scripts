@@ -1165,7 +1165,7 @@ def api_caixa_lancar(unit: str):
         data    = request.get_json(force=True, silent=True) or {}
         placa   = clean_text(data.get("placa", "")).upper()
         cliente = clean_text(data.get("cliente", "")).upper()
-        cpf     = "".join(c for c in data.get("cpf", "") if c.isdigit())[:11]
+        cpf     = "".join(c for c in data.get("cpf", "") if c.isdigit())[:14]
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
