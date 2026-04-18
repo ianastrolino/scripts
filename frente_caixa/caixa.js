@@ -190,9 +190,10 @@ function validarFormulario() {
   const placaOk = !placa || validarPlaca(placa);
   const errEl   = document.getElementById("placaError");
   if (errEl) {
-    errEl.textContent = placa && !placaOk ? "Placa inválida. Use AAA0000 ou AAA0A00." : "";
-    errEl.style.display = placa && !placaOk ? "block" : "none";
-    document.getElementById("fPlaca").style.borderColor = placa && !placaOk ? "var(--red)" : "";
+    const showErr = placa && !placaOk && placa.length >= 7;
+    errEl.textContent = showErr ? "Placa inválida. Use AAA0000 ou AAA0A00." : "";
+    errEl.style.display = showErr ? "block" : "none";
+    document.getElementById("fPlaca").style.borderColor = showErr ? "var(--red)" : "";
   }
 
   const ok = placa && placaOk && cliente && servico && valor > 0 && state.fpSelecionado;
