@@ -133,6 +133,35 @@ function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// ── Chips de serviço no hero ──────────────────────────────────────────────────
+
+function renderServicos() {
+  const el = document.getElementById("servicoChips");
+  if (!el) return;
+  const lcs = state.lancamentos || [];
+  if (!lcs.length) { el.innerHTML = ""; return; }
+
+  const counts = {};
+  lcs.forEach(lc => {
+    const s = (lc.servico || "").trim();
+    if (s) counts[s] = (counts[s] || 0) + 1;
+  });
+
+  const MAX = 5;
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const visible = sorted.slice(0, MAX);
+  const extra = sorted.length - MAX;
+
+  el.innerHTML = visible.map(([name, n]) => {
+    const label = name.length > 18 ? name.slice(0, 17) + "…" : name;
+    return `<span class="svc-chip" title="${escHtml(name)}">
+      ${escHtml(label)}<span class="svc-chip-count">×${n}</span>
+    </span>`;
+  }).join("") + (extra > 0
+    ? `<span class="svc-chip svc-chip-more">+${extra} mais</span>`
+    : "");
+}
+
 // ── Render totais ─────────────────────────────────────────────────────────────
 
 let _renderTotaisActive = false;
@@ -157,6 +186,7 @@ function renderTotais(totais, count) {
     setVal("totAvista",   brl(t.total_avista !== undefined ? t.total_avista : (t.total || 0)));
     setVal("totCount",    `${n} lancamento${n !== 1 ? "s" : ""}`);
 
+    renderServicos();
     if (typeof atualizarBtnConferir === 'function') atualizarBtnConferir();
   } catch (e) {
     console.error("[renderTotais] Erro fatal:", e);

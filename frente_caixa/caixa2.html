@@ -584,12 +584,17 @@
       border-radius: var(--rl);
       padding: 24px 26px 22px;
       display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 0;
       border: 1px solid rgba(255,255,255,.05);
       position: relative;
       overflow: hidden;
       box-shadow: 0 4px 24px rgba(0,0,0,.2);
+    }
+    .hero-top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
     }
     /* Detalhe de profundidade — grid sutil */
     .hero-card::before {
@@ -644,6 +649,41 @@
       font-weight: 600;
       color: rgba(255,255,255,.35);
       letter-spacing: -.02em;
+    }
+
+    /* ─── Chips de serviço no hero ───────────────────────── */
+    .servico-chips {
+      position: relative; z-index: 1;
+      display: flex; flex-wrap: wrap; gap: 6px;
+      margin-top: 14px;
+      min-height: 0;
+    }
+    .servico-chips:empty { margin-top: 0; }
+    .svc-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 20px;
+      padding: 3px 10px 3px 9px;
+      font-size: 11.5px;
+      color: rgba(255,255,255,.6);
+      font-weight: 500;
+      white-space: nowrap;
+      letter-spacing: -.01em;
+    }
+    .svc-chip-count {
+      background: rgba(255,255,255,.12);
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: rgba(255,255,255,.75);
+    }
+    .svc-chip-more {
+      background: transparent;
+      border-color: rgba(255,255,255,.07);
+      color: rgba(255,255,255,.3);
+      font-style: italic;
     }
 
     /* ─── KPI strip — hierarquia entre tiles ─────────────── */
@@ -1728,15 +1768,18 @@
 
       <!-- Hero: Total à Vista -->
       <div class="hero-card">
-        <div class="hero-left">
-          <div class="hero-eyebrow">Total à Vista — Hoje</div>
-          <div class="hero-value" id="totAvista">R$ 0,00</div>
-          <div class="hero-sub">Fechamento parcial · <span id="unidadeLabel">—</span></div>
+        <div class="hero-top">
+          <div class="hero-left">
+            <div class="hero-eyebrow">Total à Vista — Hoje</div>
+            <div class="hero-value" id="totAvista">R$ 0,00</div>
+            <div class="hero-sub">Fechamento parcial · <span id="unidadeLabel">—</span></div>
+          </div>
+          <div class="hero-right">
+            <div class="hero-count" id="totCount">0 lançamentos</div>
+            <button id="btnAbrirConferencia" type="button">Conferir Caixa ✓</button>
+          </div>
         </div>
-        <div class="hero-right">
-          <div class="hero-count" id="totCount">0 lançamentos</div>
-          <button id="btnAbrirConferencia" type="button">Conferir Caixa ✓</button>
-        </div>
+        <div class="servico-chips" id="servicoChips"></div>
       </div>
 
       <!-- KPI strip -->
