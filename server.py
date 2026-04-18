@@ -10,9 +10,12 @@ USERS_CONFIG (JSON):
       "password_hash": "<saida de criar_usuario.py>",
       "unit": "moema",
       "master": false,
+      "gerencial": false,
       "name": "Nome do Usuario"
     }
   }
+  master=true  → acessa todas as unidades + gerencial de todas
+  gerencial=true → acessa gerencial da sua unidade (master da unidade)
 
 UNITS_CONFIG (JSON):
   {
@@ -64,7 +67,7 @@ from typing import Any
 from flask import Flask, Response, redirect, request, send_from_directory, session, url_for
 
 from caixa_helpers import FP_VALIDOS, calcular_totais, validar_lancamento
-from caixa_db import migrate_from_json as _db_migrate, load_lancamentos as _db_load, _connect as _db_connect
+from caixa_db import migrate_from_json as _db_migrate, load_lancamentos as _db_load, _connect as _db_connect, load_lancamentos_range as _db_load_range
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -199,6 +202,24 @@ def login_required(f):
     def wrapper(*args, **kwargs):
         if not _current_user():
             return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def gerencial_required(f):
+    """Exige login + acesso à unidade + flag gerencial (ou master global)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = _current_user()
+        if not user:
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+            return redirect(url_for("login_page"))
+        unit = kwargs.get("unit")
+        if not user.get("master") and user.get("unit") != unit:
+            return Response("Acesso negado a esta unidade.", status=403)
+        if not user.get("master") and not user.get("gerencial"):
+            return Response("Acesso restrito ao gerente da unidade.", status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -1371,6 +1392,147 @@ def api_caixa_conferir(unit: str):
                 })
 
         return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rotas: gerencial (acesso restrito — master da unidade ou global)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/gerencial")
+@gerencial_required
+def unit_gerencial(unit: str):
+    return _nocache(send_from_directory(UI_DIR, "gerencial.html"))
+
+
+@app.route("/u/<unit>/api/gerencial/historico")
+@gerencial_required
+def api_gerencial_historico(unit: str):
+    try:
+        date_from = request.args.get("from", "")
+        date_to   = request.args.get("to", "")
+        dt.date.fromisoformat(date_from)
+        dt.date.fromisoformat(date_to)
+
+        unit_dir    = _unit_state_dir(unit)
+        lancamentos = _db_load_range(unit, unit_dir, date_from, date_to)
+
+        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran")
+        totais: dict[str, float] = {fp: 0.0 for fp in fp_keys}
+        for lc in lancamentos:
+            fp = lc.get("fp", "")
+            if fp in totais:
+                totais[fp] += float(lc.get("valor", 0))
+
+        total  = sum(totais.values())
+        avista = total - totais["faturado"] - totais["detran"]
+        count  = len(lancamentos)
+
+        # Agrupa por dia
+        by_day: dict[str, list] = {}
+        for lc in lancamentos:
+            by_day.setdefault(lc["data"], []).append(lc)
+
+        por_dia = []
+        for data in sorted(by_day.keys()):
+            dlcs = by_day[data]
+            dt_fp: dict[str, float] = {fp: 0.0 for fp in fp_keys}
+            for lc in dlcs:
+                fp = lc.get("fp", "")
+                if fp in dt_fp:
+                    dt_fp[fp] += float(lc.get("valor", 0))
+            dtotal = sum(dt_fp.values())
+            por_dia.append({
+                "data":      data,
+                "total":     round(dtotal, 2),
+                "avista":    round(dtotal - dt_fp["faturado"] - dt_fp["detran"], 2),
+                "faturado":  round(dt_fp["faturado"], 2),
+                "detran":    round(dt_fp["detran"], 2),
+                "dinheiro":  round(dt_fp["dinheiro"], 2),
+                "debito":    round(dt_fp["debito"], 2),
+                "credito":   round(dt_fp["credito"], 2),
+                "pix":       round(dt_fp["pix"], 2),
+                "count":     len(dlcs),
+                "lancamentos": dlcs,
+            })
+
+        # Ranking de serviços
+        svc_count: dict[str, int]   = {}
+        svc_total: dict[str, float] = {}
+        for lc in lancamentos:
+            s = lc.get("servico", "").strip()
+            if s:
+                svc_count[s] = svc_count.get(s, 0) + 1
+                svc_total[s] = svc_total.get(s, 0.0) + float(lc.get("valor", 0))
+        servicos = sorted(
+            [{"servico": s, "count": svc_count[s], "total": round(svc_total[s], 2)}
+             for s in svc_count],
+            key=lambda x: x["count"], reverse=True,
+        )
+
+        ud = UNITS.get(unit, {})
+        return _json({
+            "success":  True,
+            "unidade":  ud.get("nome", unit),
+            "periodo":  {"from": date_from, "to": date_to},
+            "resumo": {
+                "total":        round(total, 2),
+                "avista":       round(avista, 2),
+                "faturado":     round(totais["faturado"], 2),
+                "detran":       round(totais["detran"], 2),
+                "dinheiro":     round(totais["dinheiro"], 2),
+                "debito":       round(totais["debito"], 2),
+                "credito":      round(totais["credito"], 2),
+                "pix":          round(totais["pix"], 2),
+                "count":        count,
+                "ticket_medio": round(total / count, 2) if count else 0.0,
+            },
+            "por_dia":  por_dia,
+            "servicos": servicos,
+        })
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/gerencial/exportar")
+@gerencial_required
+def api_gerencial_exportar(unit: str):
+    try:
+        import csv, io
+        date_from = request.args.get("from", "")
+        date_to   = request.args.get("to", "")
+        dt.date.fromisoformat(date_from)
+        dt.date.fromisoformat(date_to)
+
+        unit_dir    = _unit_state_dir(unit)
+        lancamentos = _db_load_range(unit, unit_dir, date_from, date_to)
+
+        out = io.StringIO()
+        w   = csv.writer(out)
+        w.writerow(["Data", "Hora", "Placa", "Cliente", "CPF/CNPJ", "Servico", "Valor", "FP"])
+        for lc in lancamentos:
+            w.writerow([
+                lc.get("data", ""), lc.get("hora", ""), lc.get("placa", ""),
+                lc.get("cliente", ""), lc.get("cpf", ""), lc.get("servico", ""),
+                lc.get("valor", ""), lc.get("fp", ""),
+            ])
+
+        nome = UNITS.get(unit, {}).get("nome", unit)
+        fname = f"historico_{nome}_{date_from}_{date_to}.csv"
+        return Response(
+            "\ufeff" + out.getvalue(),
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
         if isinstance(exc, HTTPException):

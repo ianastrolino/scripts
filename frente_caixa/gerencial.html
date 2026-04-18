@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerencial — Astrovistorias</title>
+  <style>
+    :root {
+      --bg:     #0f1117;
+      --card:   #161b27;
+      --card2:  #1c2333;
+      --border: rgba(255,255,255,.07);
+      --t1:     #f0f4ff;
+      --t2:     rgba(255,255,255,.6);
+      --t3:     rgba(255,255,255,.3);
+      --rl:     12px;
+      --din:    #059669; --din-bg: #ecfdf5; --din-bd: #6ee7b7;
+      --deb:    #2563eb; --deb-bg: #eff6ff; --deb-bd: #93c5fd;
+      --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
+      --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
+      --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+      --det:    #4f46e5; --det-bg: #eef2ff; --det-bd: #c7d2fe;
+      --accent: #3b82f6;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--t1); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .g-header {
+      background: #0a0e18;
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .g-header-left { display: flex; align-items: center; gap: 16px; }
+    .g-logo { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); }
+    .g-sep { color: var(--t3); }
+    .g-title { font-size: 14px; font-weight: 600; color: var(--t1); }
+    .g-header-right { display: flex; align-items: center; gap: 12px; }
+    .g-user { font-size: 12px; color: var(--t3); }
+    .g-link {
+      font-size: 12px; font-weight: 600; color: var(--accent);
+      text-decoration: none; padding: 5px 12px;
+      border: 1px solid rgba(59,130,246,.3); border-radius: 20px;
+      transition: background .15s;
+    }
+    .g-link:hover { background: rgba(59,130,246,.1); }
+
+    /* ── Main layout ─────────────────────────────────────── */
+    .g-main { max-width: 1200px; margin: 0 auto; padding: 24px 20px 48px; }
+
+    /* ── Filter bar ──────────────────────────────────────── */
+    .filter-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: 14px 18px; margin-bottom: 20px;
+    }
+    .filter-label { font-size: 12px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+    .filter-select, .filter-input {
+      background: var(--card2); border: 1px solid rgba(255,255,255,.1);
+      color: var(--t1); border-radius: 8px; padding: 7px 12px;
+      font-size: 13px; cursor: pointer; outline: none;
+    }
+    .filter-select:focus, .filter-input:focus { border-color: var(--accent); }
+    .filter-sep { color: var(--t3); font-size: 12px; }
+    .btn-aplicar {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 8px; padding: 7px 18px; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: opacity .15s;
+    }
+    .btn-aplicar:hover { opacity: .85; }
+    .btn-exportar {
+      background: transparent; color: var(--t2);
+      border: 1px solid rgba(255,255,255,.15); border-radius: 8px;
+      padding: 7px 16px; font-size: 13px; font-weight: 500;
+      cursor: pointer; margin-left: auto; transition: background .15s;
+    }
+    .btn-exportar:hover { background: rgba(255,255,255,.05); }
+    .filter-mode { display: flex; gap: 4px; }
+    .mode-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,.1);
+      color: var(--t3); border-radius: 6px; padding: 6px 12px;
+      font-size: 12px; cursor: pointer; transition: all .15s;
+    }
+    .mode-btn.active { background: rgba(59,130,246,.15); border-color: var(--accent); color: var(--accent); }
+
+    /* ── Resumo tiles ────────────────────────────────────── */
+    .resumo-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px; margin-bottom: 20px;
+    }
+    .r-tile {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: 16px 18px;
+      position: relative; overflow: hidden;
+    }
+    .r-tile::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%; border-radius: 3px 0 0 3px;
+    }
+    .r-tile.t-total::before  { background: var(--t2); }
+    .r-tile.t-av::before     { background: var(--din); }
+    .r-tile.t-fa::before     { background: var(--fat); }
+    .r-tile.t-det::before    { background: var(--det); }
+    .r-tile.t-count::before  { background: var(--accent); }
+    .r-tile.t-ticket::before { background: var(--crd); }
+    .r-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); margin-bottom: 8px; }
+    .r-value { font-size: 22px; font-weight: 800; color: var(--t1); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+    .r-tile.t-count  .r-value { color: var(--accent); }
+    .r-tile.t-ticket .r-value { color: rgba(196,181,253,.9); }
+    .r-sub { font-size: 11px; color: var(--t3); margin-top: 5px; }
+
+    /* ── Seção genérica ──────────────────────────────────── */
+    .g-section { margin-bottom: 20px; }
+    .g-section-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--t3); margin-bottom: 12px;
+    }
+
+    /* ── Bar chart ───────────────────────────────────────── */
+    .chart-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: 20px 18px 14px;
+      overflow-x: auto;
+    }
+    .chart-legend { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--t2); }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .legend-dot.av  { background: var(--din); }
+    .legend-dot.fa  { background: var(--fat); }
+    .legend-dot.det { background: var(--det); }
+
+    .bar-chart {
+      display: flex; align-items: flex-end; gap: 6px;
+      height: 140px; min-width: max-content;
+    }
+    .bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 36px; }
+    .bar-wrap { flex: 1; display: flex; align-items: flex-end; width: 100%; }
+    .bar-inner {
+      width: 100%; border-radius: 4px 4px 0 0; overflow: hidden;
+      display: flex; flex-direction: column-reverse;
+      transition: opacity .15s;
+    }
+    .bar-inner:hover { opacity: .8; }
+    .bar-seg { width: 100%; min-height: 0; }
+    .bar-seg.seg-av  { background: var(--din); }
+    .bar-seg.seg-fa  { background: var(--fat); }
+    .bar-seg.seg-det { background: var(--det); }
+    .bar-seg.seg-empty { background: rgba(255,255,255,.06); }
+    .bar-label { font-size: 9.5px; color: var(--t3); white-space: nowrap; }
+    .bar-tooltip {
+      font-size: 10px; color: var(--t2); text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
+    }
+
+    /* ── Ranking de serviços ─────────────────────────────── */
+    .svc-table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+    }
+    .svc-table { width: 100%; border-collapse: collapse; }
+    .svc-table th {
+      font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--t3); padding: 10px 16px;
+      border-bottom: 1px solid var(--border); text-align: left;
+    }
+    .svc-table th.num { text-align: right; }
+    .svc-table td { padding: 9px 16px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
+    .svc-table tr:last-child td { border-bottom: none; }
+    .svc-table td.num { text-align: right; color: var(--t2); font-variant-numeric: tabular-nums; }
+    .svc-table td.name { font-weight: 500; }
+    .svc-bar-bg { background: rgba(255,255,255,.05); border-radius: 4px; height: 5px; width: 120px; overflow: hidden; }
+    .svc-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+    .rank-num { font-size: 11px; color: var(--t3); font-weight: 700; }
+
+    /* ── Tabela histórica por dia ────────────────────────── */
+    .day-group {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); margin-bottom: 8px; overflow: hidden;
+    }
+    .day-summary {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 18px; cursor: pointer;
+      transition: background .15s; user-select: none;
+    }
+    .day-summary:hover { background: rgba(255,255,255,.03); }
+    .day-date { font-size: 13px; font-weight: 700; color: var(--t1); min-width: 90px; }
+    .day-count { font-size: 12px; color: var(--t3); }
+    .day-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+    .day-chip {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      font-weight: 600; border: 1px solid transparent;
+    }
+    .day-chip.av  { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+    .day-chip.fa  { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+    .day-chip.det { background: #eef2ff; color: #3730a3; border-color: #c7d2fe; }
+    .day-total { font-size: 15px; font-weight: 800; color: var(--t1); font-variant-numeric: tabular-nums; margin-left: auto; }
+    .day-chevron { font-size: 10px; color: var(--t3); transition: transform .2s; }
+    .day-group.open .day-chevron { transform: rotate(180deg); }
+
+    .day-detail { display: none; border-top: 1px solid var(--border); overflow-x: auto; }
+    .day-group.open .day-detail { display: block; }
+    .day-table { width: 100%; border-collapse: collapse; }
+    .day-table th {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--t3); padding: 8px 16px;
+      text-align: left; background: rgba(0,0,0,.15);
+    }
+    .day-table td { padding: 8px 16px; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.03); }
+    .day-table tr:last-child td { border-bottom: none; }
+    .day-table td.val { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fp-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border-color: var(--din-bd); }
+    .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border-color: var(--deb-bd); }
+    .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border-color: var(--crd-bd); }
+    .fp-chip.pix      { background: var(--pix-bg); color: var(--pix); border-color: var(--pix-bd); }
+    .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border-color: var(--fat-bd); }
+    .fp-chip.detran   { background: var(--det-bg); color: var(--det); border-color: var(--det-bd); }
+
+    /* ── Estados ─────────────────────────────────────────── */
+    .g-loading { text-align: center; padding: 60px 20px; color: var(--t3); font-size: 14px; }
+    .g-error   { text-align: center; padding: 40px 20px; color: #f87171; font-size: 13px; }
+    .g-empty   { text-align: center; padding: 40px 20px; color: var(--t3); font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header class="g-header">
+  <div class="g-header-left">
+    <span class="g-logo">Astrovistorias</span>
+    <span class="g-sep">›</span>
+    <span class="g-title">Gerencial — <span id="hdrUnidade">—</span></span>
+  </div>
+  <div class="g-header-right">
+    <span class="g-user" id="hdrUser"></span>
+    <a class="g-link" id="linkPdv" href="#">← PDV</a>
+  </div>
+</header>
+
+<main class="g-main">
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <span class="filter-label">Período</span>
+    <div class="filter-mode">
+      <button class="mode-btn active" id="modeMonth">Mês</button>
+      <button class="mode-btn" id="modeRange">Intervalo</button>
+    </div>
+
+    <!-- Mode: mês -->
+    <div id="filterMonth" style="display:flex;align-items:center;gap:8px;">
+      <select class="filter-select" id="selMes">
+        <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+        <option value="03">Março</option><option value="04">Abril</option>
+        <option value="05">Maio</option><option value="06">Junho</option>
+        <option value="07">Julho</option><option value="08">Agosto</option>
+        <option value="09">Setembro</option><option value="10">Outubro</option>
+        <option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+      <select class="filter-select" id="selAno"></select>
+    </div>
+
+    <!-- Mode: intervalo -->
+    <div id="filterRange" style="display:none;align-items:center;gap:8px;">
+      <input class="filter-input" type="date" id="inpFrom">
+      <span class="filter-sep">até</span>
+      <input class="filter-input" type="date" id="inpTo">
+    </div>
+
+    <button class="btn-aplicar" id="btnAplicar">Aplicar</button>
+    <button class="btn-exportar" id="btnExportar">⬇ Export CSV</button>
+  </div>
+
+  <!-- Resumo -->
+  <div class="g-section">
+    <div class="g-section-title">Resumo do período</div>
+    <div class="resumo-strip" id="resumoStrip">
+      <div class="g-loading">Carregando…</div>
+    </div>
+  </div>
+
+  <!-- Gráfico -->
+  <div class="g-section">
+    <div class="g-section-title">Faturamento por dia</div>
+    <div class="chart-wrap">
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot av"></div>À Vista</div>
+        <div class="legend-item"><div class="legend-dot fa"></div>Faturado</div>
+        <div class="legend-item"><div class="legend-dot det"></div>DETRAN</div>
+      </div>
+      <div class="bar-chart" id="barChart"><div class="g-empty">—</div></div>
+    </div>
+  </div>
+
+  <!-- Ranking de serviços -->
+  <div class="g-section">
+    <div class="g-section-title">Ranking de serviços</div>
+    <div class="svc-table-wrap">
+      <table class="svc-table" id="svcTable">
+        <thead><tr>
+          <th style="width:32px">#</th>
+          <th>Serviço</th>
+          <th class="num">Qtd</th>
+          <th class="num">Total</th>
+          <th class="num">Freq.</th>
+        </tr></thead>
+        <tbody id="svcBody"><tr><td colspan="5" class="g-loading">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Histórico por dia -->
+  <div class="g-section">
+    <div class="g-section-title">Lançamentos por dia</div>
+    <div id="historicoList"><div class="g-loading">Carregando…</div></div>
+  </div>
+
+</main>
+
+<script>
+  const pathParts = location.pathname.split("/");
+  const unit = pathParts[2] || "";
+  const apiBase = `/u/${unit}`;
+
+  document.getElementById("linkPdv").href = `${apiBase}/caixa2`;
+
+  const brl = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = s => { const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; };
+
+  // ── Inicializa filtros ──────────────────────────────────
+  const now = new Date();
+  const selMes = document.getElementById("selMes");
+  const selAno = document.getElementById("selAno");
+
+  selMes.value = String(now.getMonth() + 1).padStart(2, "0");
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const o = document.createElement("option");
+    o.value = y; o.textContent = y;
+    selAno.appendChild(o);
+  }
+  selAno.value = now.getFullYear();
+
+  const inpFrom = document.getElementById("inpFrom");
+  const inpTo   = document.getElementById("inpTo");
+  inpFrom.value = `${now.getFullYear()}-${selMes.value}-01`;
+  inpTo.value   = now.toISOString().slice(0, 10);
+
+  // ── Modo de filtro ──────────────────────────────────────
+  let filterMode = "month";
+  document.getElementById("modeMonth").addEventListener("click", () => {
+    filterMode = "month";
+    document.getElementById("modeMonth").classList.add("active");
+    document.getElementById("modeRange").classList.remove("active");
+    document.getElementById("filterMonth").style.display = "flex";
+    document.getElementById("filterRange").style.display = "none";
+  });
+  document.getElementById("modeRange").addEventListener("click", () => {
+    filterMode = "range";
+    document.getElementById("modeRange").classList.add("active");
+    document.getElementById("modeMonth").classList.remove("active");
+    document.getElementById("filterRange").style.display = "flex";
+    document.getElementById("filterMonth").style.display = "none";
+  });
+
+  function getRange() {
+    if (filterMode === "month") {
+      const y = selAno.value;
+      const m = selMes.value;
+      const lastDay = new Date(y, Number(m), 0).getDate();
+      return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, "0")}` };
+    }
+    return { from: inpFrom.value, to: inpTo.value };
+  }
+
+  // ── Info da unidade ─────────────────────────────────────
+  fetch(`${apiBase}/api/info`).then(r => r.json()).then(d => {
+    if (d.unidade) document.getElementById("hdrUnidade").textContent = d.unidade;
+    if (d.name)    document.getElementById("hdrUser").textContent = d.name;
+  }).catch(() => {});
+
+  // ── Carregar dados ──────────────────────────────────────
+  let lastData = null;
+
+  async function carregar() {
+    const { from, to } = getRange();
+    document.getElementById("resumoStrip").innerHTML = '<div class="g-loading">Carregando…</div>';
+    document.getElementById("barChart").innerHTML = '<div class="g-loading">Carregando…</div>';
+    document.getElementById("svcBody").innerHTML = '<tr><td colspan="5" class="g-loading">Carregando…</td></tr>';
+    document.getElementById("historicoList").innerHTML = '<div class="g-loading">Carregando…</div>';
+
+    try {
+      const res = await fetch(`${apiBase}/api/gerencial/historico?from=${from}&to=${to}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Erro ao carregar.");
+      lastData = data;
+      if (data.unidade) document.getElementById("hdrUnidade").textContent = data.unidade;
+      renderResumo(data.resumo);
+      renderChart(data.por_dia);
+      renderServicos(data.servicos, data.resumo.count);
+      renderHistorico(data.por_dia);
+    } catch (e) {
+      const msg = `<div class="g-error">${e.message}</div>`;
+      document.getElementById("resumoStrip").innerHTML = msg;
+      document.getElementById("barChart").innerHTML = msg;
+      document.getElementById("svcBody").innerHTML = `<tr><td colspan="5" class="g-error">${e.message}</td></tr>`;
+      document.getElementById("historicoList").innerHTML = msg;
+    }
+  }
+
+  document.getElementById("btnAplicar").addEventListener("click", carregar);
+
+  document.getElementById("btnExportar").addEventListener("click", () => {
+    const { from, to } = getRange();
+    window.location.href = `${apiBase}/api/gerencial/exportar?from=${from}&to=${to}`;
+  });
+
+  // ── Render: resumo ──────────────────────────────────────
+  function renderResumo(r) {
+    const tiles = [
+      { cls: "t-total",  label: "Total Geral",    val: brl(r.total),        sub: `${r.count} lançamentos` },
+      { cls: "t-av",     label: "À Vista",         val: brl(r.avista),       sub: "Dinheiro · Débito · Crédito · PIX" },
+      { cls: "t-fa",     label: "Faturado",        val: brl(r.faturado),     sub: "" },
+      { cls: "t-det",    label: "Taxa DETRAN",     val: brl(r.detran),       sub: "" },
+      { cls: "t-count",  label: "Lançamentos",     val: r.count,             sub: "" },
+      { cls: "t-ticket", label: "Ticket Médio",    val: brl(r.ticket_medio), sub: "" },
+    ];
+    document.getElementById("resumoStrip").innerHTML = tiles.map(t => `
+      <div class="r-tile ${t.cls}">
+        <div class="r-label">${t.label}</div>
+        <div class="r-value">${t.val}</div>
+        ${t.sub ? `<div class="r-sub">${t.sub}</div>` : ""}
+      </div>
+    `).join("");
+  }
+
+  // ── Render: gráfico ─────────────────────────────────────
+  function renderChart(porDia) {
+    const el = document.getElementById("barChart");
+    if (!porDia.length) { el.innerHTML = '<div class="g-empty">Sem dados no período.</div>'; return; }
+    const maxTotal = Math.max(...porDia.map(d => d.total), 1);
+    const CHART_H = 120;
+
+    el.innerHTML = porDia.map(d => {
+      const barH  = Math.max((d.total / maxTotal) * CHART_H, d.total > 0 ? 4 : 0);
+      const avH   = d.total ? (d.avista   / d.total) * barH : 0;
+      const faH   = d.total ? (d.faturado / d.total) * barH : 0;
+      const detH  = d.total ? (d.detran   / d.total) * barH : 0;
+      const label = d.data.slice(5).replace("-", "/");
+
+      const segs = d.total > 0
+        ? `<div class="bar-seg seg-det" style="height:${detH.toFixed(1)}px"></div>
+           <div class="bar-seg seg-fa"  style="height:${faH.toFixed(1)}px"></div>
+           <div class="bar-seg seg-av"  style="height:${avH.toFixed(1)}px"></div>`
+        : `<div class="bar-seg seg-empty" style="height:4px"></div>`;
+
+      return `
+        <div class="bar-col" title="${fmtDate(d.data)}: ${brl(d.total)} (${d.count} lanç.)">
+          <div class="bar-wrap" style="height:${CHART_H}px">
+            <div class="bar-inner" style="height:${barH.toFixed(1)}px">${segs}</div>
+          </div>
+          <div class="bar-label">${label}</div>
+        </div>`;
+    }).join("");
+  }
+
+  // ── Render: serviços ────────────────────────────────────
+  function renderServicos(servicos, totalCount) {
+    const tbody = document.getElementById("svcBody");
+    if (!servicos.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="g-empty">Sem dados.</td></tr>'; return;
+    }
+    const maxCount = servicos[0].count;
+    tbody.innerHTML = servicos.map((s, i) => {
+      const pct = Math.round((s.count / (totalCount || 1)) * 100);
+      const barW = Math.round((s.count / maxCount) * 100);
+      return `<tr>
+        <td><span class="rank-num">${i + 1}</span></td>
+        <td class="name">${escHtml(s.servico)}</td>
+        <td class="num">${s.count}</td>
+        <td class="num">${brl(s.total)}</td>
+        <td class="num">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
+            <span>${pct}%</span>
+            <div class="svc-bar-bg"><div class="svc-bar-fill" style="width:${barW}%"></div></div>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ── Render: histórico por dia ───────────────────────────
+  function renderHistorico(porDia) {
+    const el = document.getElementById("historicoList");
+    if (!porDia.length) { el.innerHTML = '<div class="g-empty">Nenhum lançamento no período.</div>'; return; }
+
+    el.innerHTML = porDia.slice().reverse().map(d => {
+      const chips = [
+        d.avista   > 0 ? `<span class="day-chip av">AV ${brl(d.avista)}</span>` : "",
+        d.faturado > 0 ? `<span class="day-chip fa">FA ${brl(d.faturado)}</span>` : "",
+        d.detran   > 0 ? `<span class="day-chip det">DETRAN ${brl(d.detran)}</span>` : "",
+      ].filter(Boolean).join("");
+
+      const rows = d.lancamentos.map(lc => `<tr>
+        <td>${lc.hora || "—"}</td>
+        <td>${escHtml(lc.placa || "")}</td>
+        <td>${escHtml(lc.cliente || "")}</td>
+        <td>${escHtml(lc.servico || "")}</td>
+        <td class="val">${brl(lc.valor || 0)}</td>
+        <td><span class="fp-chip ${lc.fp || ""}">${fpLabel(lc.fp)}</span></td>
+      </tr>`).join("");
+
+      return `
+        <div class="day-group" data-date="${d.data}">
+          <div class="day-summary" onclick="toggleDay(this)">
+            <div class="day-date">${fmtDate(d.data)}</div>
+            <div class="day-count">${d.count} lanç.</div>
+            <div class="day-chips">${chips}</div>
+            <div class="day-total">${brl(d.total)}</div>
+            <div class="day-chevron">▼</div>
+          </div>
+          <div class="day-detail">
+            <table class="day-table">
+              <thead><tr>
+                <th>Hora</th><th>Placa</th><th>Cliente</th>
+                <th>Serviço</th><th>Valor</th><th>FP</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  function toggleDay(summaryEl) {
+    summaryEl.closest(".day-group").classList.toggle("open");
+  }
+
+  function fpLabel(fp) {
+    const m = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito",
+                pix: "PIX", faturado: "Faturado", detran: "DETRAN" };
+    return m[fp] || fp || "—";
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  carregar();
+</script>
+</body>
+</html>

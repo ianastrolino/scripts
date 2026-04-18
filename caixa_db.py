@@ -111,6 +111,16 @@ def update_lancamento(unit_dir: Path, lancamento_id: str, fields: dict[str, Any]
         return cur.rowcount > 0
 
 
+def load_lancamentos_range(unit: str, unit_dir: Path, date_from: str, date_to: str) -> list[dict[str, Any]]:
+    """Retorna todos os lançamentos da unidade no intervalo [date_from, date_to] (ISO)."""
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(
+            "SELECT * FROM lancamentos WHERE unit=? AND data BETWEEN ? AND ? ORDER BY data, timestamp",
+            (unit, date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def delete_lancamento(unit_dir: Path, lancamento_id: str) -> bool:
     """Remove um lançamento. Retorna True se encontrado."""
     with _connect(unit_dir) as conn:
