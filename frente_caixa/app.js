@@ -268,8 +268,7 @@ function recordsForFilter() {
 function recordIssues(record) {
   const issues = [];
   // "sem-vinculo" = usuario confirmou que cliente nao existe no Tiny → nao pode enviar
-  // pdvExtra FA: cliente digitado no PDV → servidor faz resolve_contact por nome, nao bloqueia aqui
-  if (record.fp === "FA" && !record.pdvExtra && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
+  if (record.fp === "FA" && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
   // Cruzamento PDV: bloqueia envio ate usuario confirmar manualmente divergencias
@@ -422,7 +421,7 @@ function renderSummary() {
   const avRecords = state.records.filter((record) => record.fp === "AV");
   const totalFa = sum(faRecords);
   const totalAv = sum(avRecords);
-  const missingClients = faRecords.filter((record) => !record.tinyClienteId && !record.pdvExtra).length;
+  const missingClients = faRecords.filter((record) => !record.tinyClienteId).length;
   const pending = state.records.filter((record) => recordIssues(record).length > 0).length;
   const firstDate = state.records[0]?.data || "";
   const dueDate = firstDate ? lastDayOfMonth(firstDate) : "";
@@ -830,7 +829,7 @@ const mapState = {
 function openMapClientesModal() {
   mapState.queue = [...new Set(
     state.records
-      .filter((r) => r.fp === "FA" && !r.tinyClienteId && !r.pdvExtra)
+      .filter((r) => r.fp === "FA" && !r.tinyClienteId)
       .map((r) => r.cliente)
   )];
   if (!mapState.queue.length) return;
@@ -851,7 +850,7 @@ function mapNext() {
     return;
   }
   mapState.current = mapState.queue.shift();
-  const total = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId && !r.pdvExtra).length;
+  const total = state.records.filter((r) => r.fp === "FA" && !r.tinyClienteId).length;
   document.querySelector("#mapProgress").textContent =
     `${mapState.queue.length + 1} de ${total + mapState.queue.length} cliente(s) nao mapeado(s)`;
   document.querySelector("#mapClienteAtual").innerHTML =
