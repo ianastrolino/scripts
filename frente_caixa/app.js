@@ -308,9 +308,9 @@ function renderTable() {
         <strong>${record.tipoServico}</strong>
         <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${record.origemArquivo.replace("PDV ", "")}</span>` : record.origemArquivo}</div>
       </td>
-      <td>${record.placa}</td>
+      <td><span class="placa-tag">${record.placa}</span></td>
       <td>${record.servico}</td>
-      <td><span class="status ${record.fp === "FA" ? "ok" : "pending"}">${record.fp}</span></td>
+      <td><span class="fp-chip ${record.fp === "FA" ? "fa" : "av"}">${record.fp}</span></td>
       <td>${paymentControl(record)}</td>
       <td class="amount">${formatMoney(record.preco)}</td>
       <td>${tinyControl(record, issues)}</td>
