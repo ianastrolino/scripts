@@ -467,19 +467,23 @@ def unit_static(unit: str, filename: str):
 @unit_access_required
 def api_auth_start(unit: str):
     """Inicia o fluxo OAuth para a unidade."""
-    # Detecta automaticamente a URL de redirecionamento baseada no host atual
-    config = _build_unit_config(unit)
-    tiny = config["tiny"]
-    redirect_uri = f"https://{request.host}/u/{unit}/callback"
-    
-    params = {
-        "client_id": tiny["client_id"],
-        "redirect_uri": redirect_uri,
-        "scope": tiny["oauth_scope"],
-        "response_type": "code",
-    }
-    url = f"{tiny['auth_url']}?{urllib.parse.urlencode(params)}"
-    return redirect(url)
+    try:
+        config = _build_unit_config(unit)
+        tiny = config["tiny"]
+        redirect_uri = f"https://{request.host}/u/{unit}/callback"
+        params = {
+            "client_id": tiny["client_id"],
+            "redirect_uri": redirect_uri,
+            "scope": tiny["oauth_scope"],
+            "response_type": "code",
+        }
+        url = f"{tiny['auth_url']}?{urllib.parse.urlencode(params)}"
+        return redirect(url)
+    except KeyError as exc:
+        return f"<h1>Configuracao Tiny incompleta</h1><p>Campo ausente: <code>{exc}</code> para unidade <strong>{unit}</strong>.</p><p>Verifique UNITS_CONFIG no Railway.</p>", 500
+    except Exception as exc:
+        app.logger.exception("[server] auth unit=%s", unit)
+        return f"<h1>Erro ao iniciar autenticacao</h1><pre>{exc}</pre>", 500
 
 
 @app.route("/u/<unit>/callback")
