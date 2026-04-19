@@ -35,19 +35,17 @@
     .brand-sub { font-size: 11px; color: rgba(255,255,255,.4); }
     .top-right { display: flex; align-items: center; gap: 12px; }
     .user-chip { font-size: 12px; color: rgba(255,255,255,.5); }
-    .btn-gerencial {
-      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
-      color: rgba(255,255,255,.8); border-radius: 7px; padding: 6px 14px;
-      font-size: 12px; font-weight: 600; text-decoration: none;
-      transition: background .15s;
-    }
-    .btn-gerencial:hover { background: rgba(255,255,255,.14); }
-    .btn-logout {
-      background: transparent; border: 1px solid rgba(255,255,255,.15);
-      color: rgba(255,255,255,.5); border-radius: 7px; padding: 6px 14px;
-      font-size: 12px; text-decoration: none; transition: color .15s;
-    }
-    .btn-logout:hover { color: rgba(255,255,255,.8); }
+    .ham-menu { position: relative; }
+    .ham-btn { width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s; }
+    .ham-btn:hover { background:rgba(255,255,255,.12);color:#fff; }
+    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
+    .ham-menu.open .ham-dropdown { display:block; }
+    .dd-item { display:block;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);text-decoration:none;transition:background .12s,color .12s; }
+    .dd-item:hover { background:rgba(255,255,255,.08);color:#fff; }
+    .dd-item.active { color:#fff;font-weight:700; }
+    .dd-sep { height:1px;background:rgba(255,255,255,.07);margin:4px 6px; }
+    .dd-item.danger { color:rgba(255,80,80,.7); }
+    .dd-item.danger:hover { background:rgba(220,38,38,.15);color:#f87171; }
 
     /* ── Workspace ── */
     .workspace { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
@@ -125,9 +123,17 @@
   </div>
   <div class="top-right">
     <span class="user-chip" id="userInfo"></span>
-    <a href="/home" class="btn-gerencial">🏠 Home</a>
-    <a href="/gerencial" class="btn-gerencial">📊 Gerencial da Rede</a>
-    <a href="/logout" class="btn-logout">Sair</a>
+    <div class="ham-menu" id="hamMenu">
+      <button class="ham-btn" id="hamBtn" type="button">☰</button>
+      <div class="ham-dropdown">
+        <a class="dd-item" href="/home">🏠 Home</a>
+        <div class="dd-sep"></div>
+        <a class="dd-item active">🏢 Painel Rede</a>
+        <a class="dd-item" href="/gerencial">📊 Gerencial Rede</a>
+        <div class="dd-sep"></div>
+        <a class="dd-item danger" href="/logout">Sair</a>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -226,6 +232,12 @@
 
   loadUnits();
   loadUserInfo();
+
+  // Hamburguer
+  const hamBtn  = document.getElementById("hamBtn");
+  const hamMenu = document.getElementById("hamMenu");
+  hamBtn.addEventListener("click", e => { e.stopPropagation(); hamMenu.classList.toggle("open"); });
+  document.addEventListener("click", () => hamMenu.classList.remove("open"));
 </script>
 </body>
 </html>
