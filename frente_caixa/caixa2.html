@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Astro Ops · Caixa do Dia</title>
+  <title>Astro Vistorias App — Caixa do Dia</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@
     ═══════════════════════════════════════════════════════ */
     .header {
       background: #080f1c;
-      height: 54px;
+      height: 56px;
       padding: 0 20px;
       display: flex;
       align-items: center;
@@ -102,7 +102,7 @@
       display: flex;
       align-items: center;
     }
-    .header-logo-pill img { height: 20px; width: auto; }
+    .header-logo-pill img { height: 24px; width: auto; }
     .brand-name {
       font-size: 13px;
       font-weight: 700;
@@ -198,9 +198,9 @@
     }
     .nav-pill:hover { color: rgba(255,255,255,.72); }
     .nav-pill.active {
-      background: var(--red);
+      background: #3b82f6;
       color: #fff;
-      box-shadow: 0 1px 6px rgba(220,38,38,.45);
+      box-shadow: 0 1px 6px rgba(59,130,246,.45);
     }
 
     .btn-resumo {
@@ -237,7 +237,7 @@
     .user-avatar {
       width: 20px; height: 20px;
       border-radius: 50%;
-      background: var(--red);
+      background: #3b82f6;
       color: #fff;
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700;
@@ -1608,11 +1608,11 @@
         </div>
       </div>
       <div class="header-logo-pill">
-        <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+        <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
       </div>
       <div>
-        <div class="brand-name">Astro Ops</div>
-        <div class="brand-sub">Rede Astrovistorias</div>
+        <div class="brand-name">Astro Vistorias App</div>
+        <div class="brand-sub">Caixa do Dia</div>
       </div>
     </div>
 
@@ -1949,7 +1949,7 @@
 
   <!-- ═══ CHAT FLUTUANTE ASTRO ════════════════════════════════ -->
   <button class="chat-fab" id="chatToggleBtn" title="Falar com o Astro">
-    <img src="logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
+    <img src="/logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
     <span style="display:none;color:#fff;font-weight:800;font-size:15px;">A</span>
     <span class="chat-badge" id="chatBadge">1</span>
@@ -1959,7 +1959,7 @@
   <div class="chat-panel" id="chatPanel">
     <div class="chat-panel-header">
       <div class="chat-panel-avatar">
-        <img src="logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
+        <img src="/logo/PNG/ASTRO%20Logo%20Icon_Full%20Color.png" alt="Astro"
              onerror="this.parentElement.textContent='A'">
       </div>
       <div class="chat-panel-info">
