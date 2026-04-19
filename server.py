@@ -362,6 +362,20 @@ def _json(data: Any, status: int = 200) -> Response:
 # Rota: health check
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/api/me")
+@login_required
+def api_me():
+    """Retorna dados do usuário logado — usado pela home page."""
+    user = _current_user()
+    return _json({
+        "usuario": session.get("name", ""),
+        "email":   session.get("email", ""),
+        "master":  bool(user and user.get("master")),
+        "gerencial": bool(user and (user.get("gerencial") or user.get("master"))),
+        "unit":    user.get("unit", "") if user else "",
+    })
+
+
 @app.route("/health")
 def health():
     """Usado pelo Railway para verificar se o processo está vivo."""

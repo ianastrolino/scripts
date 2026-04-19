@@ -108,7 +108,7 @@
 <header class="topbar">
   <div class="brand">
     <div class="brand-logo">
-      <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro">
+      <img src="/u/logo/PNG/ASTRO%20Logo_Full%20Color.png" onerror="this.src='/logo/PNG/ASTRO%20Logo_Full%20Color.png'" alt="Astro">
     </div>
   </div>
   <div class="top-right">
@@ -161,21 +161,25 @@
   }
 
   async function init() {
-    // Tenta detectar unidade pela URL — /home ou /u/<unit>/home
-    const parts = location.pathname.split("/");
+    const parts    = location.pathname.split("/");
     const unitSlug = parts[1] === "u" ? parts[2] : null;
     const apiBase  = unitSlug ? `/u/${unitSlug}` : null;
 
-    let info = {};
+    // Sempre busca dados do usuário logado primeiro
+    let me = {};
+    try { me = await fetch("/api/me").then(r => r.json()); } catch(e) {}
+
+    // Info adicional da unidade (serviços, nome da unidade)
+    let info = { ...me };
     if (apiBase) {
-      try { info = await fetch(`${apiBase}/api/info`).then(r => r.json()); } catch(e) {}
-    } else {
-      // master — chama endpoint sem unidade
-      try { info = await fetch("/master/api/units").then(r => r.json()).then(d => ({ master: true, units: d.units })); } catch(e) {}
+      try {
+        const extra = await fetch(`${apiBase}/api/info`).then(r => r.json());
+        info = { ...me, ...extra };
+      } catch(e) {}
     }
 
     // Saudação
-    const nome = info.usuario || info.name || "Usuário";
+    const nome = me.usuario || "Usuário";
     document.getElementById("hdrUser").textContent = nome;
     document.getElementById("greetLabel").textContent = hora();
     document.getElementById("greetName").textContent  = nome;
