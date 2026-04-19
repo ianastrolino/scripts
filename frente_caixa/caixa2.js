@@ -412,12 +412,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Toggle dropdown
-      const menu = document.getElementById("userMenu");
-      const chip = document.getElementById("userChip");
-      if (menu && chip) {
-        chip.addEventListener("click", e => { e.stopPropagation(); menu.classList.toggle("open"); });
-        document.addEventListener("click", () => menu.classList.remove("open"));
+      // Toggle hamburger menu
+      const hamMenu = document.getElementById("hamMenu");
+      const hamBtn  = document.getElementById("hamBtn");
+      if (hamMenu && hamBtn) {
+        hamBtn.addEventListener("click", e => { e.stopPropagation(); hamMenu.classList.toggle("open"); });
+        document.addEventListener("click", () => hamMenu.classList.remove("open"));
       }
     }).catch(() => {});
   }
