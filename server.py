@@ -585,6 +585,7 @@ def api_info(unit: str):
         "usuario": session.get("name", ""),
         "email": session.get("email", ""),
         "master": bool(user and user.get("master")),
+        "gerencial": bool(user and (user.get("gerencial") or user.get("master"))),
         "servicos": servicos,
         "pin_configurado": bool(ud.get("master_pin")),
     })

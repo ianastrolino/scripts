@@ -402,6 +402,15 @@ document.addEventListener("DOMContentLoaded", () => {
         if (linkCaixaL2) linkCaixaL2.href = `${apiBase}/caixa2`;
         const linkManual = document.getElementById("linkManual");
         if (linkManual) linkManual.href = `${apiBase}/manual`;
+        const linkGerencial = document.getElementById("linkGerencial");
+        if (linkGerencial && info.gerencial) {
+          linkGerencial.href = `${apiBase}/gerencial`;
+          linkGerencial.style.display = "";
+        }
+        const linkRede = document.getElementById("linkRede");
+        if (linkRede && info.master) {
+          linkRede.style.display = "";
+        }
       }
     }).catch(() => {});
   }
