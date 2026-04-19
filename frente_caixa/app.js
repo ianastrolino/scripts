@@ -52,12 +52,28 @@ const knownTinyClients = new Map();
 const _pathMatch = window.location.pathname.match(/^(\/u\/[^/]+)/);
 const apiBase = _pathMatch ? _pathMatch[1] : "";
 
+let _csrfToken = null;
+async function getCsrfToken() {
+  if (!_csrfToken) {
+    try {
+      const data = await fetch("/api/csrf-token").then(r => r.json());
+      _csrfToken = data.token || "";
+    } catch { _csrfToken = ""; }
+  }
+  return _csrfToken;
+}
+
 /**
  * Wrapper de fetch para rotas da API.
  * Trata sessao expirada (401 + session_expired) redirecionando para login
  * em vez de exibir erro de parse de JSON.
  */
 async function apiFetch(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    const token = await getCsrfToken();
+    options.headers = { ...options.headers, "X-CSRF-Token": token };
+  }
   const response = await fetch(path, options);
   const text = await response.text();
   if (!text) {
@@ -385,9 +401,9 @@ function renderTable() {
       // Registra divergência antes de confirmar
       if (rec && apiBase) {
         const conf = state.conferencia[id] || {};
-        fetch(`${apiBase}/api/divergencias/registrar`, {
+        getCsrfToken().then(token => fetch(`${apiBase}/api/divergencias/registrar`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
           body: JSON.stringify({
             placa:     rec.placa     || "",
             cliente:   rec.cliente   || "",
@@ -399,7 +415,7 @@ function renderTable() {
             pdv_fp:    conf.pdv_fp   || "",
             arquivo:   (state.sourceFiles || []).join(", "),
           }),
-        }).catch(() => {});
+        })).catch(() => {});
       }
       state.conferido.add(id);
       render();

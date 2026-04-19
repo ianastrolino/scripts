@@ -17,7 +17,23 @@ const state = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+let _csrfToken = null;
+async function getCsrfToken() {
+  if (!_csrfToken) {
+    try {
+      const data = await fetch("/api/csrf-token").then(r => r.json());
+      _csrfToken = data.token || "";
+    } catch { _csrfToken = ""; }
+  }
+  return _csrfToken;
+}
+
 async function apiFetch(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    const token = await getCsrfToken();
+    options.headers = { ...options.headers, "X-CSRF-Token": token };
+  }
   const response = await fetch(path, options);
   const text = await response.text();
   if (!text) throw new Error(`Resposta vazia (HTTP ${response.status}).`);

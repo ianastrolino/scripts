@@ -199,6 +199,26 @@ def _current_user() -> dict[str, Any] | None:
     return USERS.get(email) if email else None
 
 
+# ── CSRF ───────────────────────────────────────────────────────────────────────
+def _get_csrf_token() -> str:
+    """Gera e persiste token CSRF na sessão do usuário."""
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+    return session["csrf_token"]
+
+def csrf_required(f):
+    """Valida X-CSRF-Token em requisições mutáveis (POST/PUT/DELETE)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            token = request.headers.get("X-CSRF-Token", "")
+            expected = session.get("csrf_token", "")
+            if not expected or not secrets.compare_digest(token, expected):
+                return _json({"success": False, "error": "Token CSRF inválido."}, 403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -374,6 +394,13 @@ def api_me():
         "gerencial": bool(user and (user.get("gerencial") or user.get("master"))),
         "unit":    user.get("unit", "") if user else "",
     })
+
+
+@app.route("/api/csrf-token")
+@login_required
+def api_csrf_token():
+    """Retorna o token CSRF da sessão — chamado uma vez pelo frontend."""
+    return _json({"token": _get_csrf_token()})
 
 
 @app.route("/health")
@@ -637,6 +664,7 @@ _FORMA_NAMES: dict[int, str] = {
 
 @app.route("/u/<unit>/api/preview", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_preview(unit: str):
     try:
         data       = request.get_json(force=True, silent=True) or {}
@@ -720,6 +748,7 @@ def api_preview(unit: str):
 
 @app.route("/u/<unit>/api/send", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_send(unit: str):
     try:
         data      = request.get_json(force=True, silent=True) or {}
@@ -827,6 +856,7 @@ def api_send(unit: str):
 
 @app.route("/u/<unit>/api/clear-imported", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_clear_imported(unit: str):
     """Limpa o estado local de importacao (imported.json) para permitir reenvio."""
     try:
@@ -850,6 +880,7 @@ def api_clear_imported(unit: str):
 
 @app.route("/u/<unit>/api/suggest-clients", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_suggest_clients(unit: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -956,6 +987,7 @@ def api_diagnostic_categorias(unit: str):
 
 @app.route("/u/<unit>/api/map-client", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_map_client(unit: str):
     try:
         data         = request.get_json(force=True, silent=True) or {}
@@ -978,6 +1010,7 @@ def api_map_client(unit: str):
 
 @app.route("/u/<unit>/api/auto-map-clients", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_auto_map_clients(unit: str):
     try:
         data      = request.get_json(force=True, silent=True) or {}
@@ -1207,6 +1240,7 @@ def unit_fechamento(unit: str):
 
 @app.route("/u/<unit>/api/astro", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_astro(unit: str):
     """Assistente virtual Astro — powered by Claude Haiku."""
     try:
@@ -1315,6 +1349,7 @@ def api_caixa_estado(unit: str):
 
 @app.route("/u/<unit>/api/caixa/lancar", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_caixa_lancar(unit: str):
     try:
         data    = request.get_json(force=True, silent=True) or {}
@@ -1362,6 +1397,7 @@ def api_caixa_lancar(unit: str):
 
 @app.route("/u/<unit>/api/caixa/editar/<lancamento_id>", methods=["PUT"])
 @unit_access_required
+@csrf_required
 def api_caixa_editar(unit: str, lancamento_id: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -1400,6 +1436,7 @@ def api_caixa_editar(unit: str, lancamento_id: str):
 
 @app.route("/u/<unit>/api/caixa/excluir/<lancamento_id>", methods=["DELETE"])
 @unit_access_required
+@csrf_required
 def api_caixa_excluir(unit: str, lancamento_id: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -1431,6 +1468,7 @@ def api_caixa_excluir(unit: str, lancamento_id: str):
 
 @app.route("/u/<unit>/api/caixa/conferir", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_caixa_conferir(unit: str):
     """Cruza registros AV da planilha com lancamentos do PDV do dia.
 
@@ -1681,6 +1719,7 @@ def api_gerencial_exportar(unit: str):
 
 @app.route("/u/<unit>/api/divergencias/registrar", methods=["POST"])
 @unit_access_required
+@csrf_required
 def api_divergencias_registrar(unit: str):
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -2102,6 +2141,7 @@ threading.Thread(target=_cron_loop, daemon=True, name="cron").start()
 
 @app.route("/gerencial/api/backup", methods=["POST"])
 @master_only_required
+@csrf_required
 def api_backup_manual():
     """Dispara backup imediato e envia por email. Retorna tamanho do ZIP."""
     try:
