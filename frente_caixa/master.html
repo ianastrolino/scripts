@@ -11,7 +11,7 @@
       --line: #e2e8f0;
       --ink: #0f172a;
       --muted: #64748b;
-      --accent: #d32f2f;
+      --accent: #3b82f6;
       --green: #059669;
       --green-bg: #ecfdf5;
       --amber: #d97706;
@@ -125,6 +125,7 @@
   </div>
   <div class="top-right">
     <span class="user-chip" id="userInfo"></span>
+    <a href="/home" class="btn-gerencial">🏠 Home</a>
     <a href="/gerencial" class="btn-gerencial">📊 Gerencial da Rede</a>
     <a href="/logout" class="btn-logout">Sair</a>
   </div>
@@ -157,7 +158,6 @@
           <div class="unit-header">
             <div>
               <div class="unit-name">${u.nome}</div>
-              <div class="unit-id">ID: ${u.id}</div>
             </div>
             <span class="status-badge loading" id="status-${u.id}">...</span>
           </div>
