@@ -1102,9 +1102,66 @@ def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
             )
 
 
+# ── PIN hash seguro ────────────────────────────────────────────────────────────
+# Formato novo:  "pbkdf2:<salt_hex>:<dk_hex>"
+# Formato legado: qualquer string sem prefixo "pbkdf2:"
+# Migração: na primeira verificação correta com legado, o hash é gravado
+#           em /data/pins.json e usado em todas as verificações seguintes.
+_PINS_FILE = DATA_DIR / "pins.json"
+_pins_lock = threading.Lock()
+
+def _load_pin_store() -> dict:
+    try:
+        return json.loads(_PINS_FILE.read_text()) if _PINS_FILE.exists() else {}
+    except Exception:
+        return {}
+
+def _save_pin_store(store: dict) -> None:
+    try:
+        _PINS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _PINS_FILE.write_text(json.dumps(store, indent=2))
+    except Exception as e:
+        app.logger.warning("Nao foi possivel salvar pins.json: %s", e)
+
+def _hash_pin(pin: str) -> str:
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt.encode(), 200_000)
+    return f"pbkdf2:{salt}:{dk.hex()}"
+
+def _verify_pin_hash(pin: str, stored: str) -> bool:
+    try:
+        _, salt, dk_hex = stored.split(":", 2)
+        dk = hashlib.pbkdf2_hmac("sha256", pin.encode(), salt.encode(), 200_000)
+        return secrets.compare_digest(dk.hex(), dk_hex)
+    except Exception:
+        return False
+
 def _verify_unit_pin(unit: str, pin: str) -> bool:
-    stored = str(UNITS.get(unit, {}).get("master_pin", ""))
-    return bool(stored) and secrets.compare_digest(pin.strip(), stored)
+    pin = pin.strip()
+    if not pin:
+        return False
+
+    with _pins_lock:
+        store = _load_pin_store()
+
+    # Formato novo — verifica hash
+    if unit in store:
+        return _verify_pin_hash(pin, store[unit])
+
+    # Formato legado — plaintext do UNITS_CONFIG
+    stored_plain = str(UNITS.get(unit, {}).get("master_pin", ""))
+    if not stored_plain:
+        return False
+
+    if secrets.compare_digest(pin, stored_plain):
+        # Migração automática: grava hash e nunca mais usa plaintext
+        with _pins_lock:
+            store = _load_pin_store()
+            store[unit] = _hash_pin(pin)
+            _save_pin_store(store)
+        return True
+
+    return False
 
 
 def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
