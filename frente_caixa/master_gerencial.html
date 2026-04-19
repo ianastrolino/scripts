@@ -300,6 +300,7 @@
 
     <button class="btn-aplicar" id="btnAplicar">Aplicar</button>
     <button class="btn-exportar" id="btnExportar">⬇ Export CSV</button>
+    <button class="btn-exportar" id="btnBackup" style="margin-left:8px">☁ Backup</button>
   </div>
 
   <!-- Resumo consolidado -->
@@ -486,6 +487,22 @@
     const { from, to } = getRange();
     const unit = document.getElementById("selUnit").value;
     window.location.href = `/gerencial/api/exportar?from=${from}&to=${to}&unit=${unit}`;
+  });
+  document.getElementById("btnBackup").addEventListener("click", async () => {
+    const btn = document.getElementById("btnBackup");
+    btn.disabled = true;
+    btn.textContent = "Gerando…";
+    try {
+      const res  = await fetch("/gerencial/api/backup", { method: "POST" });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      btn.textContent = `✓ Enviado (${data.size_kb} KB)`;
+      setTimeout(() => { btn.textContent = "☁ Backup"; btn.disabled = false; }, 4000);
+    } catch (e) {
+      btn.textContent = "Erro!";
+      alert("Falha no backup: " + e.message);
+      setTimeout(() => { btn.textContent = "☁ Backup"; btn.disabled = false; }, 3000);
+    }
   });
 
   // ── Render: resumo ──────────────────────────────────────

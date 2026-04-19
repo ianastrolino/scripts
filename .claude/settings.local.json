@@ -14,7 +14,25 @@
       "Bash(python3 -c \"import tiny_import; print\\('OK'\\)\")",
       "Bash(git commit -m ' *)",
       "Bash(python3 fix_categorias_barueri.py)",
-      "Bash(python3 fix_categorias_barueri.py --de 2026-04-01 --ate 2026-04-16)"
+      "Bash(python3 fix_categorias_barueri.py --de 2026-04-01 --ate 2026-04-16)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\); print\\('server.py OK'\\)\")",
+      "Bash(node --check frente_caixa/app.js)",
+      "Read(//home/astro/venv/**)",
+      "Read(//home/astro/env/**)",
+      "Read(//home/astro/**)",
+      "Bash(apt-get install *)",
+      "Bash(~/.local/bin/pip install *)",
+      "Bash(python3 server.py)",
+      "Read(//tmp/**)",
+      "Bash(xargs kill *)",
+      "Bash(git checkout *)",
+      "Bash(git cherry-pick *)",
+      "Bash(.venv/bin/python -c \"import pytest; print\\(pytest.__version__\\)\")",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/pytest tests/test_caixa_routes.py -v)",
+      "Bash(python -m pytest tests/ -v)"
     ]
   }
 }

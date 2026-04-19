@@ -1838,10 +1838,12 @@ def api_master_divergencias():
 # Alerta de fechamento — cron interno 18:30 SP
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _send_email(subject: str, html: str) -> None:
+def _send_email(subject: str, html: str, attachment: bytes | None = None, attachment_name: str = "") -> None:
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText as _MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
     host       = os.environ.get("SMTP_HOST", "")
     port       = int(os.environ.get("SMTP_PORT", "465"))
     user       = os.environ.get("SMTP_USER", "")
@@ -1850,11 +1852,17 @@ def _send_email(subject: str, html: str) -> None:
     if not all([host, user, passwd, recipients]):
         app.logger.warning("[email] SMTP nao configurado — email nao enviado.")
         return
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = subject
     msg["From"]    = f"Astrovistorias <{user}>"
     msg["To"]      = ", ".join(recipients)
     msg.attach(_MIMEText(html, "html", "utf-8"))
+    if attachment and attachment_name:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(attachment)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
+        msg.attach(part)
     with smtplib.SMTP_SSL(host, port) as smtp:
         smtp.login(user, passwd)
         smtp.sendmail(user, recipients, msg.as_string())
@@ -1924,23 +1932,108 @@ def _enviar_alerta_fechamento(today: str) -> None:
         app.logger.error("[email] Falha ao enviar alerta: %s", e)
 
 
-def _cron_fechamento() -> None:
-    tz         = ZoneInfo("America/Sao_Paulo")
-    last_sent  = ""
+def _criar_backup_zip() -> bytes:
+    """Gera um ZIP em memória com dump SQL de todos os bancos + JSONs de config."""
+    import io, zipfile, sqlite3
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for uid in UNITS:
+            unit_dir = DATA_DIR / uid
+            db_path  = unit_dir / "caixa_dia.db"
+            if db_path.exists():
+                try:
+                    conn = sqlite3.connect(str(db_path))
+                    sql  = "\n".join(conn.iterdump())
+                    conn.close()
+                    zf.writestr(f"{uid}/caixa_dia.sql", sql.encode("utf-8"))
+                except Exception as exc:
+                    app.logger.error("[backup] Falha ao dumpar %s: %s", uid, exc)
+            for fname in ("imported.json", "cliente_ids.json"):
+                p = unit_dir / fname
+                if p.exists():
+                    zf.writestr(f"{uid}/{fname}", p.read_bytes())
+    buf.seek(0)
+    return buf.read()
+
+
+def _executar_backup() -> None:
+    tz      = ZoneInfo("America/Sao_Paulo")
+    today   = dt.datetime.now(tz).date().isoformat()
+    data_fmt = today[8:] + "/" + today[5:7] + "/" + today[:4]
+    app.logger.info("[backup] Iniciando backup de %d unidade(s)", len(UNITS))
+    try:
+        zip_bytes = _criar_backup_zip()
+        size_kb   = len(zip_bytes) // 1024
+        html = f"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;margin:0;padding:0">
+  <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+    <div style="background:#0f1117;padding:24px 28px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Backup Automático</div>
+      <div style="font-size:20px;font-weight:800;color:#fff">Backup do Sistema — {data_fmt}</div>
+    </div>
+    <div style="padding:24px 28px;font-size:14px;color:#374151">
+      <p>Backup diário concluído com sucesso.</p>
+      <ul>
+        <li><strong>Unidades:</strong> {', '.join(UNITS.keys())}</li>
+        <li><strong>Tamanho:</strong> {size_kb} KB</li>
+        <li><strong>Conteúdo:</strong> dump SQL de cada banco + arquivos de configuração</li>
+      </ul>
+      <p style="color:#6b7280;font-size:12px">Para restaurar: <code>sqlite3 novo.db &lt; caixa_dia.sql</code></p>
+    </div>
+  </div>
+</body></html>"""
+        fname = f"backup_astro_{today}.zip"
+        _send_email(f"[Astrovistorias] Backup {data_fmt}", html, zip_bytes, fname)
+        app.logger.info("[backup] Concluido — %d KB enviados", size_kb)
+    except Exception as exc:
+        app.logger.error("[backup] Falha: %s", exc)
+
+
+def _cron_loop() -> None:
+    tz           = ZoneInfo("America/Sao_Paulo")
+    last_alerta  = ""
+    last_backup  = ""
     while True:
         try:
             now   = dt.datetime.now(tz)
             today = now.date().isoformat()
-            if now.hour == 18 and now.minute == 30 and last_sent != today:
-                last_sent = today
-                app.logger.info("[cron] Disparando alerta de fechamento para %s", today)
+            if now.hour == 18 and now.minute == 30 and last_alerta != today:
+                last_alerta = today
+                app.logger.info("[cron] Alerta de fechamento para %s", today)
                 _enviar_alerta_fechamento(today)
+            if now.hour == 0 and now.minute == 0 and last_backup != today:
+                last_backup = today
+                _executar_backup()
         except Exception:
-            app.logger.exception("[cron] Erro no loop de fechamento")
+            app.logger.exception("[cron] Erro no loop")
         time.sleep(60)
 
 
-threading.Thread(target=_cron_fechamento, daemon=True, name="cron-fechamento").start()
+threading.Thread(target=_cron_loop, daemon=True, name="cron").start()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Rota: backup manual (master only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/gerencial/api/backup", methods=["POST"])
+@master_only_required
+def api_backup_manual():
+    """Dispara backup imediato e envia por email. Retorna tamanho do ZIP."""
+    try:
+        zip_bytes = _criar_backup_zip()
+        size_kb   = len(zip_bytes) // 1024
+        tz        = ZoneInfo("America/Sao_Paulo")
+        today     = dt.datetime.now(tz).date().isoformat()
+        data_fmt  = today[8:] + "/" + today[5:7] + "/" + today[:4]
+        html = f"<p>Backup manual disparado em {data_fmt}. Tamanho: {size_kb} KB.</p>"
+        fname = f"backup_astro_{today}_manual.zip"
+        _send_email(f"[Astrovistorias] Backup Manual {data_fmt}", html, zip_bytes, fname)
+        return _json({"success": True, "size_kb": size_kb, "message": f"Backup enviado por email ({size_kb} KB)."})
+    except Exception as exc:
+        app.logger.exception("[backup] Falha no backup manual")
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
