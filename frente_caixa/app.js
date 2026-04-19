@@ -666,17 +666,42 @@ els.fileInput.addEventListener("change", async (event) => {
   if (!files.length) return;
   const imported = [];
   const errors = [];
+  const skipped = [];
+
+  // Chave de deduplicação por conteúdo do registro
+  const recordKey = (r) => `${r.data}|${r.placa}|${r.servico}|${r.valor}|${r.fp}`;
+  const existingKeys = new Set(state.records.map(recordKey));
+
   for (const file of files) {
+    // Bloqueia mesmo arquivo importado duas vezes
+    if (state.sourceFiles.includes(file.name)) {
+      skipped.push(file.name);
+      continue;
+    }
     try {
       const text = await readFileText(file);
       const records = parseExportedHtml(text, file.name);
       if (!records.length) throw new Error("Nenhum registro valido encontrado.");
-      imported.push(...records);
-      if (!state.sourceFiles.includes(file.name)) state.sourceFiles.push(file.name);
+
+      // Filtra registros duplicados por conteúdo
+      const novos = records.filter(r => !existingKeys.has(recordKey(r)));
+      const duplicados = records.length - novos.length;
+      novos.forEach(r => existingKeys.add(recordKey(r)));
+      imported.push(...novos);
+      state.sourceFiles.push(file.name);
+
+      if (duplicados > 0) {
+        skipped.push(`${file.name}: ${duplicados} registro(s) duplicado(s) ignorado(s)`);
+      }
     } catch (error) {
       errors.push(`${file.name}: ${error.message}`);
     }
   }
+
+  if (skipped.length) {
+    alert("⚠️ Arquivo(s) já importado(s) ou com duplicatas:\n\n" + skipped.join("\n"));
+  }
+
   state.records = [...state.records, ...imported];
   state.conferencia = {};
   state.conferido = new Set();
