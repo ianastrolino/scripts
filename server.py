@@ -555,9 +555,7 @@ def api_auth_callback(unit: str):
         )
     except Exception as exc:
         app.logger.exception("[server] oauth callback unit=%s", unit)
-        cid = config["tiny"].get("client_id", "?")
-        return (f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
-                f"<hr><p><b>Debug:</b> redirect_uri={redirect_uri} | client_id={cid}</p>")
+        return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
 
 @app.route("/u/<unit>/api/info")
 @unit_access_required
