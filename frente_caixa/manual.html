@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual do Sistema — Astrovistorias</title>
+  <style>
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --green: #059669;
+      --green-light: #ecfdf5;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --gray: #6b7280;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px; line-height: 1.6; color: var(--text);
+      background: #fff; max-width: 800px; margin: 0 auto; padding: 40px 32px 80px;
+    }
+
+    /* ── Capa ─────────────────────────────────────────── */
+    .cover {
+      text-align: center; padding: 60px 0 48px;
+      border-bottom: 2px solid var(--border); margin-bottom: 48px;
+    }
+    .cover-logo {
+      font-size: 11px; font-weight: 700; letter-spacing: .15em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+    }
+    .cover-title { font-size: 32px; font-weight: 800; color: var(--text); line-height: 1.2; margin-bottom: 12px; }
+    .cover-sub { font-size: 15px; color: var(--muted); margin-bottom: 24px; }
+    .cover-version {
+      display: inline-block; background: var(--accent-light); color: var(--accent);
+      border: 1px solid #bfdbfe; border-radius: 20px; padding: 4px 14px;
+      font-size: 12px; font-weight: 700;
+    }
+
+    /* ── Índice ───────────────────────────────────────── */
+    .toc { background: #f9fafb; border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin-bottom: 48px; }
+    .toc-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 14px; }
+    .toc a { display: block; color: var(--accent); text-decoration: none; padding: 4px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+    .toc a:last-child { border-bottom: none; }
+    .toc a:hover { text-decoration: underline; }
+    .toc-num { color: var(--muted); font-weight: 700; margin-right: 8px; }
+
+    /* ── Seções ───────────────────────────────────────── */
+    .section { margin-bottom: 52px; }
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 24px;
+    }
+    .section-num {
+      background: var(--accent); color: #fff; border-radius: 50%;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; flex-shrink: 0;
+    }
+    .section-title { font-size: 20px; font-weight: 800; color: var(--text); }
+    .section-sub { font-size: 16px; font-weight: 700; color: var(--text); margin: 24px 0 12px; }
+
+    /* ── Passos ───────────────────────────────────────── */
+    .steps { counter-reset: step; }
+    .step {
+      display: flex; gap: 14px; margin-bottom: 14px;
+      padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px;
+    }
+    .step-num {
+      counter-increment: step;
+      background: var(--accent-light); color: var(--accent);
+      border: 1px solid #bfdbfe; border-radius: 50%;
+      width: 26px; height: 26px; display: flex; align-items: center;
+      justify-content: center; font-size: 12px; font-weight: 800;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .step-num::before { content: counter(step); }
+    .step-body { flex: 1; }
+    .step-body strong { color: var(--accent); }
+
+    /* ── Callouts ─────────────────────────────────────── */
+    .note, .warn, .tip, .danger {
+      display: flex; gap: 12px; padding: 14px 16px;
+      border-radius: 10px; margin: 16px 0; font-size: 13.5px;
+    }
+    .note   { background: var(--accent-light); border: 1px solid #bfdbfe; }
+    .tip    { background: var(--green-light);  border: 1px solid #6ee7b7; }
+    .warn   { background: var(--amber-light);  border: 1px solid #fcd34d; }
+    .danger { background: var(--red-light);    border: 1px solid #fca5a5; }
+    .note-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .note-body { flex: 1; }
+    .note-body strong { display: block; margin-bottom: 3px; }
+
+    /* ── UI Elements ──────────────────────────────────── */
+    .ui-btn {
+      display: inline-block; padding: 3px 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 700; border: 1px solid;
+      vertical-align: middle; white-space: nowrap;
+    }
+    .ui-btn.blue   { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .ui-btn.green  { background: var(--green);  color: #fff; border-color: var(--green); }
+    .ui-btn.gray   { background: #f3f4f6; color: var(--text); border-color: var(--border); }
+    .ui-btn.red    { background: var(--red); color: #fff; border-color: var(--red); }
+    .ui-field {
+      display: inline-block; background: #f9fafb; border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 10px; font-size: 12px; color: var(--muted);
+      font-family: monospace; vertical-align: middle;
+    }
+    .fp-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 700; vertical-align: middle;
+    }
+    .fp-chip.din { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
+    .fp-chip.deb { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
+    .fp-chip.crd { background: #f5f3ff; color: #5b21b6; border: 1px solid #c4b5fd; }
+    .fp-chip.pix { background: #ecfeff; color: #0e7490; border: 1px solid #67e8f9; }
+    .fp-chip.fat { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }
+    .fp-chip.det { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; }
+
+    /* ── Tela mockup ──────────────────────────────────── */
+    .screen {
+      background: #f9fafb; border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px; margin: 14px 0; font-size: 12.5px;
+    }
+    .screen-bar {
+      background: #111827; border-radius: 8px; padding: 8px 14px;
+      color: rgba(255,255,255,.5); font-size: 11px; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .screen-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .screen-url { font-family: monospace; font-size: 11px; }
+    .screen-body { display: flex; flex-direction: column; gap: 8px; }
+    .screen-field { display: flex; flex-direction: column; gap: 3px; }
+    .screen-label { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .screen-input { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 13px; color: #9ca3af; }
+    .screen-input.filled { color: var(--text); }
+
+    /* ── Tabela ───────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th { background: #f9fafb; padding: 9px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 2px solid var(--border); }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Divider ──────────────────────────────────────── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+    /* ── Print ────────────────────────────────────────── */
+    @media print {
+      body { padding: 20px 24px; }
+      .cover { page-break-after: always; }
+      .section { page-break-inside: avoid; }
+      .no-print { display: none; }
+      a { color: var(--text); text-decoration: none; }
+    }
+
+    /* ── Print button ─────────────────────────────────── */
+    .print-bar {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; gap: 10px;
+    }
+    .btn-print {
+      background: var(--accent); color: #fff; border: none;
+      padding: 10px 20px; border-radius: 8px; font-size: 13px;
+      font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,.3);
+    }
+    .btn-print:hover { opacity: .9; }
+  </style>
+</head>
+<body>
+
+<!-- Capa -->
+<div class="cover">
+  <div class="cover-logo">Astrovistorias · Rede de Vistorias</div>
+  <div class="cover-title">Manual do Sistema<br>Frente de Caixa</div>
+  <div class="cover-sub">Guia completo de operação do PDV, Fechamento e Gerencial</div>
+  <span class="cover-version">Versão 2.0 — 2026</span>
+</div>
+
+<!-- Índice -->
+<div class="toc">
+  <div class="toc-title">Índice</div>
+  <a href="#acesso"><span class="toc-num">1.</span> Acesso ao Sistema</a>
+  <a href="#pdv"><span class="toc-num">2.</span> PDV — Caixa do Dia</a>
+  <a href="#fechamento"><span class="toc-num">3.</span> Fechamento de Caixa</a>
+  <a href="#gerencial"><span class="toc-num">4.</span> Gerencial (Master)</a>
+  <a href="#faq"><span class="toc-num">5.</span> Perguntas Frequentes</a>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- SEÇÃO 1: ACESSO -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="section" id="acesso">
+  <div class="section-header">
+    <div class="section-num">1</div>
+    <div class="section-title">Acesso ao Sistema</div>
+  </div>
+
+  <p style="margin-bottom:16px">O sistema é acessado pelo navegador — não precisa instalar nada. Recomendamos usar <strong>Google Chrome</strong>.</p>
+
+  <div class="section-sub">Como fazer login</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Abra o link da sua unidade no navegador:<br>
+        <code style="font-size:12px;background:#f3f4f6;padding:2px 8px;border-radius:4px">https://astro-v2.up.railway.app/u/barueri/caixa2</code>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">O sistema abre a tela de login automaticamente. Digite seu <strong>e-mail</strong> e <strong>senha</strong> fornecidos pelo gestor.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Clique em <span class="ui-btn blue">Entrar</span>. Você será redirecionado direto para o PDV da sua unidade.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="note-icon">💡</div>
+    <div class="note-body"><strong>Dica</strong> Salve o link nos favoritos do navegador para acessar rapidamente todos os dias.</div>
+  </div>
+
+  <div class="section-sub">Links por perfil</div>
+  <table>
+    <thead><tr><th>Perfil</th><th>URL</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Auxiliar ADM</strong></td><td><code>https://astro-v2.up.railway.app/u/barueri/caixa2</code></td></tr>
+      <tr><td><strong>Fechamento</strong></td><td><code>https://astro-v2.up.railway.app/u/barueri/fechamento</code></td></tr>
+      <tr><td><strong>Gerencial Barueri</strong></td><td><code>https://astro-v2.up.railway.app/u/barueri/gerencial</code></td></tr>
+      <tr><td><strong>Gerencial Rede (Master)</strong></td><td><code>https://astro-v2.up.railway.app/gerencial</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn">
+    <div class="note-icon">⚠️</div>
+    <div class="note-body"><strong>Importante</strong> Nunca compartilhe sua senha. Ao terminar o expediente, clique em <span class="ui-btn gray">Sair</span> no canto superior direito.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- SEÇÃO 2: PDV -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="section" id="pdv">
+  <div class="section-header">
+    <div class="section-num">2</div>
+    <div class="section-title">PDV — Caixa do Dia</div>
+  </div>
+
+  <p style="margin-bottom:16px">O PDV é a tela principal da auxiliar. Cada atendimento deve ser lançado <strong>no momento em que o cliente paga</strong> — não deixar para depois.</p>
+
+  <div class="section-sub">Lançar um novo atendimento</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">No campo <span class="ui-field">Placa</span>, digite a placa do veículo (ex: <strong>ABC1234</strong> ou <strong>ABC1D23</strong>). Apenas letras e números — sem espaço ou traço.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">No campo <span class="ui-field">Cliente</span>, digite o nome completo do cliente.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Selecione o <span class="ui-field">Serviço</span> realizado na lista suspensa.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Digite o <span class="ui-field">Valor</span> cobrado (somente números — ex: <strong>150.00</strong>).</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Selecione a <strong>Forma de Pagamento</strong> clicando no botão correspondente:<br><br>
+        <span class="fp-chip din">💵 Dinheiro</span>&nbsp;
+        <span class="fp-chip deb">💳 Débito</span>&nbsp;
+        <span class="fp-chip crd">💳 Crédito</span>&nbsp;
+        <span class="fp-chip pix">⚡ PIX</span>&nbsp;
+        <span class="fp-chip fat">🧾 Faturado</span>&nbsp;
+        <span class="fp-chip det">🚗 Taxa DETRAN</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Clique em <span class="ui-btn blue">Lançar</span>. Uma tela de confirmação aparece — confira os dados e clique em <span class="ui-btn green">Confirmar</span>.</div>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="note-icon">✅</div>
+    <div class="note-body"><strong>O lançamento aparece na tabela</strong> imediatamente após a confirmação. O painel superior mostra o total do dia atualizado.</div>
+  </div>
+
+  <div class="section-sub">CPF / CNPJ — quando é obrigatório</div>
+  <p style="margin-bottom:12px">Para os serviços <strong>Laudo de Transferência</strong> e <strong>Revistoria</strong>, o sistema solicita o CPF ou CNPJ do cliente quando o pagamento é à vista.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Selecione o serviço <strong>Laudo de Transferência</strong> ou <strong>Revistoria</strong> e uma forma de pagamento à vista.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">O campo <span class="ui-field">CPF / CNPJ</span> aparece automaticamente. Digite os números — a máscara é aplicada automaticamente.<br>
+      CPF: <code>000.000.000-00</code> &nbsp;|&nbsp; CNPJ: <code>00.000.000/0000-00</code></div>
+    </div>
+  </div>
+
+  <div class="warn">
+    <div class="note-icon">⚠️</div>
+    <div class="note-body"><strong>Atenção</strong> O CPF/CNPJ é obrigatório nesses serviços. O botão Lançar só é liberado após preenchimento e validação.</div>
+  </div>
+
+  <div class="section-sub">Taxa DETRAN</div>
+  <p style="margin-bottom:12px">A Taxa DETRAN é uma forma de pagamento separada — representa valores recebidos pelo DETRAN junto ao serviço. Selecione <span class="fp-chip det">🚗 Taxa DETRAN</span> e lance normalmente.</p>
+
+  <div class="section-sub">Editar um lançamento</div>
+  <div class="note">
+    <div class="note-icon">🔐</div>
+    <div class="note-body"><strong>Requer PIN master.</strong> Somente o responsável pela unidade pode editar lançamentos.</div>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Na tabela, clique no ícone ✏️ na linha do lançamento que deseja editar.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">O modal de edição abre. Altere os campos necessários (placa, cliente, serviço, valor ou forma de pagamento).</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Digite o <strong>PIN master</strong> e clique em <span class="ui-btn blue">Salvar</span>.</div>
+    </div>
+  </div>
+
+  <div class="section-sub">Excluir um lançamento</div>
+  <div class="danger">
+    <div class="note-icon">🗑️</div>
+    <div class="note-body"><strong>Ação irreversível.</strong> Só exclua se o lançamento foi feito por engano. Também requer PIN master.</div>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Na tabela, clique no ícone 🗑️ na linha do lançamento.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Confirme o PIN master quando solicitado.</div>
+    </div>
+  </div>
+
+  <div class="section-sub">Painel do dia (topo da tela)</div>
+  <p>O card escuro no topo mostra em tempo real:</p>
+  <table>
+    <thead><tr><th>Informação</th><th>O que significa</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Total à Vista</strong></td><td>Soma de todos os pagamentos à vista do dia (dinheiro + débito + crédito + PIX)</td></tr>
+      <tr><td><strong>N lançamentos</strong></td><td>Quantos atendimentos foram registrados hoje</td></tr>
+      <tr><td><strong>Chips de serviço</strong></td><td>Os serviços mais realizados no dia com contagem — ex: Laudo ×3</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- SEÇÃO 3: FECHAMENTO -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="section" id="fechamento">
+  <div class="section-header">
+    <div class="section-num">3</div>
+    <div class="section-title">Fechamento de Caixa</div>
+  </div>
+
+  <p style="margin-bottom:16px">O fechamento é feito <strong>uma vez por dia</strong>, ao final do expediente. Ele cruza os lançamentos do PDV com a planilha do sistema de produção e envia tudo para o Tiny (ERP).</p>
+
+  <div class="warn">
+    <div class="note-icon">⏰</div>
+    <div class="note-body"><strong>Prazo</strong> O fechamento deve ser concluído até as <strong>18:30</strong>. Após esse horário, o sistema envia um alerta automático por e-mail ao financeiro e ao gestor.</div>
+  </div>
+
+  <div class="section-sub">Passo a passo do fechamento</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Acesse a tela de <strong>Fechamento</strong> pelo menu superior ou pelo link <code>https://astro-v2.up.railway.app/u/barueri/fechamento</code>.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Clique em <span class="ui-btn blue">Importar Planilha</span> e selecione o arquivo <code>.xlsx</code> exportado do sistema de produção do dia.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Aguarde o carregamento. A tabela de conferência aparece com todos os registros da planilha.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Clique em <span class="ui-btn blue">Conferir Caixa ✓</span>. O sistema cruza automaticamente os lançamentos do PDV com a planilha.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Resolva as pendências na tabela (ver seção abaixo).</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Quando o status mostrar <strong style="color:var(--green)">Lote pronto</strong>, clique em <span class="ui-btn green">Enviar para o Tiny</span>.</div>
+    </div>
+  </div>
+
+  <div class="section-sub">Entendendo a tabela de conferência</div>
+  <table>
+    <thead><tr><th>Status</th><th>O que significa</th><th>O que fazer</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span style="color:var(--green);font-weight:700">✅ Pronto</span></td>
+        <td>Lançamento encontrado no PDV com valor e FP iguais</td>
+        <td>Nada — já está certo</td>
+      </tr>
+      <tr>
+        <td><span style="color:var(--amber);font-weight:700">⚠️ Divergência</span></td>
+        <td>Encontrado no PDV mas com valor ou FP diferente</td>
+        <td>Corrija no PDV ou clique "Confirmar assim"</td>
+      </tr>
+      <tr>
+        <td><span style="color:var(--red);font-weight:700">❌ Sem registro</span></td>
+        <td>Não foi lançado no PDV (placa errada ou esqueceu)</td>
+        <td>Selecione o FP e clique "Confirmar assim"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="section-sub">Como resolver "Sem registro no PDV"</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Na linha com ❌, o campo de pagamento aparece com "A definir". Selecione a forma de pagamento correta no menu suspenso.</div>
+    </div>
+    <div class="step">
+      <div class="step-num"></div>
+      <div class="step-body">Clique em <span class="ui-btn gray">Confirmar assim</span>. O sistema aceita o registro e salva a divergência no relatório de auditoria.</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="note-icon">📋</div>
+    <div class="note-body"><strong>Auditoria automática</strong> Toda vez que "Confirmar assim" é usado, o sistema registra a divergência automaticamente. O gestor pode consultar pelo Gerencial.</div>
+  </div>
+
+  <div class="section-sub">Registros AV sem pagamento definido</div>
+  <p style="margin-bottom:12px">Registros à vista precisam ter a forma de pagamento selecionada antes do envio. Para cada linha com "A definir", escolha entre:</p>
+  <p>
+    <span class="fp-chip din">💵 Dinheiro</span>&nbsp;
+    <span class="fp-chip deb">💳 Débito</span>&nbsp;
+    <span class="fp-chip crd">💳 Crédito</span>&nbsp;
+    <span class="fp-chip pix">⚡ PIX</span>
+  </p>
+
+  <div class="section-sub">Painel lateral — Entradas Físicas</div>
+  <p style="margin-bottom:12px">No lado direito da tela, preencha os valores reais recebidos no caixa físico:</p>
+  <table>
+    <thead><tr><th>Campo</th><th>O que preencher</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Dinheiro</strong></td><td>Total em espécie contado no caixa</td></tr>
+      <tr><td><strong>Débito</strong></td><td>Total das maquininhas débito</td></tr>
+      <tr><td><strong>Crédito</strong></td><td>Total das maquininhas crédito</td></tr>
+      <tr><td><strong>PIX / Transf.</strong></td><td>Total de PIX e transferências recebidos</td></tr>
+      <tr><td><strong>Retorno cliente</strong></td><td>Troco devolvido ou estorno (valor negativo)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <div class="note-icon">✅</div>
+    <div class="note-body"><strong>Diferença de entradas</strong> O sistema calcula automaticamente a diferença entre o total da planilha e o total físico. O ideal é <strong>R$ 0,00</strong>. Qualquer diferença aparece em destaque para investigação.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- SEÇÃO 4: GERENCIAL -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="section" id="gerencial">
+  <div class="section-header">
+    <div class="section-num">4</div>
+    <div class="section-title">Gerencial</div>
+  </div>
+
+  <div class="note">
+    <div class="note-icon">🔐</div>
+    <div class="note-body"><strong>Acesso restrito</strong> O Gerencial é exclusivo para gestores com perfil master. A auxiliar ADM não tem acesso a esta seção.</div>
+  </div>
+
+  <div class="section-sub">Gerencial da Unidade</div>
+  <p style="margin-bottom:12px">Acesse em <code>/u/barueri/gerencial</code>. Mostra o histórico completo da unidade com:</p>
+  <table>
+    <thead><tr><th>Seção</th><th>O que mostra</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Resumo do período</strong></td><td>Total geral, à vista, faturado, DETRAN, lançamentos e ticket médio</td></tr>
+      <tr><td><strong>Gráfico por dia</strong></td><td>Barras empilhadas: verde (AV), âmbar (FA), índigo (DETRAN)</td></tr>
+      <tr><td><strong>Ranking de serviços</strong></td><td>Serviços mais realizados com contagem, total e frequência</td></tr>
+      <tr><td><strong>Lançamentos por dia</strong></td><td>Tabela expansível com todos os lançamentos — clique no dia para expandir</td></tr>
+      <tr><td><strong>Divergências</strong></td><td>Registro de todos os "Confirmar assim" do período para auditoria</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-sub">Filtros disponíveis</div>
+  <table>
+    <thead><tr><th>Filtro</th><th>Como usar</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Mês</strong></td><td>Selecione mês e ano — padrão é o mês atual</td></tr>
+      <tr><td><strong>Intervalo</strong></td><td>Defina data início e data fim para períodos personalizados</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-sub">Export CSV</div>
+  <p style="margin-bottom:12px">Clique em <span class="ui-btn gray">⬇ Export CSV</span> para baixar todos os lançamentos do período em planilha Excel. Inclui: unidade, data, hora, placa, cliente, CPF/CNPJ, serviço, valor e forma de pagamento.</p>
+
+  <div class="section-sub">Gerencial Rede (Master)</div>
+  <p style="margin-bottom:12px">Acesse em <code>/gerencial</code>. Igual ao gerencial da unidade, mas com visão de <strong>todas as unidades simultaneamente</strong>:</p>
+  <table>
+    <thead><tr><th>Seção extra</th><th>O que mostra</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Seletor de unidade</strong></td><td>Filtra por unidade específica ou exibe todas</td></tr>
+      <tr><td><strong>Comparativo por unidade</strong></td><td>Cards rankeados por faturamento — aparece quando "Todas" está selecionado</td></tr>
+      <tr><td><strong>Divergências da rede</strong></td><td>Erros de todas as unidades com identificação de qual unidade</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-sub">Alerta de fechamento — e-mail 18:30</div>
+  <p>Todos os dias às <strong>18:30</strong> o sistema envia automaticamente um e-mail para o financeiro e o gestor com o status de cada unidade: quantos lançamentos foram feitos e se o fechamento foi realizado.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- SEÇÃO 5: FAQ -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="section" id="faq">
+  <div class="section-header">
+    <div class="section-num">5</div>
+    <div class="section-title">Perguntas Frequentes</div>
+  </div>
+
+  <div class="section-sub">Lancei com a placa errada — o que faço?</div>
+  <p style="margin-bottom:16px">Peça para o responsável editar o lançamento no PDV usando o PIN master antes do fechamento. Se o fechamento já foi feito, a correção é feita no dia seguinte pelo administrativo diretamente no Tiny.</p>
+
+  <div class="section-sub">Esqueci de lançar um atendimento no PDV</div>
+  <p style="margin-bottom:16px">No fechamento, o registro vai aparecer como "Sem registro no PDV". Selecione o FP correto e clique "Confirmar assim". O sistema registra a divergência para auditoria.</p>
+
+  <div class="section-sub">O sistema deu erro ao enviar para o Tiny</div>
+  <p style="margin-bottom:16px">Verifique se todos os clientes FA têm vínculo com o Tiny (ícone verde ao lado do nome). Se algum aparecer em vermelho, clique nele para localizar ou criar o cliente no Tiny antes de reenviar.</p>
+
+  <div class="section-sub">O botão Lançar está desabilitado</div>
+  <p style="margin-bottom:16px">Verifique se todos os campos obrigatórios estão preenchidos: placa, cliente, serviço, valor e forma de pagamento. Para Laudo de Transferência e Revistoria, o CPF/CNPJ também é obrigatório.</p>
+
+  <div class="section-sub">A sessão expirou e fui redirecionado para o login</div>
+  <p style="margin-bottom:16px">Por segurança, sessões expiram após inatividade. Faça login novamente — os dados do dia ficam salvos no servidor, nada é perdido.</p>
+
+  <div class="section-sub">Preciso de suporte</div>
+  <p>Entre em contato com o gestor da sua unidade ou com o administrativo da rede.</p>
+
+</div>
+
+<!-- Print button -->
+<div class="print-bar no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ Salvar como PDF</button>
+</div>
+
+</body>
+</html>

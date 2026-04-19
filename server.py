@@ -1082,6 +1082,17 @@ def unit_caixa2(unit: str):
     return _nocache(send_from_directory(UI_DIR, "caixa2.html"))
 
 
+@app.route("/u/<unit>/manual")
+@unit_access_required
+def unit_manual(unit: str):
+    return send_from_directory(UI_DIR, "manual.html")
+
+
+@app.route("/manual")
+def public_manual():
+    return send_from_directory(UI_DIR, "manual.html")
+
+
 @app.route("/u/<unit>/fechamento")
 @unit_access_required
 def unit_fechamento(unit: str):

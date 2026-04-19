@@ -400,6 +400,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (linkFechamento) linkFechamento.href = `${apiBase}/fechamento`;
         const linkCaixaL2 = document.getElementById("linkCaixaL2");
         if (linkCaixaL2) linkCaixaL2.href = `${apiBase}/caixa2`;
+        const linkManual = document.getElementById("linkManual");
+        if (linkManual) linkManual.href = `${apiBase}/manual`;
       }
     }).catch(() => {});
   }
