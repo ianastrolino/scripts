@@ -399,6 +399,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const set = (id, href) => { const el = document.getElementById(id); if (el) el.href = href; };
         set("linkFechamento", `${apiBase}/fechamento`);
         set("linkCaixaL2",    `${apiBase}/caixa2`);
+        set("ddHome",         `${apiBase}/home`);
         set("ddCaixa",        `${apiBase}/caixa2`);
         set("ddFechamento",   `${apiBase}/fechamento`);
         set("ddManual",       `${apiBase}/manual`);

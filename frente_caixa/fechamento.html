@@ -679,6 +679,8 @@
       <div class="ham-menu" id="hamMenu">
         <button class="ham-btn" id="hamBtn" type="button">☰</button>
         <div class="ham-dropdown">
+          <a class="dd-item" id="ddHome" href="">🏠 Home</a>
+          <div class="dd-sep"></div>
           <a class="dd-item" id="ddCaixa" href="">💰 Caixa do Dia</a>
           <a class="dd-item active">✓ Fechamento</a>
           <a class="dd-item" id="ddGerencial" href="" style="display:none">📊 Gerencial</a>
@@ -1114,6 +1116,8 @@
           document.getElementById('userLabel').textContent  = info.usuario;
           document.getElementById('userAvatar').textContent = info.usuario.charAt(0).toUpperCase();
         }
+        const ddHome = document.getElementById('ddHome');
+        if (ddHome) ddHome.href = apiBase + '/home';
         const ddCaixa = document.getElementById('ddCaixa');
         if (ddCaixa) ddCaixa.href = apiBase + '/caixa2';
         const ddManual = document.getElementById('ddManual');

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astrovistorias — Home</title>
+  <style>
+    :root {
+      --bg:      #f0f2f5;
+      --surface: #ffffff;
+      --line:    #e2e8f0;
+      --ink:     #0f172a;
+      --muted:   #64748b;
+      --accent:  #3b82f6;
+      --green:   #059669;
+      --green-bg:#ecfdf5;
+      --amber:   #d97706;
+      --radius:  12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Header ── */
+    .topbar {
+      background: #0f172a; padding: 0 28px; height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo { background: #fff; border-radius: 6px; padding: 4px 8px; display: flex; align-items: center; }
+    .brand-logo img { height: 20px; width: auto; }
+    .top-right { display: flex; align-items: center; gap: 12px; }
+    .user-chip { font-size: 12px; color: rgba(255,255,255,.5); }
+    .btn-top {
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.7); border-radius: 7px; padding: 6px 14px;
+      font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-top:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+    /* ── Layout ── */
+    .page { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+
+    /* ── Saudação ── */
+    .greeting { margin-bottom: 28px; }
+    .greeting-label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .greeting-name  { font-size: 24px; font-weight: 800; color: var(--ink); }
+    .greeting-sub   { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Cards de ação ── */
+    .action-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin-bottom: 32px; }
+    .action-card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 20px; text-decoration: none; color: var(--ink);
+      display: flex; flex-direction: column; gap: 10px;
+      transition: box-shadow .15s, transform .15s;
+    }
+    .action-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.09); transform: translateY(-2px); }
+    .action-icon { font-size: 26px; }
+    .action-label { font-size: 14px; font-weight: 700; }
+    .action-desc  { font-size: 12px; color: var(--muted); }
+    .action-card.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .action-card.primary .action-desc { color: rgba(255,255,255,.7); }
+
+    /* ── Seção de status ── */
+    .section-title { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+    /* ── Card de unidade (master) ── */
+    .unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 32px; }
+    .unit-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+    .unit-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .unit-name { font-size: 14px; font-weight: 700; }
+    .status-badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    .status-badge.aberto  { background: var(--green-bg); color: var(--green); }
+    .status-badge.fechado { background: #f1f5f9; color: var(--muted); }
+    .unit-stats { display: flex; gap: 16px; margin-bottom: 14px; }
+    .stat { display: flex; flex-direction: column; gap: 2px; }
+    .stat-val  { font-size: 16px; font-weight: 800; }
+    .stat-label{ font-size: 11px; color: var(--muted); }
+    .unit-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .unit-link {
+      font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+      text-decoration: none; background: #f1f5f9; color: var(--ink);
+      transition: background .12s;
+    }
+    .unit-link:hover { background: var(--line); }
+
+    /* ── Resumo do dia (gerencial) ── */
+    .day-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px; }
+    .day-card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 16px 20px; flex: 1; min-width: 130px;
+    }
+    .day-card-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .day-card-val   { font-size: 20px; font-weight: 800; }
+    .day-card-val.green  { color: var(--green); }
+    .day-card-val.amber  { color: var(--amber); }
+    .day-card-val.accent { color: var(--accent); }
+
+    /* ── Loading / empty ── */
+    .g-loading { text-align: center; color: var(--muted); padding: 40px; }
+    .g-empty   { text-align: center; color: var(--muted); padding: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-logo">
+      <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro">
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="user-chip" id="hdrUser"></span>
+    <a href="/logout" class="btn-top">Sair</a>
+  </div>
+</header>
+
+<main class="page">
+
+  <!-- Saudação -->
+  <div class="greeting">
+    <div class="greeting-label" id="greetLabel">Bem-vindo</div>
+    <div class="greeting-name" id="greetName">—</div>
+    <div class="greeting-sub"  id="greetSub"></div>
+  </div>
+
+  <!-- Ações rápidas -->
+  <div class="section-title">Acesso rápido</div>
+  <div class="action-grid" id="actionGrid">
+    <div class="g-loading">Carregando…</div>
+  </div>
+
+  <!-- Status unidades (master) -->
+  <div id="secaoUnidades" style="display:none">
+    <div class="section-title">Status das unidades — hoje</div>
+    <div class="unit-grid" id="unitGrid">
+      <div class="g-loading">Carregando…</div>
+    </div>
+  </div>
+
+  <!-- Resumo do dia (gerencial) -->
+  <div id="secaoDia" style="display:none">
+    <div class="section-title">Resumo do dia</div>
+    <div class="day-strip" id="dayStrip">
+      <div class="g-loading">Carregando…</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const brl = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function hora() {
+    const h = new Date().getHours();
+    if (h < 12) return "Bom dia";
+    if (h < 18) return "Boa tarde";
+    return "Boa noite";
+  }
+
+  async function init() {
+    // Tenta detectar unidade pela URL — /home ou /u/<unit>/home
+    const parts = location.pathname.split("/");
+    const unitSlug = parts[1] === "u" ? parts[2] : null;
+    const apiBase  = unitSlug ? `/u/${unitSlug}` : null;
+
+    let info = {};
+    if (apiBase) {
+      try { info = await fetch(`${apiBase}/api/info`).then(r => r.json()); } catch(e) {}
+    } else {
+      // master — chama endpoint sem unidade
+      try { info = await fetch("/master/api/units").then(r => r.json()).then(d => ({ master: true, units: d.units })); } catch(e) {}
+    }
+
+    // Saudação
+    const nome = info.usuario || info.name || "Usuário";
+    document.getElementById("hdrUser").textContent = nome;
+    document.getElementById("greetLabel").textContent = hora();
+    document.getElementById("greetName").textContent  = nome;
+
+    if (info.master) {
+      document.getElementById("greetSub").textContent = "Você tem acesso a toda a rede.";
+      renderMaster();
+    } else if (unitSlug) {
+      const unidade = info.unidade || unitSlug;
+      document.getElementById("greetSub").textContent = `Unidade ${unidade}`;
+      renderUnidade(unitSlug, apiBase, info);
+    }
+  }
+
+  function renderMaster() {
+    const grid = document.getElementById("actionGrid");
+    grid.innerHTML = `
+      <a class="action-card primary" href="/master">
+        <div class="action-icon">🏢</div>
+        <div class="action-label">Painel da Rede</div>
+        <div class="action-desc">Status em tempo real de todas as unidades</div>
+      </a>
+      <a class="action-card" href="/gerencial">
+        <div class="action-icon">📊</div>
+        <div class="action-label">Gerencial Rede</div>
+        <div class="action-desc">Relatórios consolidados da rede</div>
+      </a>
+      <a class="action-card" href="/logout">
+        <div class="action-icon">🚪</div>
+        <div class="action-label">Sair</div>
+        <div class="action-desc">Encerrar sessão</div>
+      </a>`;
+
+    document.getElementById("secaoUnidades").style.display = "";
+    carregarUnidades();
+  }
+
+  function renderUnidade(unit, apiBase, info) {
+    const isMaster    = info.master;
+    const isGerencial = info.gerencial;
+    const cards = [];
+
+    cards.push(`
+      <a class="action-card primary" href="${apiBase}/caixa2">
+        <div class="action-icon">💰</div>
+        <div class="action-label">Caixa do Dia</div>
+        <div class="action-desc">Lançamentos em tempo real</div>
+      </a>`);
+
+    cards.push(`
+      <a class="action-card" href="${apiBase}/fechamento">
+        <div class="action-icon">✓</div>
+        <div class="action-label">Fechamento</div>
+        <div class="action-desc">Importar planilha e enviar ao Tiny</div>
+      </a>`);
+
+    if (isGerencial) {
+      cards.push(`
+        <a class="action-card" href="${apiBase}/gerencial">
+          <div class="action-icon">📊</div>
+          <div class="action-label">Gerencial</div>
+          <div class="action-desc">Relatórios da unidade</div>
+        </a>`);
+    }
+
+    if (isMaster) {
+      cards.push(`
+        <a class="action-card" href="/master">
+          <div class="action-icon">🏢</div>
+          <div class="action-label">Painel da Rede</div>
+          <div class="action-desc">Todas as unidades</div>
+        </a>`);
+    }
+
+    cards.push(`
+      <a class="action-card" href="${apiBase}/manual" target="_blank">
+        <div class="action-icon">?</div>
+        <div class="action-label">Ajuda</div>
+        <div class="action-desc">Manual do sistema</div>
+      </a>`);
+
+    document.getElementById("actionGrid").innerHTML = cards.join("");
+
+    if (isGerencial) {
+      document.getElementById("secaoDia").style.display = "";
+      carregarDia(unit, apiBase);
+    }
+  }
+
+  async function carregarUnidades() {
+    try {
+      const data = await fetch("/master/api/units/status").then(r => r.json());
+      const grid = document.getElementById("unitGrid");
+      if (!data.status || !data.status.length) {
+        grid.innerHTML = '<div class="g-empty">Nenhuma unidade configurada.</div>';
+        return;
+      }
+      grid.innerHTML = data.status.map(u => {
+        const hoje   = u.hoje || {};
+        const aberto = hoje.lancamentos > 0;
+        return `
+          <div class="unit-card">
+            <div class="unit-header">
+              <span class="unit-name">${u.nome}</span>
+              <span class="status-badge ${aberto ? "aberto" : "fechado"}">${aberto ? "Ativo" : "Sem mov."}</span>
+            </div>
+            <div class="unit-stats">
+              <div class="stat">
+                <span class="stat-val">${hoje.lancamentos || 0}</span>
+                <span class="stat-label">Lançamentos</span>
+              </div>
+              <div class="stat">
+                <span class="stat-val">${brl(hoje.total || 0)}</span>
+                <span class="stat-label">Total</span>
+              </div>
+            </div>
+            <div class="unit-links">
+              <a class="unit-link" href="/u/${u.id}/caixa2">💰 PDV</a>
+              <a class="unit-link" href="/u/${u.id}/fechamento">✓ Fechamento</a>
+              <a class="unit-link" href="/u/${u.id}/gerencial">📊 Gerencial</a>
+            </div>
+          </div>`;
+      }).join("");
+    } catch(e) {
+      document.getElementById("unitGrid").innerHTML = '<div class="g-empty">Erro ao carregar unidades.</div>';
+    }
+  }
+
+  async function carregarDia(unit, apiBase) {
+    try {
+      const today = new Date().toISOString().slice(0,10);
+      const data  = await fetch(`${apiBase}/api/gerencial/historico?from=${today}&to=${today}`).then(r => r.json());
+      const r     = data.resumo || {};
+      document.getElementById("dayStrip").innerHTML = `
+        <div class="day-card">
+          <div class="day-card-label">Total do dia</div>
+          <div class="day-card-val accent">${brl(r.total || 0)}</div>
+        </div>
+        <div class="day-card">
+          <div class="day-card-label">À Vista</div>
+          <div class="day-card-val green">${brl(r.avista || 0)}</div>
+        </div>
+        <div class="day-card">
+          <div class="day-card-label">Faturado</div>
+          <div class="day-card-val amber">${brl(r.faturado || 0)}</div>
+        </div>
+        <div class="day-card">
+          <div class="day-card-label">Lançamentos</div>
+          <div class="day-card-val">${r.count || 0}</div>
+        </div>
+        <div class="day-card">
+          <div class="day-card-label">Ticket Médio</div>
+          <div class="day-card-val">${brl(r.ticket_medio || 0)}</div>
+        </div>`;
+    } catch(e) {
+      document.getElementById("dayStrip").innerHTML = '<div class="g-empty">Sem dados hoje.</div>';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

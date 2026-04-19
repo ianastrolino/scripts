@@ -262,6 +262,8 @@
     <div class="ham-menu" id="hamMenu">
       <button class="ham-btn" id="hamBtn" type="button">☰</button>
       <div class="ham-dropdown">
+        <a class="dd-item" id="ddHome" href="">🏠 Home</a>
+        <div class="dd-sep"></div>
         <a class="dd-item" id="ddCaixa" href="">💰 Caixa do Dia</a>
         <a class="dd-item" id="ddFechamento" href="">✓ Fechamento</a>
         <a class="dd-item active">📊 Gerencial</a>
@@ -447,6 +449,7 @@
   fetch(`${apiBase}/api/info`).then(r => r.json()).then(d => {
     if (d.unidade) document.getElementById("hdrUnidade").textContent = d.unidade;
     if (d.usuario) document.getElementById("hdrUser").textContent = d.usuario;
+    document.getElementById("ddHome").href       = `${apiBase}/home`;
     document.getElementById("ddCaixa").href      = `${apiBase}/caixa2`;
     document.getElementById("ddFechamento").href = `${apiBase}/fechamento`;
     document.getElementById("ddManual").href     = `${apiBase}/manual`;

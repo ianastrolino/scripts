@@ -418,11 +418,23 @@ def root_static(filename: str):
 def index():
     user = _current_user()
     if user.get("master"):
-        return redirect(url_for("master_page"))
+        return redirect("/home")
     unit = user.get("unit")
     if unit:
-        return redirect(f"/u/{unit}/")
+        return redirect(f"/u/{unit}/home")
     return redirect(url_for("login_page"))
+
+
+@app.route("/home")
+@login_required
+def home_master():
+    return send_from_directory(UI_DIR, "home.html")
+
+
+@app.route("/u/<unit>/home")
+@unit_access_required
+def home_unit(unit: str):
+    return send_from_directory(UI_DIR, "home.html")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
