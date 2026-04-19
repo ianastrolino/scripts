@@ -538,6 +538,7 @@ def api_auth_callback(unit: str):
     redirect_uri = config["tiny"].get("redirect_uri") or f"https://{request.host}/u/{unit}/callback"
 
     try:
+        app.logger.info("[oauth] unit=%s redirect_uri=%s client_id=%s", unit, redirect_uri, config["tiny"].get("client_id","?")[:30])
         tokens = importer.client.exchange_authorization_code(code, redirect_uri)
         rt = tokens.get("refresh_token", "")
         rt_block = (
@@ -554,7 +555,9 @@ def api_auth_callback(unit: str):
         )
     except Exception as exc:
         app.logger.exception("[server] oauth callback unit=%s", unit)
-        return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
+        cid = config["tiny"].get("client_id", "?")
+        return (f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
+                f"<hr><p><b>Debug:</b> redirect_uri={redirect_uri} | client_id={cid}</p>")
 
 @app.route("/u/<unit>/api/info")
 @unit_access_required
