@@ -1801,6 +1801,115 @@ def api_master_divergencias():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Alerta de fechamento — cron interno 18:30 SP
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _send_email(subject: str, html: str) -> None:
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText as _MIMEText
+    host       = os.environ.get("SMTP_HOST", "")
+    port       = int(os.environ.get("SMTP_PORT", "465"))
+    user       = os.environ.get("SMTP_USER", "")
+    passwd     = os.environ.get("SMTP_PASS", "")
+    recipients = [e.strip() for e in os.environ.get("ALERT_EMAILS", "").split(",") if e.strip()]
+    if not all([host, user, passwd, recipients]):
+        app.logger.warning("[email] SMTP nao configurado — email nao enviado.")
+        return
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = f"Astrovistorias <{user}>"
+    msg["To"]      = ", ".join(recipients)
+    msg.attach(_MIMEText(html, "html", "utf-8"))
+    with smtplib.SMTP_SSL(host, port) as smtp:
+        smtp.login(user, passwd)
+        smtp.sendmail(user, recipients, msg.as_string())
+    app.logger.info("[email] Enviado: %s → %s", subject, recipients)
+
+
+def _enviar_alerta_fechamento(today: str) -> None:
+    tz   = ZoneInfo("America/Sao_Paulo")
+    rows = ""
+    tem_movimento = False
+    for uid, ud in UNITS.items():
+        try:
+            lcs = _db_load(uid, _unit_state_dir(uid), today)
+        except Exception:
+            lcs = []
+        nome   = ud.get("nome", uid)
+        count  = len(lcs)
+        total  = sum(float(lc.get("valor", 0)) for lc in lcs)
+        brl    = lambda v: f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        if count > 0:
+            tem_movimento = True
+            status_html = '<span style="color:#d97706;font-weight:700">⚠ Verificar fechamento</span>'
+        else:
+            status_html = '<span style="color:#6b7280">Sem movimentação</span>'
+        rows += f"""
+        <tr>
+          <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;font-weight:600">{nome}</td>
+          <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:center">{count}</td>
+          <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:700">{brl(total)}</td>
+          <td style="padding:10px 16px;border-bottom:1px solid #e5e7eb">{status_html}</td>
+        </tr>"""
+
+    data_fmt = today[8:] + "/" + today[5:7] + "/" + today[:4]
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+    <div style="background:#0f1117;padding:24px 28px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Alerta automático</div>
+      <div style="font-size:20px;font-weight:800;color:#fff">Status do Caixa — {data_fmt}</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.4);margin-top:4px">Verificação das 18:30 — horário de Brasília</div>
+    </div>
+    <div style="padding:24px 28px">
+      <p style="font-size:13px;color:#6b7280;margin:0 0 16px">Abaixo o status de cada unidade no momento da verificação. Unidades com lançamentos devem ter o fechamento confirmado.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f9fafb">
+            <th style="padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Unidade</th>
+            <th style="padding:10px 16px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Lançamentos</th>
+            <th style="padding:10px 16px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Total</th>
+            <th style="padding:10px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;border-bottom:2px solid #e5e7eb">Status</th>
+          </tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </div>
+    <div style="padding:16px 28px 24px;border-top:1px solid #f3f4f6">
+      <a href="https://astro-v2.up.railway.app/gerencial" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600">Abrir Gerencial Rede</a>
+    </div>
+  </div>
+</body></html>"""
+
+    subject = f"[Astrovistorias] Caixa do Dia — {data_fmt}"
+    try:
+        _send_email(subject, html)
+    except Exception as e:
+        app.logger.error("[email] Falha ao enviar alerta: %s", e)
+
+
+def _cron_fechamento() -> None:
+    tz         = ZoneInfo("America/Sao_Paulo")
+    last_sent  = ""
+    while True:
+        try:
+            now   = dt.datetime.now(tz)
+            today = now.date().isoformat()
+            if now.hour == 18 and now.minute == 30 and last_sent != today:
+                last_sent = today
+                app.logger.info("[cron] Disparando alerta de fechamento para %s", today)
+                _enviar_alerta_fechamento(today)
+        except Exception:
+            app.logger.exception("[cron] Erro no loop de fechamento")
+        time.sleep(60)
+
+
+threading.Thread(target=_cron_fechamento, daemon=True, name="cron-fechamento").start()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Ponto de entrada
 # ══════════════════════════════════════════════════════════════════════════════
 
