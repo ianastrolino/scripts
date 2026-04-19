@@ -35,7 +35,8 @@
       position: sticky; top: 0; z-index: 100;
     }
     .g-header-left { display: flex; align-items: center; gap: 16px; }
-    .g-logo { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--t2); }
+    .g-logo { display: flex; align-items: center; }
+    .g-logo img { height: 22px; width: auto; background: #fff; border-radius: 5px; padding: 2px 6px; }
     .g-sep  { color: var(--t3); }
     .g-title { font-size: 14px; font-weight: 600; color: var(--t1); }
     .g-badge {
@@ -235,7 +236,7 @@
 
 <header class="g-header">
   <div class="g-header-left">
-    <span class="g-logo">Astrovistorias</span>
+    <div class="g-logo"><img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias"></div>
     <span class="g-sep">›</span>
     <span class="g-title">Gerencial Rede</span>
     <span class="g-badge">Master</span>
