@@ -396,21 +396,28 @@ document.addEventListener("DOMContentLoaded", () => {
         avatarEl.textContent  = info.usuario.charAt(0).toUpperCase();
       }
       if (apiBase) {
-        const linkFechamento = document.getElementById("linkFechamento");
-        if (linkFechamento) linkFechamento.href = `${apiBase}/fechamento`;
-        const linkCaixaL2 = document.getElementById("linkCaixaL2");
-        if (linkCaixaL2) linkCaixaL2.href = `${apiBase}/caixa2`;
-        const linkManual = document.getElementById("linkManual");
-        if (linkManual) linkManual.href = `${apiBase}/manual`;
-        const linkGerencial = document.getElementById("linkGerencial");
-        if (linkGerencial && info.gerencial) {
-          linkGerencial.href = `${apiBase}/gerencial`;
-          linkGerencial.style.display = "";
+        const set = (id, href) => { const el = document.getElementById(id); if (el) el.href = href; };
+        set("linkFechamento", `${apiBase}/fechamento`);
+        set("linkCaixaL2",    `${apiBase}/caixa2`);
+        set("ddCaixa",        `${apiBase}/caixa2`);
+        set("ddFechamento",   `${apiBase}/fechamento`);
+        set("ddManual",       `${apiBase}/manual`);
+        if (info.gerencial) {
+          const el = document.getElementById("ddGerencial");
+          if (el) { el.href = `${apiBase}/gerencial`; el.style.display = ""; }
         }
-        const linkRede = document.getElementById("linkRede");
-        if (linkRede && info.master) {
-          linkRede.style.display = "";
+        if (info.master) {
+          const el = document.getElementById("ddRede");
+          if (el) el.style.display = "";
         }
+      }
+
+      // Toggle dropdown
+      const menu = document.getElementById("userMenu");
+      const chip = document.getElementById("userChip");
+      if (menu && chip) {
+        chip.addEventListener("click", e => { e.stopPropagation(); menu.classList.toggle("open"); });
+        document.addEventListener("click", () => menu.classList.remove("open"));
       }
     }).catch(() => {});
   }

@@ -258,6 +258,33 @@
     }
     .btn-logout:hover { color: rgba(255,255,255,.6); }
 
+    /* ── User dropdown ── */
+    .user-menu { position: relative; }
+    .user-chip { cursor: pointer; user-select: none; }
+    .user-chip:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.14); }
+    .user-dropdown {
+      display: none;
+      position: absolute; top: calc(100% + 8px); right: 0;
+      background: #1e2535; border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px; padding: 6px;
+      min-width: 180px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      z-index: 200;
+    }
+    .user-menu.open .user-dropdown { display: block; }
+    .dd-item {
+      display: block; padding: 8px 12px; border-radius: 7px;
+      font-size: 13px; font-weight: 500; color: rgba(255,255,255,.7);
+      text-decoration: none; cursor: pointer; border: none; background: none;
+      width: 100%; text-align: left; font-family: inherit;
+      transition: background .12s, color .12s;
+    }
+    .dd-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .dd-item.active { color: #fff; font-weight: 700; }
+    .dd-sep { height: 1px; background: rgba(255,255,255,.07); margin: 4px 6px; }
+    .dd-item.danger { color: rgba(255,80,80,.7); }
+    .dd-item.danger:hover { background: rgba(220,38,38,.15); color: #f87171; }
+
     /* ═══════════════════════════════════════════════════════
        WORKSPACE
     ═══════════════════════════════════════════════════════ */
@@ -1587,18 +1614,24 @@
       <nav class="header-nav">
         <a class="nav-pill active" id="linkCaixaL2" href="">Caixa do Dia</a>
         <a class="nav-pill" id="linkFechamento" href="">Fechamento</a>
-        <a class="nav-pill" id="linkGerencial" href="" style="display:none">Gerencial</a>
-        <a class="nav-pill" id="linkRede" href="/master" style="display:none">Rede</a>
       </nav>
       <button id="btnResumo" class="btn-resumo" type="button">📊 Resumo</button>
-      <div class="user-chip">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <span id="userLabel"></span>
+      <div class="user-menu" id="userMenu">
+        <div class="user-chip" id="userChip">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <span id="userLabel"></span>
+        </div>
+        <div class="user-dropdown" id="userDropdown">
+          <a class="dd-item active" id="ddCaixa" href="">💰 Caixa do Dia</a>
+          <a class="dd-item" id="ddFechamento" href="">✓ Fechamento</a>
+          <a class="dd-item" id="ddGerencial" href="" style="display:none">📊 Gerencial</a>
+          <a class="dd-item" id="ddRede" href="/master" style="display:none">🏢 Rede</a>
+          <div class="dd-sep"></div>
+          <a class="dd-item" id="ddManual" href="" target="_blank">? Ajuda</a>
+          <div class="dd-sep"></div>
+          <a class="dd-item danger" href="/logout">Sair</a>
+        </div>
       </div>
-      <a id="linkManual" href="" target="_blank" title="Manual do sistema"
-         style="height:30px;padding:0 10px;border-radius:7px;font-size:12px;font-weight:600;color:rgba(255,255,255,.45);text-decoration:none;display:flex;align-items:center;transition:color .15s;"
-         onmouseover="this.style.color='rgba(255,255,255,.7)'" onmouseout="this.style.color='rgba(255,255,255,.45)'">? Ajuda</a>
-      <a class="btn-logout" href="/logout">Sair</a>
     </div>
 
   </header>
