@@ -356,17 +356,25 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
 
 
 def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
-    """Semeie o refresh_token de UNITS_CONFIG no arquivo de tokens se ainda nao existir."""
+    """Sincroniza o refresh_token do UNITS_CONFIG para o arquivo de tokens.
+    Se o arquivo ja existe mas o refresh_token do config e diferente (mais novo),
+    sobrescreve para garantir que o token do Railway sempre prevaleca."""
     p = _unit_state_dir(unit) / "tiny_tokens.json"
-    if p.exists():
-        return
     rt = config["tiny"].get("refresh_token", "")
-    if rt:
-        p.write_text(json.dumps({
-            "access_token": "",
-            "refresh_token": rt,
-            "expires_at": 0,
-        }))
+    if not rt:
+        return
+    if p.exists():
+        try:
+            stored = json.loads(p.read_text())
+            if stored.get("refresh_token") == rt:
+                return  # ja esta sincronizado
+        except Exception:
+            pass
+    p.write_text(json.dumps({
+        "access_token": "",
+        "refresh_token": rt,
+        "expires_at": 0,
+    }))
 
 
 # ── Resposta JSON helper ───────────────────────────────────────────────────────
