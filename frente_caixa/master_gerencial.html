@@ -37,6 +37,17 @@
     .g-header-left { display: flex; align-items: center; gap: 16px; }
     .g-logo { display: flex; align-items: center; }
     .g-logo img { height: 22px; width: auto; background: #fff; border-radius: 5px; padding: 2px 6px; }
+    .ham-menu { position: relative; }
+    .ham-btn { width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s; }
+    .ham-btn:hover { background:rgba(255,255,255,.12);color:#fff; }
+    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);left:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
+    .ham-menu.open .ham-dropdown { display:block; }
+    .dd-item { display:block;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:inherit;transition:background .12s,color .12s; }
+    .dd-item:hover { background:rgba(255,255,255,.08);color:#fff; }
+    .dd-item.active { color:#fff;font-weight:700; }
+    .dd-sep { height:1px;background:rgba(255,255,255,.07);margin:4px 6px; }
+    .dd-item.danger { color:rgba(255,80,80,.7); }
+    .dd-item.danger:hover { background:rgba(220,38,38,.15);color:#f87171; }
     .g-sep  { color: var(--t3); }
     .g-title { font-size: 14px; font-weight: 600; color: var(--t1); }
     .g-badge {
@@ -236,6 +247,15 @@
 
 <header class="g-header">
   <div class="g-header-left">
+    <div class="ham-menu" id="hamMenu">
+      <button class="ham-btn" id="hamBtn" type="button">☰</button>
+      <div class="ham-dropdown">
+        <a class="dd-item" href="/master">🏢 Painel Rede</a>
+        <a class="dd-item active">📊 Gerencial Rede</a>
+        <div class="dd-sep"></div>
+        <a class="dd-item danger" href="/logout">Sair</a>
+      </div>
+    </div>
     <div class="g-logo"><img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias"></div>
     <span class="g-sep">›</span>
     <span class="g-title">Gerencial Rede</span>
@@ -243,7 +263,6 @@
   </div>
   <div class="g-header-right">
     <span class="g-user" id="hdrUser"></span>
-    <a class="g-link" href="/">← Painel</a>
   </div>
 </header>
 
@@ -401,6 +420,13 @@
   }
 
   // ── Info do usuário ─────────────────────────────────────
+  const hamBtn = document.getElementById("hamBtn");
+  const hamMenu = document.getElementById("hamMenu");
+  if (hamBtn && hamMenu) {
+    hamBtn.addEventListener("click", e => { e.stopPropagation(); hamMenu.classList.toggle("open"); });
+    document.addEventListener("click", () => hamMenu.classList.remove("open"));
+  }
+
   fetch("/u/master/api/info").catch(() => {})
     .then(r => r && r.ok ? r.json() : null)
     .then(d => { if (d && d.name) document.getElementById("hdrUser").textContent = d.name; })
