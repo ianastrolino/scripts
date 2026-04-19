@@ -38,7 +38,7 @@
     .ham-menu { position: relative; }
     .ham-btn { width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s; }
     .ham-btn:hover { background:rgba(255,255,255,.12);color:#fff; }
-    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
+    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);left:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
     .ham-menu.open .ham-dropdown { display:block; }
     .dd-item { display:block;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);text-decoration:none;transition:background .12s,color .12s; }
     .dd-item:hover { background:rgba(255,255,255,.08);color:#fff; }
@@ -113,16 +113,6 @@
 
 <header class="topbar">
   <div class="brand">
-    <div class="brand-logo">
-      <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-    </div>
-    <div>
-      <div class="brand-label">Astro Vistorias App</div>
-      <div class="brand-sub">Painel Master</div>
-    </div>
-  </div>
-  <div class="top-right">
-    <span class="user-chip" id="userInfo"></span>
     <div class="ham-menu" id="hamMenu">
       <button class="ham-btn" id="hamBtn" type="button">☰</button>
       <div class="ham-dropdown">
@@ -134,6 +124,16 @@
         <a class="dd-item danger" href="/logout">Sair</a>
       </div>
     </div>
+    <div class="brand-logo">
+      <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+    </div>
+    <div>
+      <div class="brand-label">Astro Vistorias App</div>
+      <div class="brand-sub">Painel Master</div>
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="user-chip" id="userInfo"></span>
   </div>
 </header>
 
