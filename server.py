@@ -508,7 +508,7 @@ def api_auth_start(unit: str):
     try:
         config = _build_unit_config(unit)
         tiny = config["tiny"]
-        redirect_uri = f"https://{request.host}/u/{unit}/callback"
+        redirect_uri = tiny.get("redirect_uri") or f"https://{request.host}/u/{unit}/callback"
         params = {
             "client_id": tiny["client_id"],
             "redirect_uri": redirect_uri,
@@ -535,8 +535,7 @@ def api_auth_callback(unit: str):
     state_dir = _unit_state_dir(unit)
     importer = TinyImporter(config, state_dir)
     
-    # Detecta a mesma URL dinâmica para a troca do code
-    redirect_uri = f"https://{request.host}/u/{unit}/callback"
+    redirect_uri = config["tiny"].get("redirect_uri") or f"https://{request.host}/u/{unit}/callback"
 
     try:
         tokens = importer.client.exchange_authorization_code(code, redirect_uri)
