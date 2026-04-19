@@ -1,5 +1,15 @@
 /* caixa2.js — Features exclusivas do Layout 2: Astro chatbot + Resumo do dia */
 
+// Sanitização central — mesma implementação do app.js
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ── Estado do chat ────────────────────────────────────────────────────────────
 const chatState = {
   open: false,
@@ -83,14 +93,14 @@ function abrirResumo() {
 
   const servicoRows = r.porServico
     .map(([s, d]) => `<tr>
-      <td>${s}</td>
+      <td>${escHtml(s)}</td>
       <td style="text-align:center;color:var(--muted);">${d.count}x</td>
       <td style="text-align:right;font-weight:700;">${fmt(d.total)}</td>
     </tr>`).join("");
 
   const clienteRows = r.porCliente
     .map(([c, d]) => `<tr>
-      <td>${c}</td>
+      <td>${escHtml(c)}</td>
       <td style="text-align:center;color:var(--muted);">${d.count}x</td>
       <td style="text-align:right;font-weight:700;">${fmt(d.total)}</td>
     </tr>`).join("");
@@ -184,7 +194,7 @@ function renderMessages() {
   container.innerHTML = chatState.messages.map(m => `
     <div class="chat-msg chat-msg-${m.role}">
       ${m.role === "assistant" ? '<div class="chat-avatar">A</div>' : ""}
-      <div class="chat-bubble">${m.content.replace(/\n/g, "<br>")}</div>
+      <div class="chat-bubble">${escHtml(m.content).replace(/\n/g, "<br>")}</div>
     </div>
   `).join("");
 
@@ -204,8 +214,11 @@ function showQuickReplies() {
   const el = document.getElementById("chatQuickReplies");
   if (chatState.messages.length > 0) { el.style.display = "none"; return; }
   el.innerHTML = QUICK_REPLIES
-    .map(q => `<button class="quick-reply-btn" onclick="sendQuick('${q.replace(/'/g, "\\'")}')">${q}</button>`)
+    .map(q => `<button class="quick-reply-btn" type="button">${escHtml(q)}</button>`)
     .join("");
+  el.querySelectorAll(".quick-reply-btn").forEach((btn, i) => {
+    btn.addEventListener("click", () => sendQuick(QUICK_REPLIES[i]));
+  });
   el.style.display = "flex";
 }
 

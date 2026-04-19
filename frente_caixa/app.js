@@ -1,3 +1,13 @@
+// Sanitização central — escapa todos os caracteres perigosos para HTML e atributos
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const serviceAliases = {
   "LAUDO DE VERIFICACA": "LAUDO DE VERIFICACAO",
   "LAUDO DE VERIFICA": "LAUDO DE VERIFICACAO",
@@ -318,16 +328,16 @@ function renderTable() {
     tr.innerHTML = `
       <td>${formatDateBr(record.data)}</td>
       <td>
-        <strong>${record.cliente}</strong>
+        <strong>${escHtml(record.cliente)}</strong>
         <div class="cell-muted">${record.cpf ? fmtCpf(record.cpf) : record.fp === "FA" ? "Faturado" : record.fp === "detran" ? "Taxa DETRAN" : "Particular / caixa"}</div>
       </td>
       <td>
-        <strong>${record.tipoServico}</strong>
-        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${record.origemArquivo.replace("PDV ", "")}</span>` : record.origemArquivo}</div>
+        <strong>${escHtml(record.tipoServico)}</strong>
+        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}</div>
       </td>
-      <td><span class="placa-tag">${record.placa}</span></td>
-      <td>${record.servico}</td>
-      <td><span class="fp-chip ${record.fp === "FA" ? "fa" : record.fp === "detran" ? "detran" : "av"}">${record.fp === "detran" ? "DETRAN" : record.fp}</span></td>
+      <td><span class="placa-tag">${escHtml(record.placa)}</span></td>
+      <td>${escHtml(record.servico)}</td>
+      <td><span class="fp-chip ${record.fp === "FA" ? "fa" : record.fp === "detran" ? "detran" : "av"}">${record.fp === "detran" ? "DETRAN" : escHtml(record.fp)}</span></td>
       <td>${paymentControl(record)}</td>
       <td class="amount">${formatMoney(record.preco)}</td>
       <td>${tinyControl(record, issues)}</td>
@@ -560,11 +570,11 @@ function renderFpCorrections(divergentes) {
     const pdvFp = fp_label[conf.pdv_fp] || conf.pdv_fp || "—";
     const pdvFpCat = conf.pdv_fp === "faturado" ? "FA" : "AV";
     return `<tr>
-      <td>${r.placa}</td>
-      <td>${r.cliente}</td>
-      <td>${r.servico}</td>
-      <td><span class="corr-tag">${r.fp}</span> → <span class="corr-tag corr-pdv">${pdvFpCat} (${pdvFp})</span></td>
-      <td style="color:var(--t4);font-size:12px">${conf.pdv_hora || "—"}</td>
+      <td>${escHtml(r.placa)}</td>
+      <td>${escHtml(r.cliente)}</td>
+      <td>${escHtml(r.servico)}</td>
+      <td><span class="corr-tag">${escHtml(r.fp)}</span> → <span class="corr-tag corr-pdv">${escHtml(pdvFpCat)} (${escHtml(pdvFp)})</span></td>
+      <td style="color:var(--t4);font-size:12px">${escHtml(conf.pdv_hora || "—")}</td>
     </tr>`;
   }).join("");
   document.getElementById("fpCorrBody").innerHTML = rows;
@@ -860,14 +870,14 @@ function renderPreviewRows(previews, tbodyEl, summaryEl) {
   `;
   tbodyEl.innerHTML = previews.map((p) => `
     <tr class="${p.jaEnviado ? "duplicata" : ""}">
-      <td><strong>${p.cliente}</strong></td>
-      <td><span class="status ${p.fp === "FA" ? "ok" : "pending"}">${p.fp}</span></td>
-      <td>${p.avPagamento || "—"}</td>
+      <td><strong>${escHtml(p.cliente)}</strong></td>
+      <td><span class="status ${p.fp === "FA" ? "ok" : "pending"}">${escHtml(p.fp)}</span></td>
+      <td>${escHtml(p.avPagamento || "—")}</td>
       <td class="amount">${formatMoney(p.valor)}</td>
       <td>${formatDateBr(p.dataVencimento)}</td>
-      <td>${p.formaRecebimento}</td>
-      <td style="font-size:12px;color:var(--muted)">${p.numeroDocumento}</td>
-      <td style="font-size:11px;color:var(--muted)">${p.servico || "—"}</td>
+      <td>${escHtml(p.formaRecebimento)}</td>
+      <td style="font-size:12px;color:var(--muted)">${escHtml(p.numeroDocumento)}</td>
+      <td style="font-size:11px;color:var(--muted)">${escHtml(p.servico || "—")}</td>
       <td>${p.jaEnviado ? '<span class="status pending">Ja enviado</span>' : '<span class="status ok">Novo</span>'}</td>
     </tr>
   `).join("");
@@ -968,7 +978,7 @@ function mapNext() {
   document.querySelector("#mapProgress").textContent =
     `${mapState.queue.length + 1} de ${total + mapState.queue.length} cliente(s) nao mapeado(s)`;
   document.querySelector("#mapClienteAtual").innerHTML =
-    `${mapState.current}<span>Nome como aparece na planilha</span>`;
+    `${escHtml(mapState.current)}<span>Nome como aparece na planilha</span>`;
   document.querySelector("#mapBuscarBox").classList.add("hidden");
   document.querySelector("#mapBuscarInput").value = "";
   mapBuscar(mapState.current);
@@ -990,7 +1000,7 @@ async function mapBuscar(nome) {
     const authLink = isTokenErr
       ? ` <a href="${apiBase}/auth" target="_blank" style="color:#c0392b;font-weight:bold">Clique aqui para autorizar o Tiny</a>`
       : "";
-    container.innerHTML = `<p class="map-empty">Erro ao buscar: ${err.message}${authLink}</p>`;
+    container.innerHTML = `<p class="map-empty">Erro ao buscar: ${escHtml(err.message)}${authLink}</p>`;
   }
 }
 
@@ -1006,12 +1016,12 @@ function renderCandidatos(candidates) {
     return `
       <div class="candidate-card">
         <div class="candidate-info">
-          <strong>${c.nome}</strong>
-          ${c.fantasia ? `<span>${c.fantasia}</span>` : ""}
+          <strong>${escHtml(c.nome)}</strong>
+          ${c.fantasia ? `<span>${escHtml(c.fantasia)}</span>` : ""}
         </div>
         <span class="candidate-score ${high ? "high" : ""}">${pct}%</span>
         <button class="candidate-confirm" type="button"
-          data-id="${c.id}" data-nome="${c.nome}">Confirmar</button>
+          data-id="${escHtml(c.id)}" data-nome="${escHtml(c.nome)}">Confirmar</button>
       </div>`;
   }).join("")}</div>`;
 

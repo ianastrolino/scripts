@@ -32,7 +32,8 @@
       "Bash(.venv/bin/python -c \"import pytest; print\\(pytest.__version__\\)\")",
       "Bash(.venv/bin/pip install *)",
       "Bash(.venv/bin/pytest tests/test_caixa_routes.py -v)",
-      "Bash(python -m pytest tests/ -v)"
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(grep -E \"\\\\.py$|\\\\.js$|\\\\.html$\")"
     ]
   }
 }
