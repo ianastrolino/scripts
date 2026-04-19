@@ -907,6 +907,28 @@ def api_diagnostic_payment(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostic-categorias")
+@unit_access_required
+def api_diagnostic_categorias(unit: str):
+    """Retorna as categorias financeiras cadastradas no Tiny para diagnostico."""
+    try:
+        config = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        importer = TinyImporter(config, state_dir)
+        res = importer.client.request("GET", "categorias-receita-despesa", params={"limit": 100})
+        return _json({
+            "success": True,
+            "tiny_response": res,
+            "current_config": config["tiny"].get("categoria_ids")
+        })
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/map-client", methods=["POST"])
 @unit_access_required
 def api_map_client(unit: str):
