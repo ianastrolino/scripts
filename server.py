@@ -485,7 +485,7 @@ def master_api_units_status():
 @app.route("/u/<unit>/")
 @unit_access_required
 def unit_index(unit: str):
-    return send_from_directory(UI_DIR, "index.html")
+    return redirect(f"/u/{unit}/caixa2")
 
 
 @app.route("/u/<unit>/<path:filename>")
@@ -1073,7 +1073,7 @@ def _nocache(resp):
 @app.route("/u/<unit>/caixa")
 @unit_access_required
 def unit_caixa(unit: str):
-    return _nocache(send_from_directory(UI_DIR, "caixa.html"))
+    return redirect(f"/u/{unit}/caixa2")
 
 
 @app.route("/u/<unit>/caixa2")
