@@ -287,6 +287,9 @@
   <div class="filter-bar">
     <span class="filter-label">Período</span>
     <div class="filter-mode">
+      <button class="mode-btn" id="modeHoje">Hoje</button>
+      <button class="mode-btn" id="modeOntem">Ontem</button>
+      <button class="mode-btn" id="mode7dias">7 dias</button>
       <button class="mode-btn active" id="modeMonth">Mês</button>
       <button class="mode-btn" id="modeRange">Intervalo</button>
     </div>
@@ -406,27 +409,36 @@
 
   // ── Modo de filtro ──────────────────────────────────────
   let filterMode = "month";
-  document.getElementById("modeMonth").addEventListener("click", () => {
-    filterMode = "month";
-    document.getElementById("modeMonth").classList.add("active");
-    document.getElementById("modeRange").classList.remove("active");
-    document.getElementById("filterMonth").style.display = "flex";
-    document.getElementById("filterRange").style.display = "none";
-  });
-  document.getElementById("modeRange").addEventListener("click", () => {
-    filterMode = "range";
-    document.getElementById("modeRange").classList.add("active");
-    document.getElementById("modeMonth").classList.remove("active");
-    document.getElementById("filterRange").style.display = "flex";
-    document.getElementById("filterMonth").style.display = "none";
-  });
+  const modeBtns = ["modeHoje","modeOntem","mode7dias","modeMonth","modeRange"];
+
+  function setMode(mode) {
+    filterMode = mode;
+    modeBtns.forEach(id => document.getElementById(id).classList.remove("active"));
+    document.getElementById(
+      mode === "hoje" ? "modeHoje" : mode === "ontem" ? "modeOntem" :
+      mode === "7dias" ? "mode7dias" : mode === "month" ? "modeMonth" : "modeRange"
+    ).classList.add("active");
+    document.getElementById("filterMonth").style.display = mode === "month" ? "flex" : "none";
+    document.getElementById("filterRange").style.display = mode === "range"  ? "flex" : "none";
+  }
+
+  function toISO(d) { return d.toISOString().slice(0, 10); }
+
+  document.getElementById("modeHoje").addEventListener("click",  () => { setMode("hoje");  carregar(); });
+  document.getElementById("modeOntem").addEventListener("click", () => { setMode("ontem"); carregar(); });
+  document.getElementById("mode7dias").addEventListener("click", () => { setMode("7dias"); carregar(); });
+  document.getElementById("modeMonth").addEventListener("click", () => setMode("month"));
+  document.getElementById("modeRange").addEventListener("click", () => setMode("range"));
 
   function getRange() {
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (filterMode === "hoje")  { const s = toISO(today); return { from: s, to: s }; }
+    if (filterMode === "ontem") { const d = new Date(today); d.setDate(d.getDate()-1); const s = toISO(d); return { from: s, to: s }; }
+    if (filterMode === "7dias") { const d = new Date(today); d.setDate(d.getDate()-6); return { from: toISO(d), to: toISO(today) }; }
     if (filterMode === "month") {
-      const y = selAno.value;
-      const m = selMes.value;
+      const y = selAno.value, m = selMes.value;
       const lastDay = new Date(y, Number(m), 0).getDate();
-      return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, "0")}` };
+      return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2,"0")}` };
     }
     return { from: inpFrom.value, to: inpTo.value };
   }
