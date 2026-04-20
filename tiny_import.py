@@ -70,6 +70,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
                 "LAUDO CAUTELAR VERI": "LAUDO CAUTELAR VERIFICACAO",
                 "CAUTELAR COM ANALIS": "CAUTELAR COM ANALISE",
                 "LAUDO DE TRANSFEREN": "LAUDO DE TRANSFERENCIA",
+                "LAUDO DE TRANSFERENC": "LAUDO DE TRANSFERENCIA",
             },
             "fp": {},
             "cliente": {},
