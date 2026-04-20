@@ -674,6 +674,10 @@ class TinyClient:
         return {}
 
     def _save_tokens(self, tokens: dict[str, Any]) -> None:
+        old_tokens = self._load_tokens()
+        if "seed_refresh_token" in old_tokens and "seed_refresh_token" not in tokens:
+            tokens["seed_refresh_token"] = old_tokens["seed_refresh_token"]
+            
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
         with self.token_file.open("w", encoding="utf-8") as file:
             json.dump(tokens, file, ensure_ascii=False, indent=2)

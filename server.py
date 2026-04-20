@@ -366,14 +366,17 @@ def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
     if p.exists():
         try:
             stored = json.loads(p.read_text())
+            if stored.get("seed_refresh_token") == rt:
+                return  # ja fomos iniciados com esse seed
             if stored.get("refresh_token") == rt:
-                return  # ja esta sincronizado
+                return  # retrocompatibilidade
         except Exception:
             pass
     p.write_text(json.dumps({
         "access_token": "",
         "refresh_token": rt,
         "expires_at": 0,
+        "seed_refresh_token": rt,
     }))
 
 
