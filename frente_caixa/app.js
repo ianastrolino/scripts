@@ -623,8 +623,8 @@ async function conferirComPDV() {
 
     // Injeta lançamentos do PDV que não têm correspondência na planilha
     // (serviços que nunca vêm no Excel: PESQUISA AVULSA, BAIXA PERMANENTE etc.)
-    // Sem planilha: injeta apenas faturados (AV sem planilha não faz sentido aqui)
-    const extras = (result.pdv_sem_planilha || []).filter((lc) => temPlanilha || lc.fp === "faturado" || lc.fp === "detran");
+    // Alterado a pedido: permite visualizar AV mesmo sem planilha
+    const extras = (result.pdv_sem_planilha || []);
     // Remove extras anteriores para não duplicar em chamadas subsequentes
     state.records = state.records.filter((r) => !r.pdvExtra);
     for (const lc of extras) {
