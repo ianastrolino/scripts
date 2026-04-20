@@ -69,6 +69,28 @@ async function getCsrfToken() {
  * Trata sessao expirada (401 + session_expired) redirecionando para login
  * em vez de exibir erro de parse de JSON.
  */
+function isTinyAuthError(message) {
+  if (!message) return false;
+  const m = String(message);
+  return m.includes("invalid_grant")
+      || m.includes("Token is not active")
+      || m.includes("Falha ao renovar token")
+      || /Erro Tiny [A-Z]+ [a-z]+ \(401\)/.test(m)
+      || m.includes("token") && m.includes("401");
+}
+
+function promptReauthTiny(contextMsg) {
+  const baseMsg = contextMsg ? `${contextMsg}\n\n` : "";
+  const ok = confirm(
+    `${baseMsg}A autorizacao do Tiny expirou para esta unidade.\n\n` +
+    `Clique OK para abrir a tela do Tiny e reautorizar agora.\n` +
+    `Apos autorizar, volte para esta aba e tente novamente.`
+  );
+  if (ok && typeof apiBase !== "undefined" && apiBase) {
+    window.open(`${apiBase}/auth`, "_blank");
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
   if (method !== "GET") {
@@ -837,11 +859,12 @@ els.confirmSendBtn.addEventListener("click", async () => {
       msg += `\nFalhas: ${total.falhas.length}`;
       const detalhes = total.falhas.map((f) => `  • ${f.cliente}: ${f.erro}`).join("\n");
       msg += `\n\nDetalhes das falhas:\n${detalhes}`;
-      if (tokenError) {
-        msg += `\n\n⚠️ Erro de autenticacao detectado.\nVocê pode reautorizar em: ${window.location.origin}${apiBase}/auth`;
-      }
     }
-    alert(msg);
+    if (tokenError) {
+      promptReauthTiny(msg);
+    } else {
+      alert(msg);
+    }
 
     if (total.falhas.length === 0 && confirm("Deseja limpar o lote atual?")) {
       clearBatch();
@@ -1108,7 +1131,11 @@ async function autoMapClientes() {
       openMapClientesModal();
     }
   } catch (err) {
-    alert(`Erro no auto-mapeamento: ${err.message}`);
+    if (isTinyAuthError(err.message)) {
+      promptReauthTiny("Erro no auto-mapeamento.");
+    } else {
+      alert(`Erro no auto-mapeamento: ${err.message}`);
+    }
   } finally {
     els.autoMapBtn.disabled = false;
     els.autoMapBtn.textContent = "Auto-mapear clientes (≥90%)";

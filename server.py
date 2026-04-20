@@ -356,34 +356,24 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
 
 
 def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
-    """Sincroniza o refresh_token do UNITS_CONFIG para o arquivo de tokens.
-    Se o arquivo ja existe mas o refresh_token do config e diferente (mais novo),
-    sobrescreve para garantir que o token do Railway sempre prevaleca."""
+    """Bootstrap-only: cria arquivo de tokens a partir do UNITS_CONFIG APENAS se nao existir
+    ou estiver vazio/corrompido. Apos a primeira autorizacao OAuth, o arquivo e a
+    UNICA fonte de verdade — o refresh_token do Railway nunca sobrescreve um arquivo valido."""
     p = _unit_state_dir(unit) / "tiny_tokens.json"
-    rt = config["tiny"].get("refresh_token", "")
-    if not rt:
-        return
     if p.exists():
         try:
             stored = json.loads(p.read_text())
-            if stored.get("seed_refresh_token") == rt:
-                return  # ja fomos iniciados com esse seed
-            if stored.get("refresh_token") == rt:
-                return  # retrocompat: seed ainda nao foi rotacionado pelo Tiny
-            # Migracao: arquivo existe sem seed_refresh_token mas com token ja rotacionado.
-            # O token no arquivo e mais recente que o seed do Railway — preserva e marca.
-            existing_rt = stored.get("refresh_token", "")
-            if existing_rt:
-                stored["seed_refresh_token"] = rt
-                p.write_text(json.dumps(stored))
-                return
+            if stored.get("refresh_token"):
+                return  # arquivo ja tem token — nao mexe, e o rei
         except Exception:
-            pass
+            pass  # arquivo corrompido — pode sobrescrever com seed
+    rt = config["tiny"].get("refresh_token", "")
+    if not rt:
+        return
     p.write_text(json.dumps({
         "access_token": "",
         "refresh_token": rt,
         "expires_at": 0,
-        "seed_refresh_token": rt,
     }))
 
 
@@ -549,6 +539,50 @@ def master_api_units_status():
     return _json({"status": status, "data": today})
 
 
+@app.route("/master/api/tiny-health")
+@master_required
+def master_api_tiny_health():
+    """Status do token Tiny para cada unidade — alimenta o painel master.
+
+    Retorna por unidade:
+      - has_token: se existe arquivo de token
+      - access_expires_in: segundos ate o access_token expirar (negativo se expirado)
+      - refresh_token_tail: ultimos 6 chars do refresh_token (identificacao visual)
+      - file_mtime: quando o arquivo foi atualizado pela ultima vez
+      - status: "ok" | "renovar" | "ausente" | "erro"
+    """
+    now = time.time()
+    items = []
+    for uid in UNITS.keys():
+        p = _unit_state_dir(uid) / "tiny_tokens.json"
+        entry = {"id": uid, "nome": UNITS[uid].get("nome", uid)}
+        if not p.exists():
+            entry["status"] = "ausente"
+            entry["has_token"] = False
+            items.append(entry)
+            continue
+        try:
+            stored = json.loads(p.read_text())
+            rt = stored.get("refresh_token", "")
+            expires_at = float(stored.get("expires_at", 0) or 0)
+            expires_in = int(expires_at - now) if expires_at else None
+            entry["has_token"] = bool(rt)
+            entry["refresh_token_tail"] = rt[-6:] if rt else ""
+            entry["access_expires_in"] = expires_in
+            entry["file_mtime"] = dt.datetime.fromtimestamp(p.stat().st_mtime, ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+            if not rt:
+                entry["status"] = "ausente"
+            elif expires_in is not None and expires_in < 0:
+                entry["status"] = "renovar"
+            else:
+                entry["status"] = "ok"
+        except Exception as exc:
+            entry["status"] = "erro"
+            entry["error"] = str(exc)[:200]
+        items.append(entry)
+    return _json({"units": items, "checked_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")})
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Rotas: arquivos estaticos da frente de caixa
 # ══════════════════════════════════════════════════════════════════════════════
@@ -597,7 +631,8 @@ def api_auth_start(unit: str):
 
 @app.route("/u/<unit>/callback")
 def api_auth_callback(unit: str):
-    """Recebe o code do Tiny e troca pelo refresh_token."""
+    """Recebe o code do Tiny e troca pelo refresh_token.
+    O token e salvo direto no arquivo da unidade — zero intervencao no Railway."""
     code = request.args.get("code")
     if not code:
         return Response("Code ausente", status=400)
@@ -605,28 +640,38 @@ def api_auth_callback(unit: str):
     config = _build_unit_config(unit)
     state_dir = _unit_state_dir(unit)
     importer = TinyImporter(config, state_dir)
-    
+
     redirect_uri = config["tiny"].get("redirect_uri") or f"https://{request.host}/u/{unit}/callback"
 
     try:
-        app.logger.info("[oauth] unit=%s redirect_uri=%s client_id=%s", unit, redirect_uri, config["tiny"].get("client_id","?")[:30])
-        tokens = importer.client.exchange_authorization_code(code, redirect_uri)
-        rt = tokens.get("refresh_token", "")
-        rt_block = (
-            f"<p><strong>Cole este refresh_token no UNITS_CONFIG do Railway</strong> "
-            f"(campo <code>\"refresh_token\"</code> da unidade <code>{unit}</code>):</p>"
-            f"<textarea rows='3' style='width:100%;font-family:monospace;font-size:13px'>{rt}</textarea>"
-            f"<p style='color:#666;font-size:13px'>Sem um Volume Railway em /data, o token nao sobrevive ao restart. "
-            f"Salvar o refresh_token no UNITS_CONFIG resolve definitivamente.</p>"
-        ) if rt else ""
+        app.logger.info("[oauth.callback] unit=%s ok=start redirect_uri=%s", unit, redirect_uri)
+        importer.client.exchange_authorization_code(code, redirect_uri)
+        app.logger.info("[oauth.callback] unit=%s ok=True token_saved", unit)
         return (
-            f"<h1>Autenticacao concluida!</h1>"
-            f"<p>Unidade <strong>{unit}</strong> autorizada. Pode voltar ao app.</p>"
-            f"{rt_block}"
+            f"<!doctype html><meta charset='utf-8'>"
+            f"<title>Tiny autorizado — {unit}</title>"
+            f"<style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:80px auto;padding:0 24px;color:#222}}"
+            f".ok{{background:#d4f7dc;border:1px solid #2fa84f;border-radius:8px;padding:20px;margin:24px 0}}"
+            f"a.btn{{display:inline-block;background:#2b60d9;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin-top:16px}}"
+            f"a.btn:hover{{background:#1f4ab0}}</style>"
+            f"<h1>Tiny autorizado com sucesso</h1>"
+            f"<div class='ok'><strong>Unidade:</strong> {unit}<br>"
+            f"O token foi salvo e a unidade ja pode enviar para o Tiny.</div>"
+            f"<a class='btn' href='/u/{unit}/home'>Voltar para a unidade</a>"
         )
     except Exception as exc:
-        app.logger.exception("[server] oauth callback unit=%s", unit)
-        return f"<h1>Erro na autenticacao:</h1><pre>{exc}</pre>"
+        app.logger.exception("[oauth.callback] unit=%s ok=False", unit)
+        return (
+            f"<!doctype html><meta charset='utf-8'>"
+            f"<title>Erro ao autorizar — {unit}</title>"
+            f"<style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:80px auto;padding:0 24px;color:#222}}"
+            f".err{{background:#fde0e0;border:1px solid #c62828;border-radius:8px;padding:20px;margin:24px 0}}"
+            f"pre{{background:#f4f4f4;padding:12px;border-radius:4px;overflow:auto;font-size:12px}}"
+            f"a.btn{{display:inline-block;background:#2b60d9;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin-top:16px}}</style>"
+            f"<h1>Falha na autorizacao</h1>"
+            f"<div class='err'><pre>{exc}</pre></div>"
+            f"<a class='btn' href='/u/{unit}/auth'>Tentar novamente</a>"
+        )
 
 @app.route("/u/<unit>/api/info")
 @unit_access_required

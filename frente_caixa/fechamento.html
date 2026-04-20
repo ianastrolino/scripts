@@ -686,6 +686,7 @@
           <a class="dd-item" id="ddGerencial" href="" style="display:none">📊 Gerencial</a>
           <a class="dd-item" id="ddRede" href="/master" style="display:none">🏢 Rede</a>
           <div class="dd-sep"></div>
+          <a class="dd-item" id="ddReauthTiny" href="" target="_blank">🔑 Reautorizar Tiny</a>
           <a class="dd-item" id="ddManual" href="" target="_blank">? Ajuda</a>
           <div class="dd-sep"></div>
           <a class="dd-item danger" href="/logout">Sair</a>
@@ -1122,6 +1123,8 @@
         if (ddCaixa) ddCaixa.href = apiBase + '/caixa2';
         const ddManual = document.getElementById('ddManual');
         if (ddManual) ddManual.href = apiBase + '/manual';
+        const ddReauth = document.getElementById('ddReauthTiny');
+        if (ddReauth) ddReauth.href = apiBase + '/auth';
         if (info.gerencial) { const el = document.getElementById('ddGerencial'); if (el) { el.href = apiBase + '/gerencial'; el.style.display = ''; } }
         if (info.master)    { const el = document.getElementById('ddRede');      if (el) el.style.display = ''; }
         const hamMenu = document.getElementById('hamMenu');

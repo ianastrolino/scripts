@@ -81,6 +81,27 @@
     .status-badge.closed { background: #f1f5f9; color: var(--muted); }
     .status-badge.loading { background: #f1f5f9; color: #94a3b8; }
 
+    .tiny-row {
+      padding: 10px 20px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 12px;
+    }
+    .tiny-label { color: var(--muted); font-weight: 600; }
+    .tiny-status { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+    .tiny-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .tiny-ok .tiny-dot { background: var(--green); }
+    .tiny-ok .tiny-status { color: var(--green); }
+    .tiny-renovar .tiny-dot { background: var(--amber); }
+    .tiny-renovar .tiny-status { color: var(--amber); }
+    .tiny-erro .tiny-dot, .tiny-ausente .tiny-dot { background: #dc2626; }
+    .tiny-erro .tiny-status, .tiny-ausente .tiny-status { color: #dc2626; }
+    .tiny-reauth {
+      background: #fef2f2; border: 1px solid #fecaca; color: #dc2626;
+      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;
+      text-decoration: none; transition: background .15s;
+    }
+    .tiny-reauth:hover { background: #fee2e2; }
+
     .unit-stats {
       padding: 14px 20px;
       display: grid; grid-template-columns: repeat(3, 1fr);
@@ -172,6 +193,10 @@
             <div class="stat"><div class="stat-val" id="total-${u.id}">—</div><div class="stat-lbl">Total AV</div></div>
             <div class="stat"><div class="stat-val" id="fa-${u.id}">—</div><div class="stat-lbl">A Faturar</div></div>
           </div>
+          <div class="tiny-row" id="tiny-row-${u.id}">
+            <span class="tiny-label">Tiny</span>
+            <span class="tiny-status"><span class="tiny-dot"></span><span id="tiny-text-${u.id}">verificando...</span></span>
+          </div>
           <div class="unit-actions">
             <a href="/u/${u.id}/caixa2" class="action-btn primary">💰 Caixa do Dia</a>
             <a href="/u/${u.id}/fechamento" class="action-btn secondary">✓ Fechamento</a>
@@ -182,6 +207,7 @@
 
       // Carrega status de cada unidade
       data.units.forEach(u => loadUnitStatus(u.id));
+      loadTinyHealth();
     } catch (err) {
       grid.innerHTML = '<p class="loading-state">Erro ao carregar unidades.</p>';
     }
@@ -216,6 +242,30 @@
 
   function fmt(v) {
     return "R$\u00a0" + Number(v).toLocaleString("pt-BR", {minimumFractionDigits:0, maximumFractionDigits:0});
+  }
+
+  async function loadTinyHealth() {
+    try {
+      const res = await fetch("/master/api/tiny-health");
+      const data = await res.json();
+      (data.units || []).forEach(u => {
+        const row = document.getElementById(`tiny-row-${u.id}`);
+        const text = document.getElementById(`tiny-text-${u.id}`);
+        if (!row || !text) return;
+        row.classList.remove("tiny-ok","tiny-renovar","tiny-erro","tiny-ausente");
+        const labels = {
+          ok: "Autorizado",
+          renovar: "Renovacao pendente",
+          ausente: "Nao autorizado",
+          erro: "Erro"
+        };
+        row.classList.add(`tiny-${u.status}`);
+        text.textContent = labels[u.status] || u.status;
+        if (u.status === "ausente" || u.status === "erro") {
+          row.innerHTML += `<a class="tiny-reauth" href="/u/${u.id}/auth" target="_blank">Reautorizar</a>`;
+        }
+      });
+    } catch (_) {}
   }
 
   async function loadUserInfo() {

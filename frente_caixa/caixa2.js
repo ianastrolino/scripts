@@ -416,6 +416,7 @@ document.addEventListener("DOMContentLoaded", () => {
         set("ddCaixa",        `${apiBase}/caixa2`);
         set("ddFechamento",   `${apiBase}/fechamento`);
         set("ddManual",       `${apiBase}/manual`);
+        set("ddReauthTiny",   `${apiBase}/auth`);
         if (info.gerencial) {
           const el = document.getElementById("ddGerencial");
           if (el) { el.href = `${apiBase}/gerencial`; el.style.display = ""; }
