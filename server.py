@@ -369,7 +369,14 @@ def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
             if stored.get("seed_refresh_token") == rt:
                 return  # ja fomos iniciados com esse seed
             if stored.get("refresh_token") == rt:
-                return  # retrocompatibilidade
+                return  # retrocompat: seed ainda nao foi rotacionado pelo Tiny
+            # Migracao: arquivo existe sem seed_refresh_token mas com token ja rotacionado.
+            # O token no arquivo e mais recente que o seed do Railway — preserva e marca.
+            existing_rt = stored.get("refresh_token", "")
+            if existing_rt:
+                stored["seed_refresh_token"] = rt
+                p.write_text(json.dumps(stored))
+                return
         except Exception:
             pass
     p.write_text(json.dumps({
@@ -1518,6 +1525,31 @@ def api_caixa_conferir(unit: str):
             key = (_norm_placa(lc.get("placa", "")), _norm_servico(lc.get("servico", "")))
             pdv_map[key] = lc
 
+        def _find_pdv_key(placa: str, servico: str) -> tuple | None:
+            """Busca exata primeiro; fallback por prefixo para tolerar truncamento do Excel."""
+            exact = (placa, servico)
+            if exact in pdv_map:
+                return exact
+            # Truncamento do Excel limita nomes a ~19 chars — compara pelo comprimento menor
+            for (p, s) in pdv_map:
+                if p != placa:
+                    continue
+                n = min(len(s), len(servico))
+                if n >= 12 and s[:n] == servico[:n]:
+                    return (p, s)
+            return None
+
+        def _planilha_has_match(placa: str, servico: str, planilha_keys: set) -> bool:
+            if (placa, servico) in planilha_keys:
+                return True
+            for (p, s) in planilha_keys:
+                if p != placa:
+                    continue
+                n = min(len(s), len(servico))
+                if n >= 12 and s[:n] == servico[:n]:
+                    return True
+            return False
+
         # Chaves da planilha (AV e FA) para detectar PDV sem planilha
         planilha_keys: set[tuple] = set()
         conferencia: dict[str, dict] = {}
@@ -1527,10 +1559,10 @@ def api_caixa_conferir(unit: str):
             placa   = _norm_placa(r.get("placa", ""))
             servico = _norm_servico(r.get("servico", ""))
             preco   = float(r.get("preco", 0))
-            key     = (placa, servico)
-            planilha_keys.add(key)
+            planilha_keys.add((placa, servico))
 
-            if key not in pdv_map:
+            pdv_key = _find_pdv_key(placa, servico)
+            if pdv_key is None:
                 conferencia[rec_id] = {
                     "status": "sem_pdv",
                     "pdv_valor": None,
@@ -1538,7 +1570,7 @@ def api_caixa_conferir(unit: str):
                     "pdv_hora": None,
                 }
             else:
-                lc        = pdv_map[key]
+                lc        = pdv_map[pdv_key]
                 pdv_valor = float(lc.get("valor", 0))
                 pdv_fp    = lc.get("fp", "")
                 # Categoriza FP do PDV em AV ou FA (faturado → FA, resto → AV)
@@ -1562,7 +1594,7 @@ def api_caixa_conferir(unit: str):
         # — serviços avulsos: PESQUISA AVULSA, BAIXA PERMANENTE, faturados sem planilha etc.
         pdv_sem_planilha = []
         for (placa_key, servico_key), lc in pdv_map.items():
-            if (placa_key, servico_key) not in planilha_keys:
+            if not _planilha_has_match(placa_key, servico_key, planilha_keys):
                 pdv_sem_planilha.append({
                     "pdv_id":   lc.get("id"),
                     "hora":     lc.get("hora"),
