@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Histórico de Caixa</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+      --din:    #059669; --din-bg: #ecfdf5; --din-bd: #6ee7b7;
+      --deb:    #2563eb; --deb-bg: #eff6ff; --deb-bd: #93c5fd;
+      --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
+      --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
+      --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+      --det:    #4f46e5; --det-bg: #eef2ff; --det-bd: #c7d2fe;
+      --accent: var(--ds-accent-600);
+    }
+
+    .filter-bar {
+      display: flex; align-items: center; gap: var(--ds-space-3); flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      margin-bottom: var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .filter-label {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: var(--ds-tracking-wide);
+    }
+    .filter-select, .filter-input {
+      background: var(--ds-surface); border: 1px solid var(--border);
+      color: var(--t1); border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-3);
+      font-size: var(--ds-text-base); font-family: inherit;
+      cursor: pointer; outline: none;
+    }
+    .filter-input[type="search"] { cursor: text; min-width: 220px; }
+    .filter-select:focus, .filter-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--ds-accent-100);
+    }
+    .filter-div { width: 1px; height: 24px; background: var(--border); margin: 0 var(--ds-space-1); }
+    .filter-sep { color: var(--ds-ink-muted); font-size: var(--ds-text-sm); }
+    .mode-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--ds-ink-muted); border-radius: var(--ds-radius-md);
+      padding: 6px var(--ds-space-3);
+      font-size: var(--ds-text-sm); font-family: inherit;
+      cursor: pointer;
+    }
+    .mode-btn:hover { background: var(--ds-surface-alt); color: var(--t1); }
+    .mode-btn.active {
+      background: var(--ds-accent-50);
+      border-color: var(--ds-accent-500);
+      color: var(--ds-accent-700);
+      font-weight: var(--ds-weight-semi);
+    }
+    .btn-aplicar {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-5);
+      font-size: var(--ds-text-base); font-family: inherit;
+      font-weight: var(--ds-weight-semi); cursor: pointer;
+    }
+    .btn-aplicar:hover { background: var(--ds-accent-700); }
+    .btn-exportar {
+      background: transparent; color: var(--t2);
+      border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-4);
+      font-size: var(--ds-text-sm); font-family: inherit;
+      font-weight: var(--ds-weight-semi); cursor: pointer;
+    }
+    .btn-exportar:hover { background: var(--card2); color: var(--t1); }
+
+    /* KPIs resumo */
+    .kpi-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--ds-space-4); margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi-label { font-size: var(--ds-text-xs); color: var(--t2);
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      font-weight: var(--ds-weight-bold); margin-bottom: 4px; }
+    .kpi-value { font-size: var(--ds-text-xl); font-weight: var(--ds-weight-bold);
+      color: var(--t1); font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: var(--ds-text-xs); color: var(--t3); margin-top: 2px; }
+
+    /* Tabela */
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border); background: var(--card2);
+    }
+    .table-title {
+      font-size: var(--ds-text-md); font-weight: var(--ds-weight-bold); color: var(--t1);
+    }
+    .table-meta { font-size: var(--ds-text-sm); color: var(--t2); }
+    .table-scroll { overflow-x: auto; max-height: 640px; overflow-y: auto; }
+    table.lc-table { width: 100%; border-collapse: collapse; }
+    table.lc-table thead th {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      color: var(--ds-ink-muted); padding: var(--ds-space-3) var(--ds-space-4);
+      text-align: left; background: var(--card2);
+      position: sticky; top: 0; z-index: 1;
+      border-bottom: 1px solid var(--border);
+    }
+    table.lc-table tbody td {
+      padding: var(--ds-space-3) var(--ds-space-4);
+      font-size: var(--ds-text-sm); color: var(--t1);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    table.lc-table tbody tr:last-child td { border-bottom: none; }
+    table.lc-table tbody tr:hover { background: var(--card2); }
+    td.num { font-variant-numeric: tabular-nums; text-align: right; font-weight: var(--ds-weight-semi); }
+    td.data { color: var(--t2); font-variant-numeric: tabular-nums; }
+
+    .fp-chip {
+      display: inline-block; padding: 2px 8px; border-radius: var(--ds-radius-full);
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-semi);
+      white-space: nowrap; border: 1px solid transparent;
+    }
+    .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border-color: var(--din-bd); }
+    .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border-color: var(--deb-bd); }
+    .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border-color: var(--crd-bd); }
+    .fp-chip.pix      { background: var(--pix-bg); color: var(--pix); border-color: var(--pix-bd); }
+    .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border-color: var(--fat-bd); }
+    .fp-chip.detran   { background: var(--det-bg); color: var(--det); border-color: var(--det-bd); }
+
+    .unit-tag {
+      display: inline-block; font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-semi); padding: 1px var(--ds-space-2);
+      border-radius: var(--ds-radius-sm);
+      background: var(--ds-accent-50); color: var(--ds-accent-700);
+      border: 1px solid var(--ds-accent-100);
+    }
+
+    .g-loading { text-align: center; padding: var(--ds-space-10) var(--ds-space-5); color: var(--ds-ink-muted); }
+    .g-empty   { text-align: center; padding: var(--ds-space-10) var(--ds-space-5); color: var(--ds-ink-muted); }
+    .g-error   { text-align: center; padding: var(--ds-space-10) var(--ds-space-5); color: var(--ds-danger); }
+
+    .pager {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-3) var(--ds-space-5); border-top: 1px solid var(--border);
+      background: var(--card2); font-size: var(--ds-text-sm); color: var(--t2);
+    }
+    .pager .pager-buttons { display: flex; gap: var(--ds-space-2); }
+    .pager button {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--t1); border-radius: var(--ds-radius-md);
+      padding: 4px var(--ds-space-3); font-size: var(--ds-text-sm);
+      font-family: inherit; cursor: pointer;
+    }
+    .pager button:disabled { opacity: .4; cursor: not-allowed; }
+    .pager button:not(:disabled):hover { background: var(--card2); }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Histórico de Caixa</h1>
+        <p class="app-page-sub">Consulta linha-a-linha com filtro por período, unidade, forma de pagamento e busca livre</p>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <span class="filter-label">Período</span>
+        <button class="mode-btn active" id="modeMonth">Mês</button>
+        <button class="mode-btn" id="modeRange">Intervalo</button>
+
+        <div id="filterMonth" style="display:flex;align-items:center;gap:8px;">
+          <select class="filter-select" id="selMes">
+            <option value="01">Janeiro</option><option value="02">Fevereiro</option>
+            <option value="03">Março</option><option value="04">Abril</option>
+            <option value="05">Maio</option><option value="06">Junho</option>
+            <option value="07">Julho</option><option value="08">Agosto</option>
+            <option value="09">Setembro</option><option value="10">Outubro</option>
+            <option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select>
+          <select class="filter-select" id="selAno"></select>
+        </div>
+
+        <div id="filterRange" style="display:none;align-items:center;gap:8px;">
+          <input class="filter-input" type="date" id="inpFrom">
+          <span class="filter-sep">até</span>
+          <input class="filter-input" type="date" id="inpTo">
+        </div>
+
+        <div class="filter-div"></div>
+        <span class="filter-label">Unidade</span>
+        <select class="filter-select" id="selUnit">
+          <option value="all">Todas</option>
+        </select>
+
+        <span class="filter-label">FP</span>
+        <select class="filter-select" id="selFp">
+          <option value="all">Todas</option>
+          <option value="dinheiro">Dinheiro</option>
+          <option value="debito">Débito</option>
+          <option value="credito">Crédito</option>
+          <option value="pix">PIX</option>
+          <option value="faturado">Faturado</option>
+          <option value="detran">DETRAN</option>
+        </select>
+
+        <div class="filter-div"></div>
+        <input class="filter-input" type="search" id="inpBusca" placeholder="Buscar placa, cliente, CPF, serviço…">
+
+        <button class="btn-aplicar" id="btnAplicar">Aplicar</button>
+        <button class="btn-exportar" id="btnExportar">⬇ Export CSV</button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-strip" id="kpiStrip">
+        <div class="kpi"><div class="kpi-label">Registros</div><div class="kpi-value" id="kpiCount">—</div><div class="kpi-sub" id="kpiCountSub">no filtro</div></div>
+        <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">soma filtrada</div></div>
+        <div class="kpi"><div class="kpi-label">Ticket médio</div><div class="kpi-value" id="kpiTicket">—</div></div>
+        <div class="kpi"><div class="kpi-label">À vista</div><div class="kpi-value" id="kpiAvista">—</div></div>
+        <div class="kpi"><div class="kpi-label">Faturado</div><div class="kpi-value" id="kpiFat">—</div></div>
+        <div class="kpi"><div class="kpi-label">DETRAN</div><div class="kpi-value" id="kpiDet">—</div></div>
+      </div>
+
+      <!-- Tabela -->
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">Lançamentos</div>
+          <div class="table-meta" id="tableMeta">—</div>
+        </div>
+        <div class="table-scroll">
+          <table class="lc-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Hora</th>
+                <th>Unidade</th>
+                <th>Placa</th>
+                <th>Cliente</th>
+                <th>CPF/CNPJ</th>
+                <th>Serviço</th>
+                <th>FP</th>
+                <th class="num">Valor</th>
+              </tr>
+            </thead>
+            <tbody id="lcBody">
+              <tr><td colspan="9" class="g-loading">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager" id="pager" style="display:none">
+          <div class="pager-info" id="pagerInfo">—</div>
+          <div class="pager-buttons">
+            <button id="pgPrev">← Anterior</button>
+            <button id="pgNext">Próxima →</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "historico-caixa",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Histórico de Caixa", current: true }
+    ]
+  });
+
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = s => { if (!s) return ""; const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; };
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const now = new Date();
+  const selMes = document.getElementById("selMes");
+  const selAno = document.getElementById("selAno");
+  selMes.value = String(now.getMonth() + 1).padStart(2, "0");
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const o = document.createElement("option");
+    o.value = y; o.textContent = y; selAno.appendChild(o);
+  }
+  selAno.value = now.getFullYear();
+
+  const inpFrom = document.getElementById("inpFrom");
+  const inpTo   = document.getElementById("inpTo");
+  inpFrom.value = `${now.getFullYear()}-${selMes.value}-01`;
+  inpTo.value   = now.toISOString().slice(0, 10);
+
+  let filterMode = "month";
+  document.getElementById("modeMonth").addEventListener("click", () => {
+    filterMode = "month";
+    document.getElementById("modeMonth").classList.add("active");
+    document.getElementById("modeRange").classList.remove("active");
+    document.getElementById("filterMonth").style.display = "flex";
+    document.getElementById("filterRange").style.display = "none";
+  });
+  document.getElementById("modeRange").addEventListener("click", () => {
+    filterMode = "range";
+    document.getElementById("modeRange").classList.add("active");
+    document.getElementById("modeMonth").classList.remove("active");
+    document.getElementById("filterMonth").style.display = "none";
+    document.getElementById("filterRange").style.display = "flex";
+  });
+
+  function getRange() {
+    if (filterMode === "month") {
+      const ano = selAno.value;
+      const mes = selMes.value;
+      const from = `${ano}-${mes}-01`;
+      const lastDay = new Date(Number(ano), Number(mes), 0).getDate();
+      const to = `${ano}-${mes}-${String(lastDay).padStart(2, "0")}`;
+      return { from, to };
+    }
+    return { from: inpFrom.value, to: inpTo.value };
+  }
+
+  // Estado
+  let allLcs = [];       // lançamentos do backend (brutos)
+  let filteredLcs = [];  // após filtros client (fp + busca)
+  let page = 0;
+  const PAGE_SIZE = 200;
+
+  const fpLabel = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito",
+                    pix: "PIX", faturado: "Faturado", detran: "DETRAN" };
+
+  async function loadUnidades() {
+    try {
+      const r = await fetch("/gerencial/api/historico?from=2025-01-01&to=2025-01-01&unit=all", { credentials: "same-origin" });
+      const d = await r.json();
+      if (d && d.unidades) {
+        const sel = document.getElementById("selUnit");
+        sel.innerHTML = `<option value="all">Todas</option>`;
+        const entries = Object.entries(d.unidades).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+        for (const [slug, nome] of entries) {
+          const o = document.createElement("option");
+          o.value = slug; o.textContent = nome; sel.appendChild(o);
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function loadData() {
+    const tb = document.getElementById("lcBody");
+    tb.innerHTML = `<tr><td colspan="9" class="g-loading">Carregando…</td></tr>`;
+    document.getElementById("tableMeta").textContent = "—";
+    document.getElementById("pager").style.display = "none";
+
+    const { from, to } = getRange();
+    if (!from || !to) {
+      tb.innerHTML = `<tr><td colspan="9" class="g-error">Informe o período.</td></tr>`;
+      return;
+    }
+    const unit = document.getElementById("selUnit").value;
+    const url = `/gerencial/api/historico?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&unit=${encodeURIComponent(unit)}&detail=1`;
+    try {
+      const r = await fetch(url, { credentials: "same-origin" });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || "erro");
+      allLcs = Array.isArray(d.lancamentos) ? d.lancamentos : [];
+      applyClientFilters();
+    } catch (e) {
+      tb.innerHTML = `<tr><td colspan="9" class="g-error">Erro: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  function applyClientFilters() {
+    const fp = document.getElementById("selFp").value;
+    const q = (document.getElementById("inpBusca").value || "").trim().toLowerCase();
+
+    filteredLcs = allLcs.filter(lc => {
+      if (fp !== "all" && (lc.fp || "") !== fp) return false;
+      if (q) {
+        const hay = [
+          lc.placa, lc.cliente, lc.cpf, lc.servico, lc.unit_nome
+        ].map(x => String(x || "").toLowerCase()).join(" | ");
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    page = 0;
+    render();
+  }
+
+  function render() {
+    const tb = document.getElementById("lcBody");
+    const total = filteredLcs.length;
+
+    if (total === 0) {
+      tb.innerHTML = `<tr><td colspan="9" class="g-empty">Nenhum lançamento no filtro.</td></tr>`;
+      document.getElementById("tableMeta").textContent = "0 registro(s)";
+      document.getElementById("pager").style.display = "none";
+      updateKPIs([]);
+      return;
+    }
+
+    updateKPIs(filteredLcs);
+
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (page >= pages) page = pages - 1;
+    if (page < 0) page = 0;
+    const start = page * PAGE_SIZE;
+    const slice = filteredLcs.slice(start, start + PAGE_SIZE);
+
+    const rows = slice.map(lc => {
+      const fp = lc.fp || "";
+      const chip = fp ? `<span class="fp-chip ${fp}">${escHtml(fpLabel[fp] || fp)}</span>` : "—";
+      const unitHtml = lc.unit_nome ? `<span class="unit-tag">${escHtml(lc.unit_nome)}</span>` : "—";
+      return `<tr>
+        <td class="data">${escHtml(fmtDate(lc.data))}</td>
+        <td class="data">${escHtml(lc.hora || "")}</td>
+        <td>${unitHtml}</td>
+        <td>${escHtml(lc.placa || "")}</td>
+        <td>${escHtml(lc.cliente || "")}</td>
+        <td>${escHtml(lc.cpf || "")}</td>
+        <td>${escHtml(lc.servico || "")}</td>
+        <td>${chip}</td>
+        <td class="num">${brl(lc.valor)}</td>
+      </tr>`;
+    }).join("");
+    tb.innerHTML = rows;
+
+    document.getElementById("tableMeta").textContent =
+      `${total.toLocaleString("pt-BR")} registro(s) · mostrando ${slice.length} (pág. ${page + 1}/${pages})`;
+
+    const pager = document.getElementById("pager");
+    if (pages > 1) {
+      pager.style.display = "flex";
+      document.getElementById("pagerInfo").textContent =
+        `${(start + 1).toLocaleString("pt-BR")}–${(start + slice.length).toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")}`;
+      document.getElementById("pgPrev").disabled = page === 0;
+      document.getElementById("pgNext").disabled = page >= pages - 1;
+    } else {
+      pager.style.display = "none";
+    }
+  }
+
+  function updateKPIs(lcs) {
+    let total = 0, avista = 0, fat = 0, det = 0;
+    for (const lc of lcs) {
+      const v = Number(lc.valor || 0);
+      total += v;
+      const fp = lc.fp || "";
+      if (fp === "faturado") fat += v;
+      else if (fp === "detran") det += v;
+      else avista += v;
+    }
+    const count = lcs.length;
+    document.getElementById("kpiCount").textContent = count.toLocaleString("pt-BR");
+    document.getElementById("kpiCountSub").textContent = count === allLcs.length ? "no período" : `de ${allLcs.length.toLocaleString("pt-BR")} no período`;
+    document.getElementById("kpiTotal").textContent = brl(total);
+    document.getElementById("kpiTicket").textContent = count ? brl(total / count) : "—";
+    document.getElementById("kpiAvista").textContent = brl(avista);
+    document.getElementById("kpiFat").textContent = brl(fat);
+    document.getElementById("kpiDet").textContent = brl(det);
+  }
+
+  document.getElementById("btnAplicar").addEventListener("click", loadData);
+  document.getElementById("selFp").addEventListener("change", applyClientFilters);
+  document.getElementById("inpBusca").addEventListener("input", debounce(applyClientFilters, 200));
+  document.getElementById("pgPrev").addEventListener("click", () => { page--; render(); });
+  document.getElementById("pgNext").addEventListener("click", () => { page++; render(); });
+
+  document.getElementById("btnExportar").addEventListener("click", () => {
+    const { from, to } = getRange();
+    if (!from || !to) return;
+    const unit = document.getElementById("selUnit").value;
+    window.location.href = `/gerencial/api/exportar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&unit=${encodeURIComponent(unit)}`;
+  });
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  // Boot
+  loadUnidades().then(loadData);
+</script>
+
+</body>
+</html>

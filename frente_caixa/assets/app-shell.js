@@ -100,6 +100,7 @@
       items: [
         { id: "master",           label: "Painel Master",    icon: "master",     href: "/master" },
         { id: "gerencial-rede",   label: "Gerencial Rede",   icon: "gerencial",  href: "/gerencial" },
+        { id: "historico-caixa",  label: "Histórico de Caixa", icon: "historico", href: "/gerencial/historico-caixa" },
         { id: "unidades",         label: "Unidades",         icon: "unidades",   disabled: true, badge: "Em breve" },
       ],
     },

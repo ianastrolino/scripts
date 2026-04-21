@@ -2426,6 +2426,12 @@ def master_gerencial_page():
     return _nocache(send_from_directory(UI_DIR, "master_gerencial.html"))
 
 
+@app.route("/gerencial/historico-caixa")
+@master_only_required
+def master_historico_caixa_page():
+    return _nocache(send_from_directory(UI_DIR, "historico-caixa.html"))
+
+
 def _agg_lancamentos(lancamentos: list[dict], fp_keys: tuple) -> dict:
     totais: dict[str, float] = {fp: 0.0 for fp in fp_keys}
     for lc in lancamentos:
@@ -2446,6 +2452,7 @@ def api_master_historico():
         date_from   = request.args.get("from", "")
         date_to     = request.args.get("to", "")
         unit_filter = request.args.get("unit", "all")
+        detail      = request.args.get("detail", "").strip() in ("1", "true", "yes")
         dt.date.fromisoformat(date_from)
         dt.date.fromisoformat(date_to)
 
@@ -2505,7 +2512,7 @@ def api_master_historico():
             key=lambda x: x["count"], reverse=True,
         )
 
-        return _json({
+        payload = {
             "success":      True,
             "unidades":     {uid: UNITS[uid].get("nome", uid) for uid in UNITS},
             "unit_filter":  unit_filter,
@@ -2514,7 +2521,16 @@ def api_master_historico():
             "por_unidade":  por_unidade,
             "por_dia":      por_dia,
             "servicos":     servicos,
-        })
+        }
+
+        if detail:
+            all_sorted = sorted(
+                all_lcs,
+                key=lambda x: (x.get("data", ""), x.get("hora", ""), x.get("timestamp", "")),
+            )
+            payload["lancamentos"] = all_sorted
+
+        return _json(payload)
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
         if isinstance(exc, HTTPException):
