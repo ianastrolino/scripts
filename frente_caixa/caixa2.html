@@ -835,6 +835,23 @@
       border-radius: var(--rl) var(--rl) 0 0;
     }
     .table-toolbar-left { display: flex; align-items: center; gap: 8px; }
+    .table-toolbar-right { display: flex; align-items: center; gap: 8px; }
+    .table-filter {
+      font-size: 12px;
+      padding: 6px 10px;
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--t1);
+      outline: none;
+      width: 260px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .table-filter:focus {
+      border-color: var(--din);
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, .1);
+    }
+    .table-filter::placeholder { color: var(--t3); }
     .table-title {
       font-size: 12px;
       font-weight: 700;
@@ -1923,6 +1940,9 @@
             <span class="table-title" id="tableTitle">Lançamentos de hoje</span>
             <span class="live-badge"><span class="live-dot"></span>Ao vivo</span>
           </div>
+          <div class="table-toolbar-right">
+            <input type="search" id="filtroLancamentos" class="table-filter" placeholder="Filtrar por placa, cliente ou serviço..." autocomplete="off" />
+          </div>
         </div>
         <div class="table-scroll">
           <div class="empty-ledger" id="emptyState">
@@ -2129,8 +2149,8 @@
     })();
   </script>
 
-  <script src="caixa.js?v=15"></script>
-  <script src="caixa2-init.js?v=15"></script>
-  <script src="caixa2.js?v=15"></script>
+  <script src="caixa.js?v=16"></script>
+  <script src="caixa2-init.js?v=16"></script>
+  <script src="caixa2.js?v=16"></script>
 </body>
 </html>

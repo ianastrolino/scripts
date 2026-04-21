@@ -18,8 +18,8 @@ const state = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 let _csrfToken = null;
-async function getCsrfToken() {
-  if (!_csrfToken) {
+async function getCsrfToken(force = false) {
+  if (force || !_csrfToken) {
     try {
       const data = await fetch("/api/csrf-token").then(r => r.json());
       _csrfToken = data.token || "";
@@ -30,12 +30,24 @@ async function getCsrfToken() {
 
 async function apiFetch(path, options = {}) {
   const method = (options.method || "GET").toUpperCase();
-  if (method !== "GET") {
-    const token = await getCsrfToken();
-    options.headers = { ...options.headers, "X-CSRF-Token": token };
+  const doFetch = async (token) => {
+    const opts = { ...options };
+    if (method !== "GET") {
+      opts.headers = { ...options.headers, "X-CSRF-Token": token };
+    }
+    const response = await fetch(path, opts);
+    const text = await response.text();
+    return { response, text };
+  };
+
+  let token = method !== "GET" ? await getCsrfToken() : "";
+  let { response, text } = await doFetch(token);
+
+  if (method !== "GET" && response.status === 403) {
+    token = await getCsrfToken(true);
+    ({ response, text } = await doFetch(token));
   }
-  const response = await fetch(path, options);
-  const text = await response.text();
+
   if (!text) throw new Error(`Resposta vazia (HTTP ${response.status}).`);
   let data;
   try { data = JSON.parse(text); }
@@ -117,13 +129,38 @@ function renderTabela() {
     if (state.lancamentos.length === 0) {
       table.style.display = "none";
       empty.style.display = "block";
+      empty.innerHTML = `
+        <div class="empty-icon-ring">📋</div>
+        <p>Caixa pronto para o dia.</p>
+        <small>Use o formulário ao lado para registrar o primeiro lançamento.</small>
+      `;
+      return;
+    }
+
+    const filtroEl = document.getElementById("filtroLancamentos");
+    const filtro = (filtroEl?.value || "").trim().toLowerCase();
+    const lista = filtro
+      ? state.lancamentos.filter(lc => {
+          const hay = `${lc.placa || ""} ${lc.cliente || ""} ${lc.servico || ""} ${lc.cpf || ""}`.toLowerCase();
+          return hay.includes(filtro);
+        })
+      : state.lancamentos;
+
+    if (lista.length === 0) {
+      table.style.display = "none";
+      empty.style.display = "block";
+      empty.innerHTML = `
+        <div class="empty-icon-ring">🔍</div>
+        <p>Nenhum lançamento corresponde ao filtro.</p>
+        <small>Tente outra placa, cliente ou serviço.</small>
+      `;
       return;
     }
 
     table.style.display = "";
     empty.style.display = "none";
 
-    tbody.innerHTML = state.lancamentos.map((lc, i) => `
+    tbody.innerHTML = lista.map((lc, i) => `
       <tr data-id="${lc.id}">
         <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
         <td style="color:var(--muted);font-size:13px;">${lc.hora}</td>
@@ -672,6 +709,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   renderPlacasDatalist();
+
+  // Filtro da tabela de lançamentos
+  const filtroEl = document.getElementById("filtroLancamentos");
+  if (filtroEl) {
+    filtroEl.addEventListener("input", () => renderTabela());
+  }
 
   document.getElementById("ePlaca").addEventListener("input", function () {
     const pos = this.selectionStart;
