@@ -773,58 +773,114 @@ def master_api_maintenance_off():
 @app.route("/master/api/debug/email-test", methods=["GET"])
 @master_required
 def master_api_debug_email_test():
-    """Envia email de teste para diagnosticar SMTP. Uso: ?to=email@dominio.com.
+    """Envia email de teste. Uso: ?to=email@dominio.com[&provider=resend|smtp][&host=&port=&mode=ssl|starttls].
 
-    Retorna JSON com cada passo do diagnostico (config, conexao, envio).
-    Se falhar, o erro volta na resposta em vez de virar log silencioso.
+    Sem ?provider: auto-seleciona (resend se RESEND_API_KEY setada, senao smtp).
+    Com ?provider=resend|smtp: forca aquele provider.
+    Params host/port/mode so afetam smtp.
+
+    Retorna JSON com diagnostico completo (config, conexao, envio).
     """
     import smtplib
     from email.mime.text import MIMEText
+    import base64, json as _json_mod, urllib.request, urllib.error
 
-    to_override = (request.args.get("to") or "").strip()
-    host_override = (request.args.get("host") or "").strip()
-    port_override = (request.args.get("port") or "").strip()
-    mode_override = (request.args.get("mode") or "").strip().lower()  # "ssl" | "starttls"
+    to_override       = (request.args.get("to") or "").strip()
+    provider_override = (request.args.get("provider") or "").strip().lower()
+    host_override     = (request.args.get("host") or "").strip()
+    port_override     = (request.args.get("port") or "").strip()
+    mode_override     = (request.args.get("mode") or "").strip().lower()
 
+    provider = provider_override if provider_override in ("resend", "smtp") else (_email_provider() or "smtp")
+    alert_emails_raw = os.environ.get("ALERT_EMAILS", "")
+    alert_emails = [e.strip() for e in alert_emails_raw.split(",") if e.strip()]
+    recipients = [to_override] if to_override else alert_emails
+
+    agora = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    subject = f"[Astrovistorias] Teste Email {agora}"
+    html = f"<p>Teste de email disparado em <b>{agora}</b>.</p><p>Se voce recebeu esse email, o envio esta funcionando.</p>"
+
+    diag = {
+        "provider": provider,
+        "provider_override": provider_override or None,
+        "config": {
+            "ALERT_EMAILS_raw": alert_emails_raw,
+            "ALERT_EMAILS_parsed": alert_emails,
+            "recipients_used": recipients,
+            "to_override": to_override or None,
+        },
+    }
+
+    if not recipients:
+        diag["result"] = "FALTA_DESTINATARIO"
+        diag["hint"] = "ALERT_EMAILS env vazia e nenhum ?to= passado. Passe ?to=email@dominio.com ou configure ALERT_EMAILS."
+        return _json(diag, 400)
+
+    # ─── RESEND ───────────────────────────────────────────────
+    if provider == "resend":
+        api_key    = os.environ.get("RESEND_API_KEY", "").strip()
+        from_email = os.environ.get("RESEND_FROM", "").strip() or "Astrovistorias <onboarding@resend.dev>"
+        diag["config"]["RESEND_API_KEY_set"] = bool(api_key)
+        diag["config"]["RESEND_API_KEY_len"] = len(api_key)
+        diag["config"]["RESEND_FROM"] = from_email
+        if not api_key:
+            diag["result"] = "FALTA_CONFIG"
+            diag["hint"] = "RESEND_API_KEY vazia. Seta no Railway > Variables. Pega a key em resend.com > API Keys."
+            return _json(diag, 400)
+        payload = {"from": from_email, "to": recipients, "subject": subject, "html": html}
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=_json_mod.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+            diag["result"] = "ENVIADO"
+            diag["message"] = f"Email enviado via Resend para {recipients} (from={from_email}). Verifique caixa de entrada e spam."
+            diag["resend_response"] = body[:500]
+            app.logger.info("[email-test:resend] ok to=%s", recipients)
+            return _json(diag)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            diag["result"] = "RESEND_HTTP_ERROR"
+            diag["error"] = f"HTTP {exc.code}: {body[:500]}"
+            diag["hint"] = "Erro da API Resend. 401 = chave invalida. 403 = dominio nao verificado (use onboarding@resend.dev). 422 = payload invalido."
+            return _json(diag, 500)
+        except Exception as exc:
+            diag["result"] = "OTHER_ERROR"
+            diag["error"] = f"{type(exc).__name__}: {exc}"
+            return _json(diag, 500)
+
+    # ─── SMTP ─────────────────────────────────────────────────
     host   = host_override or os.environ.get("SMTP_HOST", "")
     port   = int(port_override) if port_override.isdigit() else int(os.environ.get("SMTP_PORT", "465") or 465)
     mode   = mode_override if mode_override in ("ssl", "starttls") else ("starttls" if port == 587 else "ssl")
     user   = os.environ.get("SMTP_USER", "")
     passwd = os.environ.get("SMTP_PASS", "")
-    alert_emails_raw = os.environ.get("ALERT_EMAILS", "")
-    alert_emails = [e.strip() for e in alert_emails_raw.split(",") if e.strip()]
-    recipients = [to_override] if to_override else alert_emails
 
-    diag = {
-        "config": {
-            "SMTP_HOST": host or "(vazio)",
-            "SMTP_PORT": port,
-            "SMTP_MODE": mode,
-            "SMTP_USER": user or "(vazio)",
-            "SMTP_PASS_len": len(passwd),
-            "ALERT_EMAILS_raw": alert_emails_raw,
-            "ALERT_EMAILS_parsed": alert_emails,
-            "recipients_used": recipients,
-            "to_override": to_override or None,
-            "host_override": host_override or None,
-            "port_override": port_override or None,
-            "mode_override": mode_override or None,
-        },
-        "checks": {
-            "host_ok": bool(host),
-            "user_ok": bool(user),
-            "password_ok": bool(passwd),
-            "recipients_ok": bool(recipients),
-        },
+    diag["config"].update({
+        "SMTP_HOST": host or "(vazio)",
+        "SMTP_PORT": port,
+        "SMTP_MODE": mode,
+        "SMTP_USER": user or "(vazio)",
+        "SMTP_PASS_len": len(passwd),
+        "host_override": host_override or None,
+        "port_override": port_override or None,
+        "mode_override": mode_override or None,
+    })
+    diag["checks"] = {
+        "host_ok": bool(host),
+        "user_ok": bool(user),
+        "password_ok": bool(passwd),
+        "recipients_ok": bool(recipients),
     }
-    if not all([host, user, passwd, recipients]):
+    if not all([host, user, passwd]):
         diag["result"] = "FALTA_CONFIG"
-        diag["hint"] = "Um ou mais dos campos acima esta vazio. Se ALERT_EMAILS estiver vazio, use ?to= na rota. Se SMTP_* estiver vazio, o email nao sera enviado por ninguem."
+        diag["hint"] = "SMTP_HOST/USER/PASS incompletos. Se for migrar para Resend, seta RESEND_API_KEY no Railway."
         return _json(diag, 400)
 
-    agora = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
-    subject = f"[Astrovistorias] Teste SMTP {agora}"
-    html = f"<p>Teste SMTP disparado em <b>{agora}</b>.</p><p>Se voce recebeu esse email, o SMTP esta funcionando.</p>"
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = subject
     msg["From"]    = f"Astrovistorias <{user}>"
@@ -843,18 +899,18 @@ def master_api_debug_email_test():
                 smtp.login(user, passwd)
                 smtp.sendmail(user, recipients, msg.as_string())
         diag["result"] = "ENVIADO"
-        diag["message"] = f"Email enviado para {recipients} via {host}:{port} ({mode}). Verifique caixa de entrada e spam."
-        app.logger.info("[email-test] ok to=%s via=%s:%s/%s", recipients, host, port, mode)
+        diag["message"] = f"Email enviado via SMTP para {recipients} via {host}:{port} ({mode}). Verifique caixa de entrada e spam."
+        app.logger.info("[email-test:smtp] ok to=%s via=%s:%s/%s", recipients, host, port, mode)
         return _json(diag)
     except smtplib.SMTPAuthenticationError as exc:
         diag["result"] = "AUTH_ERROR"
         diag["error"] = str(exc)
-        diag["hint"] = "Usuario ou senha SMTP invalidos. Verifique SMTP_USER e SMTP_PASS."
+        diag["hint"] = "Usuario ou senha SMTP invalidos."
         return _json(diag, 500)
     except (smtplib.SMTPConnectError, OSError) as exc:
         diag["result"] = "CONNECTION_ERROR"
         diag["error"] = f"{type(exc).__name__}: {exc}"
-        diag["hint"] = "Falha ao conectar no servidor SMTP. Verifique SMTP_HOST e SMTP_PORT (geralmente 465 com SSL ou 587 com STARTTLS)."
+        diag["hint"] = "Falha ao conectar. Railway pode bloquear SMTP outbound — migre para Resend (RESEND_API_KEY)."
         return _json(diag, 500)
     except Exception as exc:
         diag["result"] = "OTHER_ERROR"
@@ -2429,20 +2485,63 @@ def api_master_divergencias():
 # Alerta de fechamento — cron interno 18:30 SP
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _send_email(subject: str, html: str, attachment: bytes | None = None, attachment_name: str = "") -> None:
+def _email_provider() -> str:
+    """Retorna 'resend' se RESEND_API_KEY setada, senao 'smtp' se SMTP_* setadas, senao ''."""
+    if os.environ.get("RESEND_API_KEY", "").strip():
+        return "resend"
+    if all(os.environ.get(k, "").strip() for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASS")):
+        return "smtp"
+    return ""
+
+
+def _send_via_resend(subject: str, html: str, recipients: list[str],
+                     attachment: bytes | None = None, attachment_name: str = "") -> None:
+    """Envia via API HTTPS do Resend. Porta 443, funciona em qualquer cloud."""
+    import base64, json as _json_mod, urllib.request, urllib.error
+    api_key    = os.environ.get("RESEND_API_KEY", "").strip()
+    from_email = os.environ.get("RESEND_FROM", "").strip() or "Astrovistorias <onboarding@resend.dev>"
+    payload = {
+        "from": from_email,
+        "to": recipients,
+        "subject": subject,
+        "html": html,
+    }
+    if attachment and attachment_name:
+        payload["attachments"] = [{
+            "filename": attachment_name,
+            "content": base64.b64encode(attachment).decode("ascii"),
+        }]
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=_json_mod.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            app.logger.info("[email:resend] ok subject=%s to=%s resp=%s", subject, recipients, body[:200])
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        app.logger.error("[email:resend] HTTP %s subject=%s: %s", exc.code, subject, body[:500])
+        raise RuntimeError(f"Resend HTTP {exc.code}: {body[:300]}") from exc
+
+
+def _send_via_smtp(subject: str, html: str, recipients: list[str],
+                   attachment: bytes | None = None, attachment_name: str = "") -> None:
+    """Envia via SMTP_SSL. Requer SMTP_HOST/PORT/USER/PASS."""
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText as _MIMEText
     from email.mime.base import MIMEBase
     from email import encoders
-    host       = os.environ.get("SMTP_HOST", "")
-    port       = int(os.environ.get("SMTP_PORT", "465"))
-    user       = os.environ.get("SMTP_USER", "")
-    passwd     = os.environ.get("SMTP_PASS", "")
-    recipients = [e.strip() for e in os.environ.get("ALERT_EMAILS", "").split(",") if e.strip()]
-    if not all([host, user, passwd, recipients]):
-        app.logger.warning("[email] SMTP nao configurado — email nao enviado.")
-        return
+    host   = os.environ.get("SMTP_HOST", "")
+    port   = int(os.environ.get("SMTP_PORT", "465") or 465)
+    user   = os.environ.get("SMTP_USER", "")
+    passwd = os.environ.get("SMTP_PASS", "")
     msg = MIMEMultipart("mixed")
     msg["Subject"] = subject
     msg["From"]    = f"Astrovistorias <{user}>"
@@ -2457,7 +2556,26 @@ def _send_email(subject: str, html: str, attachment: bytes | None = None, attach
     with smtplib.SMTP_SSL(host, port) as smtp:
         smtp.login(user, passwd)
         smtp.sendmail(user, recipients, msg.as_string())
-    app.logger.info("[email] Enviado: %s → %s", subject, recipients)
+    app.logger.info("[email:smtp] ok subject=%s to=%s", subject, recipients)
+
+
+def _send_email(subject: str, html: str, attachment: bytes | None = None, attachment_name: str = "") -> None:
+    """Envia email. Prefere Resend (API HTTPS) se RESEND_API_KEY setada; senao SMTP.
+
+    Se nenhum provider estiver configurado, loga warning e nao envia (nao levanta).
+    """
+    recipients = [e.strip() for e in os.environ.get("ALERT_EMAILS", "").split(",") if e.strip()]
+    if not recipients:
+        app.logger.warning("[email] ALERT_EMAILS vazio — email nao enviado.")
+        return
+    provider = _email_provider()
+    if not provider:
+        app.logger.warning("[email] Nenhum provider configurado (nem RESEND_API_KEY nem SMTP_*) — email nao enviado.")
+        return
+    if provider == "resend":
+        _send_via_resend(subject, html, recipients, attachment, attachment_name)
+    else:
+        _send_via_smtp(subject, html, recipients, attachment, attachment_name)
 
 
 def _enviar_alerta_fechamento(today: str) -> None:

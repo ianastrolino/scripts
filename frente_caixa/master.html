@@ -116,7 +116,7 @@
           <div id="maintStatus" style="font-size:var(--ds-text-sm);color:var(--ds-ink);margin-top:2px">carregando...</div>
         </div>
         <button id="maintToggle" class="action-btn secondary" style="min-width:180px">...</button>
-        <button id="smtpTest" class="action-btn tertiary" style="min-width:180px">Testar SMTP</button>
+        <button id="smtpTest" class="action-btn tertiary" style="min-width:180px">Testar Email</button>
         <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn secondary" style="min-width:180px">Baixar backup</a>
       </div>
 
@@ -294,15 +294,17 @@
   });
 
   document.getElementById("smtpTest").addEventListener("click", async () => {
-    const to = prompt("Email para receber teste SMTP:", "smiguel2.spv@gmail.com");
+    const to = prompt("Email para receber teste:", "smiguel2.spv@gmail.com");
     if (!to) return;
     const btn = document.getElementById("smtpTest");
     btn.disabled = true;
-    btn.textContent = "Testando 465 e 587...";
-    const qs = (extra) => `/master/api/debug/email-test?to=${encodeURIComponent(to)}&${extra}`;
+    btn.textContent = "Testando...";
+    const qs = (extra) => `/master/api/debug/email-test?to=${encodeURIComponent(to)}${extra ? "&" + extra : ""}`;
+    // Testa os dois providers. O que nao estiver configurado volta FALTA_CONFIG.
     const combos = [
-      { label: "465 SSL (padrao)", url: qs("port=465&mode=ssl") },
-      { label: "587 STARTTLS",    url: qs("port=587&mode=starttls") },
+      { label: "Resend (API HTTPS)", url: qs("provider=resend") },
+      { label: "SMTP 465 SSL",       url: qs("provider=smtp&port=465&mode=ssl") },
+      { label: "SMTP 587 STARTTLS",  url: qs("provider=smtp&port=587&mode=starttls") },
     ];
     try {
       const results = await Promise.all(combos.map(async c => {
@@ -316,25 +318,24 @@
       }));
       const linhas = [];
       results.forEach(res => {
-        linhas.push(`=== ${res.label} ===`);
+        const mark = res.ok ? "OK" : "FAIL";
+        linhas.push(`=== [${mark}] ${res.label} ===`);
         linhas.push(`Resultado: ${res.d.result || "?"}`);
         if (res.d.message) linhas.push(res.d.message);
         if (res.d.error)   linhas.push(`Erro: ${res.d.error}`);
         if (res.d.hint)    linhas.push(`Dica: ${res.d.hint}`);
         linhas.push("");
       });
-      const first = results[0].d.config || {};
-      linhas.push("Config (envs):");
-      linhas.push(`  SMTP_HOST=${first.SMTP_HOST || "(vazio)"}`);
-      linhas.push(`  SMTP_USER=${first.SMTP_USER || "(vazio)"}`);
-      linhas.push(`  SMTP_PASS_len=${first.SMTP_PASS_len ?? 0}`);
-      linhas.push(`  ALERT_EMAILS=${(first.ALERT_EMAILS_parsed || []).join(", ") || "(vazio)"}`);
+      const cfg = results[0].d.config || {};
+      linhas.push("Config geral:");
+      linhas.push(`  ALERT_EMAILS=${(cfg.ALERT_EMAILS_parsed || []).join(", ") || "(vazio)"}`);
+      linhas.push(`  destinatario deste teste=${(cfg.recipients_used || []).join(", ") || "(vazio)"}`);
       alert(linhas.join("\n"));
     } catch (err) {
       alert("Erro: " + err.message);
     } finally {
       btn.disabled = false;
-      btn.textContent = "Testar SMTP";
+      btn.textContent = "Testar Email";
     }
   });
 
