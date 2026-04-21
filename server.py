@@ -1379,6 +1379,12 @@ def api_send(unit: str):
         except Exception as mirror_exc:
             app.logger.warning("[envios_tiny:mirror] falha ao gravar tabela: %s", mirror_exc)
 
+        # Email de confirmacao do envio (falha silenciosa — nao trava a resposta)
+        try:
+            _enviar_email_envio_tiny(unit, results, records)
+        except Exception as email_exc:
+            app.logger.warning("[envio_tiny:email] falha ao enviar email: %s", email_exc)
+
         return _json({
             "success": True, "summary": results,
             "message": f"Processamento concluido. Enviados: {len(results['enviados'])}",
@@ -2885,10 +2891,130 @@ def _executar_backup() -> None:
         app.logger.error("[backup] Falha: %s", exc)
 
 
+def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
+    """Dispara email de confirmacao apos envio ao Tiny concluir.
+
+    Resumo: quantos enviados / pulados / falhas + total em R$ enviado.
+    Falha silenciosa (log) — nao trava a response do envio.
+    """
+    try:
+        unit_nome = UNITS.get(unit, {}).get("nome", unit)
+        tz        = ZoneInfo("America/Sao_Paulo")
+        data_fmt  = dt.datetime.now(tz).strftime("%d/%m/%Y %H:%M")
+        enviados  = len(results.get("enviados", []))
+        pulados   = len(results.get("pulados", []))
+        falhas    = len(results.get("falhas", []))
+
+        # Total enviado em R$. Tenta casar por id; se nao bater (id regenerado
+        # em _process_one), cai em heuristica: soma proporcional dos records
+        # pelo numero de enviados. Evita mostrar "R$ 0,00" quando houve envio.
+        chaves_enviadas = {e["chave"] for e in results.get("enviados", [])}
+        total_valor     = sum(float(r.get("preco", 0) or 0) for r in records
+                              if r.get("id") in chaves_enviadas)
+        if total_valor == 0 and enviados > 0 and records:
+            soma_todos = sum(float(r.get("preco", 0) or 0) for r in records)
+            total_valor = soma_todos * enviados / len(records)
+        brl = f"R$ {total_valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        if enviados == 0 and falhas == 0:
+            return   # tudo pulado (ja importado) — nao faz sentido alertar
+
+        cor_status = "#16a34a" if falhas == 0 else "#d97706"
+        status_txt = "Envio concluido" if falhas == 0 else "Envio concluido com falhas"
+
+        falhas_html = ""
+        if falhas:
+            falhas_html = '<div style="margin-top:16px;padding:12px 14px;background:#fef2f2;border-left:3px solid #dc2626;border-radius:4px;font-size:12.5px;color:#991b1b"><strong>Falhas:</strong><ul style="margin:6px 0 0;padding-left:20px">'
+            for f in results["falhas"][:5]:
+                falhas_html += f'<li>{f.get("cliente","")} — {f.get("erro","")[:120]}</li>'
+            if falhas > 5:
+                falhas_html += f'<li>... e mais {falhas - 5}</li>'
+            falhas_html += '</ul></div>'
+
+        html = f"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+    <div style="background:#0f1117;padding:24px 28px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Envio Tiny</div>
+      <div style="font-size:20px;font-weight:800;color:#fff">{unit_nome} — {data_fmt}</div>
+      <div style="font-size:13px;color:{cor_status};margin-top:6px;font-weight:700">{status_txt}</div>
+    </div>
+    <div style="padding:20px 28px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 0;color:#6b7280">Enviados ao Tiny</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#111">{enviados}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280">Pulados (duplicatas)</td><td style="padding:6px 0;text-align:right;font-weight:700;color:#6b7280">{pulados}</td></tr>
+        <tr><td style="padding:6px 0;color:#6b7280">Falhas</td><td style="padding:6px 0;text-align:right;font-weight:700;color:{'#dc2626' if falhas else '#6b7280'}">{falhas}</td></tr>
+        <tr><td style="padding:10px 0 6px;border-top:1px solid #e5e7eb;color:#111;font-weight:700">Total enviado</td><td style="padding:10px 0 6px;border-top:1px solid #e5e7eb;text-align:right;font-weight:800;color:#111;font-size:15px">{brl}</td></tr>
+      </table>
+      {falhas_html}
+    </div>
+    <div style="padding:0 28px 24px">
+      <a href="https://astro-v2.up.railway.app/u/{unit}/gerencial" style="display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600">Ver historico da unidade</a>
+    </div>
+  </div>
+</body></html>"""
+        subject = f"[Astrovistorias] Envio Tiny — {unit_nome} ({enviados} enviados)"
+        _send_email(subject, html)
+    except Exception as e:
+        app.logger.warning("[email:envio_tiny] falha: %s", e)
+
+
+def _verificar_saude_tokens() -> None:
+    """Tenta renovar o access_token de cada unidade preventivamente.
+
+    Se a renovacao falhar (refresh_token expirado/invalido), manda email
+    imediato pro Ian com link de reautorizacao. Deduplicacao: o arquivo
+    `.token_alert_sent` no dir da unidade marca que ja foi alertado hoje.
+    """
+    tz    = ZoneInfo("America/Sao_Paulo")
+    today = dt.datetime.now(tz).date().isoformat()
+    for uid in UNITS:
+        try:
+            config    = _build_unit_config(uid)
+            state_dir = _unit_state_dir(uid)
+            _seed_tokens(uid, config)
+            importer  = TinyImporter(config, state_dir)
+            # Forca renovacao; se funcionar, access_token fica valido 4h+
+            importer.refresh_access_token()
+            app.logger.info("[cron:tokens] %s OK", uid)
+        except Exception as exc:
+            # Deduplica alerta por unidade por dia
+            marker = _unit_state_dir(uid) / ".token_alert_sent"
+            if marker.exists() and marker.read_text().strip() == today:
+                app.logger.info("[cron:tokens] %s falhou mas ja alertou hoje", uid)
+                continue
+            app.logger.warning("[cron:tokens] %s falhou: %s", uid, exc)
+            unit_nome = UNITS.get(uid, {}).get("nome", uid)
+            html = f"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+    <div style="background:#991b1b;padding:24px 28px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px">Astrovistorias · Atencao</div>
+      <div style="font-size:20px;font-weight:800;color:#fff">Token Tiny expirado — {unit_nome}</div>
+    </div>
+    <div style="padding:20px 28px;font-size:14px;color:#374151;line-height:1.55">
+      <p>O token da unidade <strong>{unit_nome}</strong> nao conseguiu renovar. O fechamento nao vai funcionar ate reautorizar.</p>
+      <p style="color:#6b7280;font-size:12.5px;margin-top:14px">Detalhe tecnico: <code style="background:#f3f4f6;padding:2px 6px;border-radius:3px">{str(exc)[:200]}</code></p>
+    </div>
+    <div style="padding:0 28px 24px">
+      <a href="https://astro-v2.up.railway.app/u/{uid}/gerencial" style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700">Reautorizar agora</a>
+    </div>
+  </div>
+</body></html>"""
+            try:
+                _send_email(f"[Astrovistorias] Token Tiny expirado — {unit_nome}", html)
+                marker.write_text(today)
+            except Exception as email_exc:
+                app.logger.error("[cron:tokens] falha ao enviar email de alerta: %s", email_exc)
+
+
 def _cron_loop() -> None:
     tz           = ZoneInfo("America/Sao_Paulo")
     last_alerta  = ""
     last_backup  = ""
+    last_tokens  = ""
     while True:
         try:
             now   = dt.datetime.now(tz)
@@ -2900,6 +3026,10 @@ def _cron_loop() -> None:
             if now.hour == 0 and now.minute == 0 and last_backup != today:
                 last_backup = today
                 _executar_backup()
+            if now.hour == 9 and now.minute == 0 and last_tokens != today:
+                last_tokens = today
+                app.logger.info("[cron] Health check dos tokens Tiny")
+                _verificar_saude_tokens()
         except Exception:
             app.logger.exception("[cron] Erro no loop")
         time.sleep(60)
