@@ -64,7 +64,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, redirect, request, send_from_directory, session, url_for
+from flask import Flask, Response, redirect, request, send_file, send_from_directory, session, url_for
 
 from caixa_helpers import FP_VALIDOS, calcular_totais, validar_lancamento
 from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_load,
@@ -654,6 +654,29 @@ def master_api_debug_storage():
         "snapshots_total": snapshots_count,
         "checked_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
     })
+
+
+@app.route("/gerencial/api/backup/download")
+@master_required
+def master_api_backup_download():
+    """Baixa um zip com dump SQL de cada unidade + configs. Download direto no navegador.
+
+    Reusa _criar_backup_zip() que ja existe — usa iterdump() do SQLite, portanto
+    o dump e consistente mesmo com escrita concorrente (snapshot SQL atomico).
+    Complementa o backup automatico via email que roda todo dia 00:00.
+    """
+    import io
+    try:
+        zip_bytes = _criar_backup_zip()
+    except Exception as exc:
+        app.logger.exception("[backup.download] falha ao gerar zip")
+        return _json({"error": f"falha ao gerar backup: {exc}"}, 500)
+
+    stamp = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y%m%d-%H%M%S")
+    filename = f"astro-backup-{stamp}.zip"
+    app.logger.info("[backup.download] size_kb=%s filename=%s", len(zip_bytes) // 1024, filename)
+    return send_file(io.BytesIO(zip_bytes), mimetype="application/zip",
+                     as_attachment=True, download_name=filename)
 
 
 def _human_bytes(n: int) -> str:
