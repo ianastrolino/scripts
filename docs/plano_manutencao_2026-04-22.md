@@ -173,6 +173,18 @@ Tabela vira a fonte. `imported.json` segue como backup por 1 semana.
 
 ---
 
+## Extras (se sobrar tempo)
+
+- [ ] E.1 Gerar templates `.md` iniciais para cada sub-página do Notion:
+    - Visão Geral (fluxo, arquitetura, mapa do sistema)
+    - Runbooks (reautenticar Tiny, restaurar backup, adicionar nova unidade)
+    - Unidades e Usuários (lista atual + como ativar uma nova)
+    - Credenciais & Acessos (onde ficam, sem segredos)
+    - Roadmap & Ideias (semanas 1–4 destrinchadas)
+  Entregar como arquivos em `docs/` para Ian colar no Notion.
+
+---
+
 ## Registro de execução
 
 Preencher conforme for executando. Data/hora + resultado + observações.
