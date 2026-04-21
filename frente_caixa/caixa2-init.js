@@ -1,5 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const FP_LABELS = { dinheiro: "💵 Dinheiro", debito: "💳 Débito", credito: "💳 Crédito", pix: "⚡ PIX", faturado: "🧾 Faturado", detran: "🚗 Taxa DETRAN" };
+  const FP_LABELS = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito", pix: "PIX", faturado: "Faturado", detran: "Taxa DETRAN" };
+  const fpChipHTML = (fp) => {
+    if (window.AstroShell && AstroShell.fpIcon) {
+      return `<span class="fp-ico">${AstroShell.fpIcon(fp)}</span>${FP_LABELS[fp] || fp}`;
+    }
+    return FP_LABELS[fp] || fp;
+  };
   const brlFmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function fmtCPF(digits) {
@@ -42,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("cfPlaca").textContent   = placa;
     document.getElementById("cfCliente").textContent = cliente;
     document.getElementById("cfServico").textContent = servico;
-    document.getElementById("cfFp").textContent      = FP_LABELS[fp] || fp;
+    document.getElementById("cfFp").innerHTML        = fpChipHTML(fp);
     document.getElementById("cfValor").textContent   = brlFmt(valor);
 
     const cfCpfRow = document.getElementById("cfCpfRow");

@@ -506,7 +506,34 @@
     .fp-card[data-fp="faturado"].selected { border-color: var(--fat); background: var(--fat-bg); box-shadow: 0 0 0 1px var(--fat); transform: none; }
     .fp-card[data-fp="detran"].selected  { border-color: var(--det); background: var(--det-bg); box-shadow: 0 0 0 1px var(--det); transform: none; }
 
-    .fp-icon { font-size: 18px; line-height: 1; }
+    .fp-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      line-height: 1;
+      color: var(--t4);
+      transition: color .15s;
+    }
+    .fp-icon svg { width: 26px; height: 26px; }
+    .fp-card[data-fp="dinheiro"] .fp-icon { color: var(--din); }
+    .fp-card[data-fp="debito"]   .fp-icon { color: var(--deb); }
+    .fp-card[data-fp="credito"]  .fp-icon { color: var(--crd); }
+    .fp-card[data-fp="pix"]      .fp-icon { color: var(--pix); }
+    .fp-card[data-fp="faturado"] .fp-icon { color: var(--fat); }
+    .fp-card[data-fp="detran"]   .fp-icon { color: var(--det); }
+
+    .fp-ico {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      color: currentColor;
+      flex-shrink: 0;
+    }
+    .fp-ico svg { width: 14px; height: 14px; }
     .fp-name {
       font-size: 10.5px;
       font-weight: 600;
@@ -877,6 +904,7 @@
     .fp-chip {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
       padding: 3px 8px;
       border-radius: 4px;
       font-size: 10px;
@@ -885,6 +913,8 @@
       text-transform: uppercase;
       white-space: nowrap;
     }
+    .fp-chip .fp-ico { width: 12px; height: 12px; }
+    .fp-chip .fp-ico svg { width: 12px; height: 12px; }
     .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border: 1px solid var(--din-bd); }
     .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border: 1px solid var(--deb-bd); }
     .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border: 1px solid var(--crd-bd); }
@@ -1103,6 +1133,10 @@
       color: var(--t4);
       outline: none;
       letter-spacing: -.01em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
     }
     .fp-mini:hover { border-color: #b8c6d6; background: #fff; color: var(--t3); }
     .fp-mini[data-fp="dinheiro"].sel { background: var(--din-bg); border-color: var(--din); color: var(--din); box-shadow: 0 0 0 1px var(--din); font-weight: 700; }
@@ -1692,27 +1726,27 @@
           <div class="fp-section-label">Forma de pagamento</div>
           <div class="fp-grid" id="fpGrid">
             <button type="button" class="fp-card" data-fp="dinheiro" tabindex="0">
-              <span class="fp-icon">💵</span>
+              <span class="fp-icon" data-fp-icon="dinheiro"></span>
               <span class="fp-name">Dinheiro</span>
             </button>
             <button type="button" class="fp-card" data-fp="debito" tabindex="0">
-              <span class="fp-icon">💳</span>
+              <span class="fp-icon" data-fp-icon="debito"></span>
               <span class="fp-name">Débito</span>
             </button>
             <button type="button" class="fp-card" data-fp="credito" tabindex="0">
-              <span class="fp-icon">💳</span>
+              <span class="fp-icon" data-fp-icon="credito"></span>
               <span class="fp-name">Crédito</span>
             </button>
             <button type="button" class="fp-card" data-fp="pix" tabindex="0">
-              <span class="fp-icon">⚡</span>
+              <span class="fp-icon" data-fp-icon="pix"></span>
               <span class="fp-name">PIX</span>
             </button>
             <button type="button" class="fp-card" data-fp="faturado" tabindex="0">
-              <span class="fp-icon">🧾</span>
+              <span class="fp-icon" data-fp-icon="faturado"></span>
               <span class="fp-name">Faturado</span>
             </button>
             <button type="button" class="fp-card" data-fp="detran" tabindex="0">
-              <span class="fp-icon">🏛️</span>
+              <span class="fp-icon" data-fp-icon="detran"></span>
               <span class="fp-name">Taxa DETRAN</span>
             </button>
           </div>
@@ -1744,7 +1778,7 @@
             </thead>
             <tbody>
               <tr class="conf-row">
-                <td><span class="conf-fp-label">💵 Dinheiro</span></td>
+                <td><span class="conf-fp-label"><span class="fp-ico" data-fp-icon="dinheiro" style="color:var(--din)"></span>Dinheiro</span></td>
                 <td class="conf-pdv-val" id="cPdvDin">R$ 0,00</td>
                 <td>
                   <div class="conf-input-wrap">
@@ -1755,7 +1789,7 @@
                 <td class="conf-diff" id="cDiffDin">—</td>
               </tr>
               <tr class="conf-row">
-                <td><span class="conf-fp-label">💳 Débito</span></td>
+                <td><span class="conf-fp-label"><span class="fp-ico" data-fp-icon="debito" style="color:var(--deb)"></span>Débito</span></td>
                 <td class="conf-pdv-val" id="cPdvDeb">R$ 0,00</td>
                 <td>
                   <div class="conf-input-wrap">
@@ -1766,7 +1800,7 @@
                 <td class="conf-diff" id="cDiffDeb">—</td>
               </tr>
               <tr class="conf-row">
-                <td><span class="conf-fp-label">💳 Crédito</span></td>
+                <td><span class="conf-fp-label"><span class="fp-ico" data-fp-icon="credito" style="color:var(--crd)"></span>Crédito</span></td>
                 <td class="conf-pdv-val" id="cPdvCrd">R$ 0,00</td>
                 <td>
                   <div class="conf-input-wrap">
@@ -1777,7 +1811,7 @@
                 <td class="conf-diff" id="cDiffCrd">—</td>
               </tr>
               <tr class="conf-row">
-                <td><span class="conf-fp-label">⚡ PIX</span></td>
+                <td><span class="conf-fp-label"><span class="fp-ico" data-fp-icon="pix" style="color:var(--pix)"></span>PIX</span></td>
                 <td class="conf-pdv-val" id="cPdvPix">R$ 0,00</td>
                 <td>
                   <div class="conf-input-wrap">
@@ -2019,12 +2053,12 @@
       <div class="edit-field">
         <label>Forma de pagamento</label>
         <div class="fp-mini-grid" id="editFpMini">
-          <button type="button" class="fp-mini" data-fp="dinheiro">💵 Dinheiro</button>
-          <button type="button" class="fp-mini" data-fp="debito">💳 Débito</button>
-          <button type="button" class="fp-mini" data-fp="credito">💳 Crédito</button>
-          <button type="button" class="fp-mini" data-fp="pix">⚡ PIX</button>
-          <button type="button" class="fp-mini" data-fp="faturado">🧾 Faturado</button>
-          <button type="button" class="fp-mini" data-fp="detran">🚗 Taxa DETRAN</button>
+          <button type="button" class="fp-mini" data-fp="dinheiro"><span class="fp-ico" data-fp-icon="dinheiro"></span>Dinheiro</button>
+          <button type="button" class="fp-mini" data-fp="debito"><span class="fp-ico" data-fp-icon="debito"></span>Débito</button>
+          <button type="button" class="fp-mini" data-fp="credito"><span class="fp-ico" data-fp-icon="credito"></span>Crédito</button>
+          <button type="button" class="fp-mini" data-fp="pix"><span class="fp-ico" data-fp-icon="pix"></span>PIX</button>
+          <button type="button" class="fp-mini" data-fp="faturado"><span class="fp-ico" data-fp-icon="faturado"></span>Faturado</button>
+          <button type="button" class="fp-mini" data-fp="detran"><span class="fp-ico" data-fp-icon="detran"></span>Taxa DETRAN</button>
         </div>
       </div>
       <div class="edit-field">
@@ -2056,6 +2090,9 @@
         ],
         date: true,
         unit: slug ? { slug } : null
+      });
+      document.querySelectorAll("[data-fp-icon]").forEach(el => {
+        el.innerHTML = AstroShell.fpIcon(el.dataset.fpIcon) || "";
       });
     })();
   </script>

@@ -140,10 +140,13 @@
     td.data { color: var(--t2); font-variant-numeric: tabular-nums; }
 
     .fp-chip {
-      display: inline-block; padding: 2px 8px; border-radius: var(--ds-radius-full);
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: var(--ds-radius-full);
       font-size: var(--ds-text-xs); font-weight: var(--ds-weight-semi);
       white-space: nowrap; border: 1px solid transparent;
     }
+    .fp-chip .fp-ico { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; flex-shrink: 0; }
+    .fp-chip .fp-ico svg { width: 13px; height: 13px; }
     .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border-color: var(--din-bd); }
     .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border-color: var(--deb-bd); }
     .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border-color: var(--crd-bd); }
@@ -439,7 +442,9 @@
 
     const rows = slice.map(lc => {
       const fp = lc.fp || "";
-      const chip = fp ? `<span class="fp-chip ${fp}">${escHtml(fpLabel[fp] || fp)}</span>` : "—";
+      const fpLbl = escHtml(fpLabel[fp] || fp);
+      const fpIco = (window.AstroShell && AstroShell.fpIcon && fp) ? AstroShell.fpIcon(fp) : "";
+      const chip = fp ? `<span class="fp-chip ${fp}">${fpIco ? `<span class="fp-ico">${fpIco}</span>` : ""}${fpLbl}</span>` : "—";
       const unitHtml = lc.unit_nome ? `<span class="unit-tag">${escHtml(lc.unit_nome)}</span>` : "—";
       return `<tr>
         <td class="data">${escHtml(fmtDate(lc.data))}</td>

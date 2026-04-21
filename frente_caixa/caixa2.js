@@ -81,14 +81,19 @@ function abrirResumo() {
   const fmt = v => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
+  const FP_COLORS = { dinheiro: "din", debito: "deb", credito: "crd", pix: "pix", faturado: "fat", detran: "det" };
+  const fpChip = (key, nome) => {
+    const ico = (window.AstroShell && AstroShell.fpIcon) ? AstroShell.fpIcon(key) : "";
+    return `<span style="display:inline-flex;align-items:center;gap:6px;"><span class="fp-ico" style="color:var(--${FP_COLORS[key] || "t4"})">${ico}</span>${nome}</span>`;
+  };
   const fpRows = [
-    ["💵 Dinheiro", r.porFp.dinheiro],
-    ["💳 Debito",   r.porFp.debito],
-    ["💳 Credito",  r.porFp.credito],
-    ["⚡ PIX",      r.porFp.pix],
-    ["🧾 Faturado", r.porFp.faturado],
-  ].filter(([, v]) => v > 0)
-   .map(([label, v]) => `<tr><td>${label}</td><td style="text-align:right;font-weight:700;">${fmt(v)}</td></tr>`)
+    ["dinheiro", "Dinheiro", r.porFp.dinheiro],
+    ["debito",   "Débito",   r.porFp.debito],
+    ["credito",  "Crédito",  r.porFp.credito],
+    ["pix",      "PIX",      r.porFp.pix],
+    ["faturado", "Faturado", r.porFp.faturado],
+  ].filter(([, , v]) => v > 0)
+   .map(([k, nome, v]) => `<tr><td>${fpChip(k, nome)}</td><td style="text-align:right;font-weight:700;">${fmt(v)}</td></tr>`)
    .join("");
 
   const servicoRows = r.porServico

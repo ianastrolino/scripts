@@ -84,6 +84,32 @@
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 
+  // ── Icones por forma de pagamento (16x16, line style) ───────
+  const _fpSvg = (paths) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  const FP_ICONS = {
+    dinheiro: _fpSvg('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v.01M18 15v.01"/>'),
+    debito:   _fpSvg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h5"/>'),
+    credito:  _fpSvg('<rect x="2" y="5" width="20" height="14" rx="2"/><rect x="5" y="10" width="5" height="4" rx="0.8"/><path d="M6.5 12h2M14 11h5M14 14h3"/>'),
+    pix:      _fpSvg('<path d="M12 2.8 21.2 12 12 21.2 2.8 12z"/><path d="M8.5 8.5 12 12l3.5-3.5M8.5 15.5 12 12l3.5 3.5"/>'),
+    faturado: _fpSvg('<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
+    detran:   _fpSvg('<path d="M5 17h14M5 17l1.5-5a2 2 0 0 1 2-1.5h7a2 2 0 0 1 2 1.5L19 17"/><path d="M4 17v2M20 17v2"/><circle cx="8" cy="17" r="1.5"/><circle cx="16" cy="17" r="1.5"/>'),
+  };
+  const FP_LABELS = {
+    dinheiro: "Dinheiro",
+    debito:   "Débito",
+    credito:  "Crédito",
+    pix:      "PIX",
+    faturado: "Faturado",
+    detran:   "Taxa DETRAN",
+  };
+  const fpIcon = (key) => FP_ICONS[key] || "";
+  const fpLabel = (key) => FP_LABELS[key] || key;
+  const fpChip = (key) => {
+    const ico = FP_ICONS[key] || "";
+    const lbl = FP_LABELS[key] || key;
+    return `<span class="fp-chip fp-${key}"><span class="fp-ico">${ico}</span>${lbl}</span>`;
+  };
+
   // ── Catalogo de itens de navegacao ─────────────────────────
   //   requires: "master" | "gerencial" | "unit" | null
   //   Items que exigem contexto de unidade recebem apiBase concatenado
@@ -612,5 +638,11 @@
     }
   }
 
-  global.AstroShell = { init, icon: (key) => ICONS[key] || "" };
+  global.AstroShell = {
+    init,
+    icon: (key) => ICONS[key] || "",
+    fpIcon,
+    fpLabel,
+    fpChip,
+  };
 })(window);

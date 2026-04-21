@@ -254,10 +254,13 @@
     .day-table td.val { font-weight: var(--ds-weight-bold); font-variant-numeric: tabular-nums; }
 
     .fp-chip {
-      display: inline-block; padding: 2px 8px; border-radius: var(--ds-radius-full);
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: var(--ds-radius-full);
       font-size: var(--ds-text-xs); font-weight: var(--ds-weight-semi);
       white-space: nowrap; border: 1px solid transparent;
     }
+    .fp-chip .fp-ico { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; flex-shrink: 0; }
+    .fp-chip .fp-ico svg { width: 13px; height: 13px; }
     .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border-color: var(--din-bd); }
     .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border-color: var(--deb-bd); }
     .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border-color: var(--crd-bd); }
@@ -661,7 +664,9 @@
   function fpLabel(fp) {
     const m = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito",
                 pix: "PIX", faturado: "Faturado", detran: "DETRAN" };
-    return m[fp] || fp || "—";
+    const lbl = m[fp] || fp || "—";
+    const ico = (window.AstroShell && AstroShell.fpIcon && fp) ? AstroShell.fpIcon(fp) : "";
+    return ico ? `<span class="fp-ico">${ico}</span>${lbl}` : lbl;
   }
 
   function escHtml(s) {
