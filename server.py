@@ -585,6 +585,87 @@ def master_api_tiny_health():
     return _json({"units": items, "checked_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")})
 
 
+@app.route("/master/api/debug/storage")
+@master_required
+def master_api_debug_storage():
+    """Diagnostico do volume persistente: tamanho total, por unidade, por arquivo.
+
+    Usado para confirmar que DATA_DIR aponta para o volume montado no Railway
+    e que os dados estao sendo gravados no disco persistente.
+    """
+    import shutil as _shutil
+
+    def _dir_stats(path: Path) -> dict:
+        total = 0
+        files = 0
+        biggest: list[tuple[int, str]] = []
+        if path.exists():
+            for p in path.rglob("*"):
+                try:
+                    if p.is_file():
+                        size = p.stat().st_size
+                        total += size
+                        files += 1
+                        rel = str(p.relative_to(path))
+                        biggest.append((size, rel))
+                except (OSError, ValueError):
+                    continue
+        biggest.sort(reverse=True)
+        return {
+            "bytes": total,
+            "human": _human_bytes(total),
+            "files": files,
+            "top5": [{"size": _human_bytes(s), "path": r} for s, r in biggest[:5]],
+        }
+
+    try:
+        du = _shutil.disk_usage(str(DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent))
+        disk = {
+            "total": _human_bytes(du.total),
+            "used":  _human_bytes(du.used),
+            "free":  _human_bytes(du.free),
+            "used_pct": round(du.used / du.total * 100, 1) if du.total else 0,
+        }
+    except Exception as exc:
+        disk = {"error": str(exc)[:200]}
+
+    root = _dir_stats(DATA_DIR)
+    per_unit = {}
+    if DATA_DIR.exists():
+        for child in sorted(DATA_DIR.iterdir()):
+            if child.is_dir():
+                per_unit[child.name] = _dir_stats(child)
+
+    snapshots_count = 0
+    try:
+        for uid in UNITS.keys():
+            udir = DATA_DIR / uid
+            if udir.exists():
+                snapshots_count += len(_db_list_snap(uid, udir, limit=10_000))
+    except Exception:
+        snapshots_count = -1
+
+    return _json({
+        "data_dir": str(DATA_DIR),
+        "data_dir_exists": DATA_DIR.exists(),
+        "disk": disk,
+        "total": root,
+        "per_unit": per_unit,
+        "snapshots_total": snapshots_count,
+        "checked_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+    })
+
+
+def _human_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    for unit in ("KB", "MB", "GB", "TB"):
+        n /= 1024.0
+        if n < 1024:
+            return f"{n:.2f} {unit}"
+    return f"{n:.2f} PB"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Rotas: arquivos estaticos da frente de caixa
 # ══════════════════════════════════════════════════════════════════════════════
