@@ -150,6 +150,11 @@ const els = {
   grossTotal: document.querySelector("#grossTotal"),
   returnAmount: document.querySelector("#returnAmount"),
   netTotal: document.querySelector("#netTotal"),
+  summaryDayMeta: document.querySelector("#summaryDayMeta"),
+  avCountMeta: document.querySelector("#avCountMeta"),
+  faTotalSummary: document.querySelector("#faTotalSummary"),
+  faCountMeta: document.querySelector("#faCountMeta"),
+  summaryByService: document.querySelector("#summaryByService"),
   cashDiff: document.querySelector("#cashDiff"),
   closingStatus: document.querySelector("#closingStatus"),
   tableSubtitle: document.querySelector("#tableSubtitle"),
@@ -541,6 +546,40 @@ function renderSummary() {
   els.cashInputTotal.textContent = formatMoney(cashInputs);
   els.grossTotal.textContent = formatMoney(total);
   els.netTotal.textContent = formatMoney(netTotal);
+
+  // Resumo v2: contagens e breakdown por categoria de serviço
+  const activeRecords = state.records.filter((r) => !r.ignorar);
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+  if (els.summaryDayMeta) els.summaryDayMeta.textContent = plural(activeRecords.length, "lançamento", "lançamentos");
+  if (els.avCountMeta)    els.avCountMeta.textContent    = plural(avRecords.length, "lançamento", "lançamentos");
+  if (els.faCountMeta)    els.faCountMeta.textContent    = plural(faRecords.length, "lançamento", "lançamentos");
+  if (els.faTotalSummary) els.faTotalSummary.textContent = formatMoney(totalFa);
+
+  if (els.summaryByService) {
+    const grouped = {};
+    for (const r of activeRecords) {
+      const key = r.tipoServico || "Servico";
+      if (!grouped[key]) grouped[key] = { total: 0, qty: 0 };
+      grouped[key].total += Number(r.preco) || 0;
+      grouped[key].qty += 1;
+    }
+    const displayName = (k) => (k === "Verificacao" ? "Verificação" : k === "Transferencia" ? "Transferência" : k);
+    const order = ["Cautelar", "Verificacao", "Transferencia", "Servico"];
+    const keys = Object.keys(grouped).sort((a, b) => {
+      const ia = order.indexOf(a); const ib = order.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    els.summaryByService.innerHTML = keys.length === 0
+      ? `<div class="svc-line"><span style="color:var(--t5);font-weight:500">Nenhum lançamento</span></div>`
+      : keys.map((k) => `
+          <div class="svc-line">
+            <span>${displayName(k)}</span>
+            <div class="svc-line-right">
+              <span class="svc-value">${formatMoney(grouped[k].total)}</span>
+              <span class="svc-qty">${grouped[k].qty}</span>
+            </div>
+          </div>`).join("");
+  }
   els.cashDiff.textContent = formatMoney(cashInputs - totalAv);
   els.closingStatus.textContent = pending > 0 ? "Pendente" : Math.abs(cashInputs - totalAv) < 0.01 ? "Conferido" : "Conferir";
 

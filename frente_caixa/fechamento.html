@@ -627,6 +627,110 @@
     .badge.new { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
     .badge.dup { background:var(--fat-bg); color:var(--fat); border-color:var(--fat-bd); }
 
+    /* ═══ RESUMO v2 (fechar o caixa batendo o olho) ═════════════════════════════ */
+    .tag-pdv { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+
+    .summary-hero {
+      position: relative;
+      display: flex; flex-direction: column;
+      padding: 14px 14px 12px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .summary-hero-label {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: rgba(255,255,255,.5);
+      margin-bottom: 4px;
+    }
+    .summary-hero-value {
+      font-size: 22px; font-weight: 800;
+      color: #fff;
+      letter-spacing: -.03em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .summary-hero-meta {
+      font-size: 11px; font-weight: 500;
+      color: rgba(255,255,255,.6);
+      margin-top: 3px;
+      letter-spacing: -.01em;
+    }
+
+    .summary-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .summary-chip {
+      display: flex; flex-direction: column;
+      padding: 9px 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--sf2);
+    }
+    .summary-chip-label {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+      color: var(--t5);
+      margin-bottom: 2px;
+    }
+    .summary-chip-value {
+      font-size: 14px; font-weight: 800;
+      color: var(--t1);
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+    .summary-chip-meta {
+      font-size: 10.5px; color: var(--t5);
+      font-weight: 500;
+      margin-top: 2px;
+      letter-spacing: -.01em;
+    }
+    .summary-chip.av { background: #f0f9ff; border-color: #bae6fd; }
+    .summary-chip.av .summary-chip-label { color: #0369a1; }
+    .summary-chip.fa { background: #fef7e7; border-color: #fcd9a6; }
+    .summary-chip.fa .summary-chip-label { color: #b45309; }
+
+    .summary-section-title {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--t5);
+      padding: 8px 0 6px;
+      border-top: 1px solid var(--border2);
+      margin-top: 2px;
+    }
+    .svc-line {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 0;
+      font-size: 12px;
+    }
+    .svc-line > span { color: var(--t3); font-weight: 600; letter-spacing: -.01em; }
+    .svc-line > .svc-value { font-weight: 700; color: var(--t1); font-variant-numeric: tabular-nums; }
+    .svc-line > .svc-qty {
+      display: inline-block;
+      min-width: 20px; text-align: center;
+      font-size: 10.5px; font-weight: 700;
+      color: var(--t5); background: var(--sf3);
+      padding: 1px 6px; border-radius: 10px;
+      margin-left: 6px;
+    }
+    .svc-line-right { display: flex; align-items: center; }
+
+    /* Read-only PDV values (Entradas físicas) */
+    .money-line .pdv-val {
+      font-size: 13px; font-weight: 800;
+      color: var(--t1);
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .money-line .pdv-val.is-empty { color: var(--t5); font-weight: 500; }
+
     [hidden] { display: none !important; }
 
     /* ═══ MODAIS ════════════════════════════════════════════════════════════════ */
@@ -866,25 +970,33 @@
       <!-- Coluna lateral -->
       <div class="side-col">
 
-        <!-- Entradas físicas -->
+        <!-- Entradas físicas (PDV) -->
         <div class="action-card">
           <div class="action-card-header">
             <h3>Entradas físicas</h3>
-            <span class="panel-tag tag-edit">editável</span>
+            <span class="panel-tag tag-pdv">PDV</span>
           </div>
           <div class="action-card-body" style="padding-top:10px;padding-bottom:10px;">
             <div class="money-lines">
               <div class="money-line">
-                <label><span>Dinheiro</span><input class="money-input" data-cash="dinheiro" value=""></label>
+                <span>Dinheiro</span>
+                <span class="pdv-val is-empty" data-pdv-cash="dinheiro">—</span>
+                <input type="hidden" class="money-input" data-cash="dinheiro" value="">
               </div>
               <div class="money-line">
-                <label><span>Débito</span><input class="money-input" data-cash="debito" value=""></label>
+                <span>Débito</span>
+                <span class="pdv-val is-empty" data-pdv-cash="debito">—</span>
+                <input type="hidden" class="money-input" data-cash="debito" value="">
               </div>
               <div class="money-line">
-                <label><span>Crédito</span><input class="money-input" data-cash="credito" value=""></label>
+                <span>Crédito</span>
+                <span class="pdv-val is-empty" data-pdv-cash="credito">—</span>
+                <input type="hidden" class="money-input" data-cash="credito" value="">
               </div>
               <div class="money-line">
-                <label><span>PIX / Transf.</span><input class="money-input" data-cash="pix" value=""></label>
+                <span>PIX / Transf.</span>
+                <span class="pdv-val is-empty" data-pdv-cash="pix">—</span>
+                <input type="hidden" class="money-input" data-cash="pix" value="">
               </div>
               <div class="money-line">
                 <label><span>Retorno cliente</span><input class="money-input" id="returnAmount" value=""></label>
@@ -897,21 +1009,40 @@
           </div>
         </div>
 
-        <!-- Resumo -->
+        <!-- Resumo do dia -->
         <div class="action-card">
           <div class="action-card-header">
-            <h3>Resumo</h3>
+            <h3>Resumo do dia</h3>
             <span class="panel-tag tag-calc">calculado</span>
           </div>
           <div class="action-card-body" style="padding-top:10px;padding-bottom:10px;">
-            <div class="money-lines">
-              <div class="money-line"><span>Bruto planilha</span><strong id="grossTotal">R$ 0,00</strong></div>
-              <div class="money-line"><span>Líquido esperado</span><strong id="netTotal">R$ 0,00</strong></div>
-              <div class="total-line">
-                <span>Total AV</span>
-                <strong id="avTotalPanel">R$ 0,00</strong>
+
+            <div class="summary-hero">
+              <div class="summary-hero-label">Total do dia</div>
+              <div class="summary-hero-value" id="grossTotal">R$ 0,00</div>
+              <div class="summary-hero-meta" id="summaryDayMeta">0 lançamentos</div>
+            </div>
+
+            <div class="summary-split">
+              <div class="summary-chip av">
+                <span class="summary-chip-label">À vista</span>
+                <span class="summary-chip-value" id="avTotalPanel">R$ 0,00</span>
+                <span class="summary-chip-meta" id="avCountMeta">0 lançamentos</span>
+              </div>
+              <div class="summary-chip fa">
+                <span class="summary-chip-label">Faturado</span>
+                <span class="summary-chip-value" id="faTotalSummary">R$ 0,00</span>
+                <span class="summary-chip-meta" id="faCountMeta">0 lançamentos</span>
               </div>
             </div>
+
+            <div class="summary-section-title">Por categoria de serviço</div>
+            <div id="summaryByService">
+              <div class="svc-line"><span>Nenhum lançamento</span></div>
+            </div>
+
+            <!-- valor auxiliar (não mostrado, usado por JS antigo) -->
+            <span id="netTotal" style="display:none;">R$ 0,00</span>
           </div>
         </div>
 
@@ -1207,16 +1338,21 @@
           chip.className   = 'pdv-banner-chip' + (absD < 0.01 ? '' : ' warn');
           banner.classList.add('show');
 
-          if (c.fisico) {
-            const map = { dinheiro: 'dinheiro', debito: 'debito', credito: 'credito', pix: 'pix' };
-            Object.entries(map).forEach(([fp, cash]) => {
-              const el = document.querySelector(`.money-input[data-cash="${cash}"]`);
-              if (el && c.fisico[fp] > 0) {
-                el.value = c.fisico[fp].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-              }
-            });
-          }
+          // Entradas físicas: agora vêm do PDV (read-only) em vez do lançamento físico manual
+          const cashKeys = ['dinheiro', 'debito', 'credito', 'pix'];
+          cashKeys.forEach((k) => {
+            const v = Number((c.pdv && c.pdv[k]) || 0);
+            const disp = document.querySelector(`.pdv-val[data-pdv-cash="${k}"]`);
+            const inp  = document.querySelector(`.money-input[data-cash="${k}"]`);
+            if (disp) {
+              disp.textContent = v > 0 ? fmt(v) : '—';
+              disp.classList.toggle('is-empty', !(v > 0));
+            }
+            if (inp) {
+              inp.value = v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+              inp.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
         }
       } catch (e) {}
     })();
