@@ -336,6 +336,15 @@ function limparFormulario() {
   document.getElementById("fPlaca").focus();
 }
 
+function _genUuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback (browsers antigos)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 async function lancar() {
   if (state.launching) return;
   state.launching = true;
@@ -353,6 +362,14 @@ async function lancar() {
     fp:      state.fpSelecionado,
   };
 
+  // Reusa o mesmo client_uuid enquanto o payload nao muda — se o POST anterior falhou
+  // por timeout/rede mas chegou no servidor, o retry nao duplica (server deduplica).
+  const fingerprint = [payload.placa, payload.cliente, payload.cpf, payload.servico, payload.valor, payload.fp].join("|");
+  if (!state.pendingAttempt || state.pendingAttempt.fingerprint !== fingerprint) {
+    state.pendingAttempt = { uuid: _genUuid(), fingerprint };
+  }
+  payload.client_uuid = state.pendingAttempt.uuid;
+
   try {
     const res = await apiFetch(`${apiBase}/api/caixa/lancar`, {
       method: "POST",
@@ -366,8 +383,12 @@ async function lancar() {
       return;
     }
 
-    // Atualiza estado local
-    state.lancamentos.push(res.lancamento);
+    // Sucesso (incluindo resposta dedup do server) — libera a tentativa
+    state.pendingAttempt = null;
+
+    // Se o server deduplicou, o lancamento ja esta no array local — nao duplica no front
+    const jaExiste = state.lancamentos.some(l => l.id === res.lancamento.id);
+    if (!jaExiste) state.lancamentos.push(res.lancamento);
     state.totais = res.totais;
 
     // Feedback visual imediato

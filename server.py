@@ -2063,11 +2063,27 @@ def api_caixa_lancar(unit: str):
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
+        client_uuid = clean_text(data.get("client_uuid", ""))[:64]
 
         err = validar_lancamento({"placa": placa, "cliente": cliente, "servico": servico,
                                    "valor": valor, "fp": fp})
         if err:
             return _json({"success": False, "error": err}, 400)
+
+        state = _load_caixa_dia(unit)
+
+        # Dedup idempotente: se o client ja enviou esse client_uuid, retorna o existente.
+        # Protege contra retry depois de timeout/rede falha — evita duplicar no dia.
+        if client_uuid:
+            for lc in state["lancamentos"]:
+                if lc.get("client_uuid") == client_uuid:
+                    return _json({
+                        "success": True,
+                        "lancamento": lc,
+                        "totais": _caixa_totals(state["lancamentos"]),
+                        "total_lancamentos": len(state["lancamentos"]),
+                        "deduped": True,
+                    })
 
         now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
         lancamento = {
@@ -2081,7 +2097,8 @@ def api_caixa_lancar(unit: str):
             "valor": round(valor, 2),
             "fp": fp,
         }
-        state = _load_caixa_dia(unit)
+        if client_uuid:
+            lancamento["client_uuid"] = client_uuid
         state["lancamentos"].append(lancamento)
         _save_caixa_dia(unit, state)
 
