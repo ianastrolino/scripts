@@ -176,40 +176,69 @@
 
     /* ═══ IMPORT BAR ════════════════════════════════════════════════════════════ */
     .import-bar {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--surface);
-      border-radius: var(--rl);
-      padding: 10px 16px;
-      border: 1px solid rgba(7,16,31,.08);
-      box-shadow: var(--s1);
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--ds-surface);
+      border-radius: var(--ds-radius-lg);
+      padding: 12px 16px;
+      border: 1px solid var(--ds-line);
+      box-shadow: var(--ds-shadow-sm);
     }
-    .import-bar-label { font-size: 11.5px; font-weight: 600; color: var(--t4); letter-spacing: -.01em; margin-right: 4px; }
+    .import-bar-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      padding-right: 10px;
+      margin-right: 2px;
+      border-right: 1px solid var(--ds-line);
+    }
     .btn-import {
       position: relative;
-      height: 34px; padding: 0 16px;
-      border-radius: var(--r); border: none;
-      background: var(--focus); color: #fff;
-      font-size: 12.5px; font-weight: 700;
-      cursor: pointer; font-family: inherit;
-      letter-spacing: -.015em;
-      box-shadow: 0 1px 0 rgba(0,0,0,.1), 0 2px 8px rgba(79,70,229,.3);
-      transition: background .15s, box-shadow .15s, transform .12s;
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 38px; padding: 0 18px;
+      border-radius: var(--ds-radius-md); border: none;
+      background: linear-gradient(135deg, var(--ds-accent-600), var(--ds-accent-700));
+      color: #fff;
+      font-family: inherit;
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-bold);
+      cursor: pointer;
+      letter-spacing: -.01em;
+      box-shadow: 0 4px 12px rgba(37,99,235,.28);
+      transition: transform var(--ds-duration-2) var(--ds-ease),
+                  box-shadow var(--ds-duration-2) var(--ds-ease),
+                  filter var(--ds-duration-2) var(--ds-ease);
       overflow: hidden;
     }
-    .btn-import:hover { background: #4338ca; transform: translateY(-1px); box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 4px 14px rgba(79,70,229,.38); }
+    .btn-import:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(37,99,235,.38); filter: brightness(1.03); }
+    .btn-import:active { transform: translateY(0); }
+    .btn-import svg { width: 16px; height: 16px; }
     .btn-import input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
     .btn-ghost-sm {
-      height: 34px; padding: 0 13px;
-      border-radius: var(--r); border: 1px solid var(--border);
-      background: var(--surface); color: var(--t4);
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      font-family: inherit; letter-spacing: -.015em;
-      transition: border-color .12s, background .12s, color .12s;
+      display: inline-flex; align-items: center; gap: 7px;
+      height: 38px; padding: 0 14px;
+      border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line);
+      background: var(--ds-surface);
+      color: var(--ds-ink-muted);
+      font-family: inherit;
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-semi);
+      cursor: pointer;
+      letter-spacing: -.01em;
+      transition: border-color var(--ds-duration-2) var(--ds-ease),
+                  background var(--ds-duration-2) var(--ds-ease),
+                  color var(--ds-duration-2) var(--ds-ease),
+                  transform var(--ds-duration-2) var(--ds-ease);
     }
-    .btn-ghost-sm:hover { border-color: #b8c6d6; background: var(--sf2); color: var(--t2); }
+    .btn-ghost-sm svg { width: 15px; height: 15px; }
+    .btn-ghost-sm:hover { border-color: var(--ds-line-strong); background: var(--ds-surface-alt); color: var(--ds-ink); transform: translateY(-1px); }
+    .btn-ghost-sm:active { transform: translateY(0); }
     .import-bar-spacer { flex: 1; }
-    .source-info { font-size: 12px; color: var(--t5); letter-spacing: -.01em; font-weight: 500; }
-    .source-info strong { color: var(--t3); font-weight: 700; }
+    .source-info { font-size: var(--ds-text-sm); color: var(--ds-ink-subtle); font-weight: var(--ds-weight-medium); }
+    .source-info strong { color: var(--ds-ink); font-weight: var(--ds-weight-bold); }
 
     /* ═══ HERO STRIP ════════════════════════════════════════════════════════════ */
     .hero-strip {
@@ -701,14 +730,23 @@
 
     <!-- Import bar -->
     <div class="import-bar">
-      <span class="import-bar-label">Planilha diária</span>
+      <span class="import-bar-label">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M9 4v18"/></svg>
+        Planilha diária
+      </span>
       <label class="btn-import">
-        ↑ Importar planilhas
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar planilhas
         <input id="fileInput" type="file" accept=".xls,.html,.htm" multiple>
       </label>
-      <button id="loadSampleBtn" class="btn-ghost-sm" type="button">Carregar exemplo</button>
-      <button id="clearBtn" class="btn-ghost-sm" type="button">Limpar lote</button>
-      <button id="exportBtn" class="btn-ghost-sm" type="button">Exportar conferência</button>
+      <button id="clearBtn" class="btn-ghost-sm" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+        Limpar lote
+      </button>
+      <button id="exportBtn" class="btn-ghost-sm" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar conferência
+      </button>
       <div class="import-bar-spacer"></div>
       <div class="source-info">
         <strong id="sourceFile">Nenhum arquivo</strong>
