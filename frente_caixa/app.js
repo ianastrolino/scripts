@@ -557,6 +557,11 @@ function paymentControl(record) {
     const label = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora}`;
     return select + `<div class="pdv-badge pdv-ok">&#x2705; PDV: ${label}</div>`;
   }
+  if (conf.status === "ok_fallback") {
+    const label = `${fp_label[conf.pdv_fp] || conf.pdv_fp} · ${conf.pdv_hora || ""}`;
+    const srvOriginal = conf.pdv_servico_original ? ` (PDV: ${String(conf.pdv_servico_original).toUpperCase()})` : "";
+    return select + `<div class="pdv-badge pdv-ok">&#x2705; PDV: ${label}${srvOriginal}</div>`;
+  }
   const confirmBtn = confirmed
     ? `<span class="pdv-confirmed">confirmado</span>`
     : `<button class="pdv-confirm-btn" data-confirm="${record.id}" type="button">Confirmar assim</button>`;
@@ -763,9 +768,12 @@ async function conferirComPDV() {
     if (!result.success) return;
     state.conferencia = result.conferencia;
 
-    // Auto-preenche avPagamento para registros confirmados no PDV ("ok")
+    // Auto-preenche avPagamento para registros confirmados no PDV
+    // ("ok" = match por placa+servico, "ok_fallback" = match por placa+valor
+    // quando o servico diverge entre planilha e PDV).
     for (const [id, conf] of Object.entries(result.conferencia)) {
-      if (conf.status === "ok" && conf.pdv_fp) {
+      const matched = conf.status === "ok" || conf.status === "ok_fallback";
+      if (matched && conf.pdv_fp) {
         const rec = state.records.find((r) => r.id === id);
         if (rec && rec.avPagamento === "pendente") {
           rec.avPagamento = conf.pdv_fp;

@@ -2105,9 +2105,11 @@ def api_caixa_conferir(unit: str):
     Output: { conferencia: { <record_id>: { status, pdv_valor, pdv_fp, pdv_hora } } }
 
     status:
-      "ok"               — placa+servico encontrado no PDV, valor igual
+      "ok"                — placa+servico encontrado no PDV, valor igual
+      "ok_fallback"       — match por placa+valor (servico divergia; planilha manda)
       "divergencia_valor" — encontrado no PDV mas valor difere
-      "sem_pdv"          — placa+servico nao encontrado no PDV hoje
+      "divergencia_fp"    — FP do PDV difere da planilha (AV vs FA)
+      "sem_pdv"           — nem (placa,servico) nem (placa,valor) acharam par no PDV
     """
     try:
         import re
@@ -2161,9 +2163,13 @@ def api_caixa_conferir(unit: str):
                     return True
             return False
 
-        # Chaves da planilha (AV e FA) para detectar PDV sem planilha
+        # Primeiro pass: match por (placa, servico). Guarda pdv_keys consumidas
+        # para segundo pass por placa+valor (fallback quando servico diverge).
+        consumed_pdv_keys: set[tuple] = set()
         planilha_keys: set[tuple] = set()
         conferencia: dict[str, dict] = {}
+        # Pendentes para fallback por placa+valor: (rec_id, placa, preco, planilha_fp)
+        pending_fallback: list[tuple] = []
         for r in records:
             planilha_fp = r.get("fp", "AV")   # "AV" ou "FA"
             rec_id  = r.get("id", "")
@@ -2174,6 +2180,8 @@ def api_caixa_conferir(unit: str):
 
             pdv_key = _find_pdv_key(placa, servico)
             if pdv_key is None:
+                # Adia decisao: tenta fallback por placa+valor apos o loop
+                pending_fallback.append((rec_id, placa, preco, planilha_fp))
                 conferencia[rec_id] = {
                     "status": "sem_pdv",
                     "pdv_valor": None,
@@ -2181,6 +2189,7 @@ def api_caixa_conferir(unit: str):
                     "pdv_hora": None,
                 }
             else:
+                consumed_pdv_keys.add(pdv_key)
                 lc        = pdv_map[pdv_key]
                 pdv_valor = float(lc.get("valor", 0))
                 pdv_fp    = lc.get("fp", "")
@@ -2201,21 +2210,51 @@ def api_caixa_conferir(unit: str):
                     "pdv_hora": lc.get("hora"),
                 }
 
+        # Segundo pass (fallback): casa planilha "sem_pdv" com PDV restante
+        # por (placa, valor aprox). Resolve caso em que o servico diverge
+        # entre planilha e PDV (ex: Ian lancou "LAUDO DE TRANSFERENCIA" no PDV
+        # e a planilha tem "LAUDO DE TRANSFERENCIA COM VISTORIA").
+        for rec_id, placa, preco, planilha_fp in pending_fallback:
+            for pdv_key, lc in pdv_map.items():
+                if pdv_key in consumed_pdv_keys:
+                    continue
+                if pdv_key[0] != placa:
+                    continue
+                pdv_valor = float(lc.get("valor", 0))
+                if abs(pdv_valor - preco) >= 0.01:
+                    continue
+                # Match por placa+valor
+                consumed_pdv_keys.add(pdv_key)
+                pdv_fp = lc.get("fp", "")
+                pdv_fp_cat = "FA" if pdv_fp in ("faturado", "detran") else "AV"
+                status = "ok_fallback" if pdv_fp_cat == planilha_fp else "divergencia_fp"
+                conferencia[rec_id] = {
+                    "status": status,
+                    "pdv_valor": pdv_valor,
+                    "pdv_fp": pdv_fp,
+                    "pdv_hora": lc.get("hora"),
+                    "pdv_servico_original": lc.get("servico"),  # dica para debug
+                }
+                break
+
         # Lançamentos do PDV sem nenhum correspondente na planilha (AV ou FA)
-        # — serviços avulsos: PESQUISA AVULSA, BAIXA PERMANENTE, faturados sem planilha etc.
+        # — so entram aqui PDVs que NAO foram consumidos no match principal
+        # nem no fallback por placa+valor. Ou seja: servicos avulsos genuinos
+        # (PESQUISA AVULSA, BAIXA PERMANENTE) e pagamentos sem planilha.
         pdv_sem_planilha = []
-        for (placa_key, servico_key), lc in pdv_map.items():
-            if not _planilha_has_match(placa_key, servico_key, planilha_keys):
-                pdv_sem_planilha.append({
-                    "pdv_id":   lc.get("id"),
-                    "hora":     lc.get("hora"),
-                    "placa":    lc.get("placa"),
-                    "cliente":  lc.get("cliente"),
-                    "servico":  lc.get("servico"),
-                    "valor":    lc.get("valor"),
-                    "fp":       lc.get("fp"),
-                    "timestamp": lc.get("timestamp"),
-                })
+        for pdv_key, lc in pdv_map.items():
+            if pdv_key in consumed_pdv_keys:
+                continue
+            pdv_sem_planilha.append({
+                "pdv_id":   lc.get("id"),
+                "hora":     lc.get("hora"),
+                "placa":    lc.get("placa"),
+                "cliente":  lc.get("cliente"),
+                "servico":  lc.get("servico"),
+                "valor":    lc.get("valor"),
+                "fp":       lc.get("fp"),
+                "timestamp": lc.get("timestamp"),
+            })
 
         return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
     except Exception as exc:
