@@ -708,4 +708,20 @@ document.addEventListener("DOMContentLoaded", () => {
       fecharEditar();
     }
   });
+
+  // Hotkeys 1-6 para forma de pagamento — so dispara fora de input/select/textarea
+  // e com os modais fechados (evita mudar FP por tras da tela de confirmacao)
+  document.addEventListener("keydown", e => {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const tag = (e.target.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+    if (document.querySelector("#confirmLancarModal.open, #pinModal.open, #editModal.open, #resumoModal.open")) return;
+    const formCard = document.getElementById("formCard");
+    if (!formCard || formCard.style.display === "none") return;
+    const btn = document.querySelector(`#fpGrid .fp-card[data-fp-key="${e.key}"]`);
+    if (!btn) return;
+    e.preventDefault();
+    btn.click();
+    btn.focus();
+  });
 });

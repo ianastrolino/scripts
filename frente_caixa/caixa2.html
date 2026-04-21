@@ -490,6 +490,24 @@
     }
     .fp-card:active { transform: none; }
 
+    .fp-key {
+      position: absolute;
+      top: 4px;
+      right: 5px;
+      font-size: 9.5px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 3px;
+      background: var(--sf3, #e9edf2);
+      color: var(--t5, #7a8796);
+      border: 1px solid var(--border);
+      letter-spacing: 0;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .fp-card.selected .fp-key { opacity: .55; }
+
     .fp-card[data-fp="faturado"] {
       grid-column: 1 / -1;
       flex-direction: row;
@@ -1725,27 +1743,33 @@
 
           <div class="fp-section-label">Forma de pagamento</div>
           <div class="fp-grid" id="fpGrid">
-            <button type="button" class="fp-card" data-fp="dinheiro" tabindex="0">
+            <button type="button" class="fp-card" data-fp="dinheiro" data-fp-key="1" tabindex="0">
+              <span class="fp-key">1</span>
               <span class="fp-icon" data-fp-icon="dinheiro"></span>
               <span class="fp-name">Dinheiro</span>
             </button>
-            <button type="button" class="fp-card" data-fp="debito" tabindex="0">
+            <button type="button" class="fp-card" data-fp="debito" data-fp-key="2" tabindex="0">
+              <span class="fp-key">2</span>
               <span class="fp-icon" data-fp-icon="debito"></span>
               <span class="fp-name">Débito</span>
             </button>
-            <button type="button" class="fp-card" data-fp="credito" tabindex="0">
+            <button type="button" class="fp-card" data-fp="credito" data-fp-key="3" tabindex="0">
+              <span class="fp-key">3</span>
               <span class="fp-icon" data-fp-icon="credito"></span>
               <span class="fp-name">Crédito</span>
             </button>
-            <button type="button" class="fp-card" data-fp="pix" tabindex="0">
+            <button type="button" class="fp-card" data-fp="pix" data-fp-key="4" tabindex="0">
+              <span class="fp-key">4</span>
               <span class="fp-icon" data-fp-icon="pix"></span>
               <span class="fp-name">PIX</span>
             </button>
-            <button type="button" class="fp-card" data-fp="faturado" tabindex="0">
+            <button type="button" class="fp-card" data-fp="faturado" data-fp-key="5" tabindex="0">
+              <span class="fp-key">5</span>
               <span class="fp-icon" data-fp-icon="faturado"></span>
               <span class="fp-name">Faturado</span>
             </button>
-            <button type="button" class="fp-card" data-fp="detran" tabindex="0">
+            <button type="button" class="fp-card" data-fp="detran" data-fp-key="6" tabindex="0">
+              <span class="fp-key">6</span>
               <span class="fp-icon" data-fp-icon="detran"></span>
               <span class="fp-name">Taxa DETRAN</span>
             </button>
@@ -2097,8 +2121,8 @@
     })();
   </script>
 
-  <script src="caixa.js?v=13"></script>
-  <script src="caixa2-init.js?v=13"></script>
-  <script src="caixa2.js?v=13"></script>
+  <script src="caixa.js?v=14"></script>
+  <script src="caixa2-init.js?v=14"></script>
+  <script src="caixa2.js?v=14"></script>
 </body>
 </html>

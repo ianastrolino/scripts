@@ -446,8 +446,30 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnAbrirConferencia")?.addEventListener("click", abrirConferencia);
   document.getElementById("confBackBtn")?.addEventListener("click", voltarLancamentos);
   document.getElementById("btnConferir")?.addEventListener("click", confirmarConferencia);
-  ["cFisDin","cFisDeb","cFisCrd","cFisPix"].forEach(id => {
-    document.getElementById(id)?.addEventListener("input", calcularConferencia);
+  const confInputs = ["cFisDin","cFisDeb","cFisCrd","cFisPix"];
+  confInputs.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", calcularConferencia);
+    el.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const next = confInputs[i + 1];
+      const nextEl = next ? document.getElementById(next) : null;
+      if (nextEl) nextEl.focus();
+      else document.getElementById("btnConferir")?.focus();
+    });
+  });
+
+  // Esc na conferencia volta para o formulario
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const confCard = document.getElementById("confCard");
+    if (!confCard || confCard.style.display === "none") return;
+    // Se algum modal estiver aberto, deixa o handler do modal tratar
+    if (document.querySelector(".modal.open, #confirmLancarModal.open, #pinModal.open, #editModal.open, #resumoModal.open")) return;
+    e.preventDefault();
+    voltarLancamentos();
   });
 
   // Botão resumo
