@@ -13,137 +13,46 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* Aliases locais → design-system (mantem classes existentes funcionando) */
     :root {
-      --bg:      #e8ecf2;
-      --surface: #ffffff;
-      --sf2:     #f5f7fa;
-      --sf3:     #eef1f6;
-      --t1: #07101f;
-      --t2: #162032;
-      --t3: #2c3f55;
-      --t4: #536a84;
-      --t5: #7f97b0;
-      --t6: #b0c2d4;
-      --border:  #d5dde8;
-      --border2: #e8edf4;
-      --s0: 0 1px 2px rgba(7,16,31,.05);
-      --s1: 0 1px 4px rgba(7,16,31,.08), 0 1px 2px rgba(7,16,31,.05);
-      --s2: 0 4px 16px rgba(7,16,31,.12), 0 1px 6px rgba(7,16,31,.06);
-      --s3: 0 20px 60px rgba(7,16,31,.2), 0 6px 24px rgba(7,16,31,.1);
-      --r:   8px;
-      --rm:  10px;
-      --rl:  12px;
-      --rxl: 16px;
-      --red:    #dc2626;
-      --red-dk: #b91c1c;
-      --red-lt: #fef2f2;
+      --bg:      var(--ds-bg);
+      --surface: var(--ds-surface);
+      --sf2:     var(--ds-surface-alt);
+      --sf3:     var(--ds-neutral-150);
+      --t1: var(--ds-ink);
+      --t2: var(--ds-ink);
+      --t3: var(--ds-neutral-700);
+      --t4: var(--ds-ink-muted);
+      --t5: var(--ds-ink-subtle);
+      --t6: var(--ds-neutral-300);
+      --border:  var(--ds-line);
+      --border2: var(--ds-neutral-150);
+      --s0: var(--ds-shadow-xs);
+      --s1: var(--ds-shadow-sm);
+      --s2: var(--ds-shadow-md);
+      --s3: var(--ds-shadow-xl);
+      --r:   var(--ds-radius-md);
+      --rm:  var(--ds-radius-lg);
+      --rl:  var(--ds-radius-lg);
+      --rxl: var(--ds-radius-xl);
+      --red:    var(--ds-danger);
+      --red-dk: var(--ds-brand-strong);
+      --red-lt: var(--ds-danger-soft);
       --focus:   #4f46e5;
       --focus-r: rgba(79,70,229,.18);
-      --din:    #059669; --din-bg: #ecfdf5; --din-bd: #6ee7b7;
-      --deb:    #2563eb; --deb-bg: #eff6ff; --deb-bd: #93c5fd;
+      --din:    var(--ds-success); --din-bg: var(--ds-success-soft); --din-bd: #6ee7b7;
+      --deb:    var(--ds-accent-600); --deb-bg: var(--ds-accent-50); --deb-bd: #93c5fd;
       --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
-      --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
-      --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+      --pix:    var(--ds-info); --pix-bg: var(--ds-info-soft); --pix-bd: #67e8f9;
+      --fat:    var(--ds-warning); --fat-bg: var(--ds-warning-soft); --fat-bd: #fcd34d;
     }
 
-    body {
-      background: var(--bg);
-      color: var(--t2);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 14px;
-      line-height: 1.5;
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    /* ═══ HEADER ═══════════════════════════════════════════════════════════════ */
-    .header {
-      background: #080f1c;
-      height: 56px;
-      padding: 0 20px;
-      display: flex;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 40;
-      box-shadow: 0 1px 0 rgba(255,255,255,.05), 0 4px 24px rgba(0,0,0,.25);
-    }
-    .header-brand {
-      display: flex; align-items: center; gap: 10px;
-      flex-shrink: 0; padding-right: 20px; margin-right: 20px;
-      border-right: 1px solid rgba(255,255,255,.07);
-    }
-    .header-logo-pill {
-      background: #fff; border-radius: 6px; padding: 4px 7px;
-      height: 30px; display: flex; align-items: center;
-    }
-    .header-logo-pill img { height: 24px; width: auto; }
-    .brand-name { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: -.025em; line-height: 1.2; }
-    .brand-sub  { font-size: 9.5px; font-weight: 500; color: rgba(255,255,255,.2); letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
-    .header-status { flex: 1; display: flex; align-items: center; gap: 6px; }
-    .hstat {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.5);
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
-      border-radius: 20px; padding: 3px 10px 3px 8px;
-      letter-spacing: -.01em; transition: background .2s, color .2s;
-    }
-    .hstat:hover { background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); }
-    .hstat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .hstat-dot.amber { background: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,.2); }
-    .hstat strong { color: rgba(255,255,255,.75); font-weight: 700; }
-    .hstat-date { color: rgba(255,255,255,.22); font-size: 11px; margin-left: auto; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-    .header-right { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-    .header-nav {
-      display: flex; align-items: center; gap: 1px;
-      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.06);
-      padding: 3px; border-radius: 9px; margin-right: 4px;
-    }
-    .nav-pill {
-      padding: 4px 14px; border-radius: 6px; border: none;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      text-decoration: none; color: rgba(255,255,255,.36);
-      background: transparent; transition: color .15s, background .15s;
-      white-space: nowrap; letter-spacing: -.015em; font-family: inherit;
-    }
-    .nav-pill:hover { color: rgba(255,255,255,.72); }
-    .nav-pill.active { background: #3b82f6; color: #fff; box-shadow: 0 1px 6px rgba(59,130,246,.45); }
-    .user-chip {
-      display: flex; align-items: center; gap: 6px;
-      height: 30px; padding: 0 10px 0 5px; border-radius: 20px;
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.07);
-      color: rgba(255,255,255,.45); font-size: 11.5px; font-weight: 500;
-    }
-    .user-avatar {
-      width: 20px; height: 20px; border-radius: 50%;
-      background: #3b82f6; color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 9px; font-weight: 700; flex-shrink: 0;
-    }
-    .btn-logout {
-      height: 30px; padding: 0 10px; border-radius: 7px; border: none;
-      background: transparent; color: rgba(255,255,255,.22); font-size: 12px;
-      font-weight: 500; cursor: pointer; text-decoration: none; transition: color .15s;
-    }
-    .btn-logout:hover { color: rgba(255,255,255,.6); }
-    .ham-menu { position: relative; }
-    .ham-btn { width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s;flex-shrink:0; }
-    .ham-btn:hover { background:rgba(255,255,255,.12);color:#fff; }
-    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);left:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
-    .ham-menu.open .ham-dropdown { display:block; }
-    .dd-item { display:block;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);text-decoration:none;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:inherit;transition:background .12s,color .12s; }
-    .dd-item:hover { background:rgba(255,255,255,.08);color:#fff; }
-    .dd-item.active { color:#fff;font-weight:700; }
-    .dd-sep { height:1px;background:rgba(255,255,255,.07);margin:4px 6px; }
-    .dd-item.danger { color:rgba(255,80,80,.7); }
-    .dd-item.danger:hover { background:rgba(220,38,38,.15);color:#f87171; }
+    /* Fechamento tem muitos controles lado-a-lado — amplia o container padrao */
+    #app-main .app-content-wrap { max-width: 1440px; }
+    #app-main .app-content { padding: var(--ds-space-5) var(--ds-space-5) var(--ds-space-12); }
 
     /* ═══ WORKSPACE ═════════════════════════════════════════════════════════════ */
     .workspace {
-      max-width: 1440px;
-      margin: 0;
-      padding: 18px 20px 48px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -828,6 +737,13 @@
 
   <div id="app-shell"></div>
   <main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Operação</div>
+        <h1 class="app-page-title">Fechamento de Caixa</h1>
+        <p class="app-page-sub">Cruze a planilha do dia com o PDV e envie para o Tiny</p>
+      </div>
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════════════════════ -->
   <div class="workspace">
 
@@ -1152,6 +1068,8 @@
     </div>
 
   </div>
+    </div><!-- /.app-content-wrap -->
+  </div><!-- /.app-content -->
 
   <!-- ═══ MODAL MAPEAMENTO DE CLIENTES ════════════════════════════════════════ -->
   <div id="mapClientesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="mapClientesTitle">
