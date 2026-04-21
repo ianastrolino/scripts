@@ -893,7 +893,12 @@ def master_api_debug_email_test():
         req = urllib.request.Request(
             "https://api.resend.com/emails",
             data=_json_mod.dumps(payload).encode("utf-8"),
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type":  "application/json",
+                "User-Agent":    "AstroVistorias/1.0 (+https://astrovistorias.com.br)",
+                "Accept":        "application/json",
+            },
             method="POST",
         )
         try:
@@ -2657,6 +2662,8 @@ def _send_via_resend(subject: str, html: str, recipients: list[str],
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type":  "application/json",
+            "User-Agent":    "AstroVistorias/1.0 (+https://astrovistorias.com.br)",
+            "Accept":        "application/json",
         },
         method="POST",
     )
