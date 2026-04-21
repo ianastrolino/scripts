@@ -713,6 +713,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Filtro da tabela de lançamentos
   const filtroEl = document.getElementById("filtroLancamentos");
   if (filtroEl) {
+    filtroEl.value = "";
     filtroEl.addEventListener("input", () => renderTabela());
   }
 

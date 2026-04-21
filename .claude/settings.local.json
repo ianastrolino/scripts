@@ -33,7 +33,13 @@
       "Bash(.venv/bin/pip install *)",
       "Bash(.venv/bin/pytest tests/test_caixa_routes.py -v)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(grep -E \"\\\\.py$|\\\\.js$|\\\\.html$\")"
+      "Bash(grep -E \"\\\\.py$|\\\\.js$|\\\\.html$\")",
+      "Bash(sed -n '450,460p' tiny_import.py)",
+      "Bash(sed -n '60,85p' tiny_import.py)",
+      "Bash(pip install *)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('caixa_db.py'\\).read\\(\\)\\); print\\('caixa_db.py OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('server.py'\\).read\\(\\)\\); ast.parse\\(open\\('caixa_db.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const c=fs.readFileSync\\('frente_caixa/historico-caixa.html','utf8'\\); const m=c.match\\(/<script>\\([\\\\s\\\\S]*?\\)<\\\\/script>/g\\); let ok=true; for \\(const s of m\\){ try { new Function\\(s.replace\\(/<\\\\/?script[^>]*>/g,''\\)\\); } catch\\(e\\){ console.log\\('ERROR:', e.message\\); ok=false; } } console.log\\(ok?'OK':'FAIL'\\)\")"
     ]
   }
 }
