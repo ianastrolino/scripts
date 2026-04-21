@@ -39,6 +39,10 @@ const sampleRows = [
   ["13/04/2026", "FORD/MUSTANG GT", "PKW7270", "CMR VEICULOS LTDA", "CAUTELAR COM ANALIS", "FA", "R$ 170,00"]
 ];
 
+// Detecta prefixo /u/<unidade> quando rodando no servidor Railway
+const _pathMatch = window.location.pathname.match(/^(\/u\/[^/]+)/);
+const apiBase = _pathMatch ? _pathMatch[1] : "";
+
 const state = {
   records: [],
   sourceFiles: [],
@@ -115,10 +119,6 @@ function hydrateFromPayload(payload) {
 }
 
 const knownTinyClients = new Map();
-
-// Detecta prefixo /u/<unidade> quando rodando no servidor Railway
-const _pathMatch = window.location.pathname.match(/^(\/u\/[^/]+)/);
-const apiBase = _pathMatch ? _pathMatch[1] : "";
 
 let _csrfToken = null;
 async function getCsrfToken() {
