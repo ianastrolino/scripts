@@ -298,26 +298,38 @@
     if (!to) return;
     const btn = document.getElementById("smtpTest");
     btn.disabled = true;
-    btn.textContent = "Enviando...";
+    btn.textContent = "Testando 465 e 587...";
+    const qs = (extra) => `/master/api/debug/email-test?to=${encodeURIComponent(to)}&${extra}`;
+    const combos = [
+      { label: "465 SSL (padrao)", url: qs("port=465&mode=ssl") },
+      { label: "587 STARTTLS",    url: qs("port=587&mode=starttls") },
+    ];
     try {
-      const r = await fetch(`/master/api/debug/email-test?to=${encodeURIComponent(to)}`);
-      const d = await r.json();
-      const cfg = d.config || {};
-      const linhas = [
-        `Resultado: ${d.result || "?"}`,
-        d.message ? `${d.message}` : null,
-        d.error ? `Erro: ${d.error}` : null,
-        d.hint ? `Dica: ${d.hint}` : null,
-        "",
-        "Config:",
-        `  SMTP_HOST=${cfg.SMTP_HOST || "(vazio)"}`,
-        `  SMTP_PORT=${cfg.SMTP_PORT ?? "(vazio)"}`,
-        `  SMTP_USER=${cfg.SMTP_USER || "(vazio)"}`,
-        `  SMTP_PASS_len=${cfg.SMTP_PASS_len ?? 0}`,
-        `  ALERT_EMAILS=${(cfg.ALERT_EMAILS_parsed || []).join(", ") || "(vazio)"}`,
-        `  recipients=${(cfg.recipients_used || []).join(", ") || "(vazio)"}`,
-      ].filter(Boolean).join("\n");
-      alert(linhas);
+      const results = await Promise.all(combos.map(async c => {
+        try {
+          const r = await fetch(c.url);
+          const d = await r.json();
+          return { label: c.label, ok: d.result === "ENVIADO", d };
+        } catch (e) {
+          return { label: c.label, ok: false, d: { result: "FETCH_ERROR", error: String(e) } };
+        }
+      }));
+      const linhas = [];
+      results.forEach(res => {
+        linhas.push(`=== ${res.label} ===`);
+        linhas.push(`Resultado: ${res.d.result || "?"}`);
+        if (res.d.message) linhas.push(res.d.message);
+        if (res.d.error)   linhas.push(`Erro: ${res.d.error}`);
+        if (res.d.hint)    linhas.push(`Dica: ${res.d.hint}`);
+        linhas.push("");
+      });
+      const first = results[0].d.config || {};
+      linhas.push("Config (envs):");
+      linhas.push(`  SMTP_HOST=${first.SMTP_HOST || "(vazio)"}`);
+      linhas.push(`  SMTP_USER=${first.SMTP_USER || "(vazio)"}`);
+      linhas.push(`  SMTP_PASS_len=${first.SMTP_PASS_len ?? 0}`);
+      linhas.push(`  ALERT_EMAILS=${(first.ALERT_EMAILS_parsed || []).join(", ") || "(vazio)"}`);
+      alert(linhas.join("\n"));
     } catch (err) {
       alert("Erro: " + err.message);
     } finally {

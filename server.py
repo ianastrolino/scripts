@@ -782,8 +782,13 @@ def master_api_debug_email_test():
     from email.mime.text import MIMEText
 
     to_override = (request.args.get("to") or "").strip()
-    host   = os.environ.get("SMTP_HOST", "")
-    port   = int(os.environ.get("SMTP_PORT", "465") or 465)
+    host_override = (request.args.get("host") or "").strip()
+    port_override = (request.args.get("port") or "").strip()
+    mode_override = (request.args.get("mode") or "").strip().lower()  # "ssl" | "starttls"
+
+    host   = host_override or os.environ.get("SMTP_HOST", "")
+    port   = int(port_override) if port_override.isdigit() else int(os.environ.get("SMTP_PORT", "465") or 465)
+    mode   = mode_override if mode_override in ("ssl", "starttls") else ("starttls" if port == 587 else "ssl")
     user   = os.environ.get("SMTP_USER", "")
     passwd = os.environ.get("SMTP_PASS", "")
     alert_emails_raw = os.environ.get("ALERT_EMAILS", "")
@@ -794,12 +799,16 @@ def master_api_debug_email_test():
         "config": {
             "SMTP_HOST": host or "(vazio)",
             "SMTP_PORT": port,
+            "SMTP_MODE": mode,
             "SMTP_USER": user or "(vazio)",
             "SMTP_PASS_len": len(passwd),
             "ALERT_EMAILS_raw": alert_emails_raw,
             "ALERT_EMAILS_parsed": alert_emails,
             "recipients_used": recipients,
             "to_override": to_override or None,
+            "host_override": host_override or None,
+            "port_override": port_override or None,
+            "mode_override": mode_override or None,
         },
         "checks": {
             "host_ok": bool(host),
@@ -822,12 +831,20 @@ def master_api_debug_email_test():
     msg["To"]      = ", ".join(recipients)
 
     try:
-        with smtplib.SMTP_SSL(host, port, timeout=20) as smtp:
-            smtp.login(user, passwd)
-            smtp.sendmail(user, recipients, msg.as_string())
+        if mode == "starttls":
+            with smtplib.SMTP(host, port, timeout=20) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(user, passwd)
+                smtp.sendmail(user, recipients, msg.as_string())
+        else:
+            with smtplib.SMTP_SSL(host, port, timeout=20) as smtp:
+                smtp.login(user, passwd)
+                smtp.sendmail(user, recipients, msg.as_string())
         diag["result"] = "ENVIADO"
-        diag["message"] = f"Email enviado para {recipients}. Verifique caixa de entrada e spam."
-        app.logger.info("[email-test] ok to=%s", recipients)
+        diag["message"] = f"Email enviado para {recipients} via {host}:{port} ({mode}). Verifique caixa de entrada e spam."
+        app.logger.info("[email-test] ok to=%s via=%s:%s/%s", recipients, host, port, mode)
         return _json(diag)
     except smtplib.SMTPAuthenticationError as exc:
         diag["result"] = "AUTH_ERROR"
