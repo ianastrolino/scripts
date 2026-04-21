@@ -79,6 +79,8 @@
     edit:        _svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
     trash:       _svg('<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/>'),
     plus:        _svg('<path d="M12 5v14M5 12h14"/>'),
+    cloud:       _svg('<path d="M17.5 19a4.5 4.5 0 1 0-.88-8.91 5.5 5.5 0 0 0-10.6 1.75A4 4 0 0 0 6.5 19z"/>'),
+    cloudDown:   _svg('<path d="M20 16.2A4.5 4.5 0 0 0 17.5 8h-1.79A7 7 0 1 0 4 14.9"/><path d="m8 17 4 4 4-4"/><path d="M12 12v9"/>'),
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 

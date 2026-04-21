@@ -81,15 +81,25 @@
     }
     .btn-aplicar:hover { background: var(--ds-accent-700); }
     .btn-exportar {
-      background: var(--ds-surface); color: var(--ds-ink-muted);
+      background: var(--ds-surface); color: var(--t1);
       border: 1px solid var(--border); border-radius: var(--ds-radius-md);
       padding: 7px var(--ds-space-4);
-      font-size: var(--ds-text-base); font-family: inherit;
-      font-weight: var(--ds-weight-medium);
+      font-size: var(--ds-text-sm); font-family: inherit;
+      font-weight: var(--ds-weight-semi);
       cursor: pointer; margin-left: auto;
-      transition: all var(--ds-duration-2) var(--ds-ease);
+      display: inline-flex; align-items: center; gap: 8px;
+      line-height: 1;
+      transition: background var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease);
     }
-    .btn-exportar:hover { background: var(--ds-surface-alt); color: var(--t1); }
+    #btnBackup { margin-left: 0; }
+    .btn-exportar:hover { background: var(--card2); border-color: var(--ds-line-strong); }
+    .btn-exportar:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-exportar .bi {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; flex-shrink: 0;
+    }
+    .btn-exportar .bi svg { width: 18px; height: 18px; }
 
     /* ── Resumo tiles ────────────────────────────────────── */
     .resumo-strip {
@@ -337,10 +347,16 @@
       <!-- Filter bar -->
       <div class="filter-bar">
         <span class="filter-label">Período</span>
-        <button class="mode-btn active" id="modeMonth">Mês</button>
+        <button class="mode-btn active" id="modeToday">Hoje</button>
+        <button class="mode-btn" id="modeWeek">Semana</button>
+        <button class="mode-btn" id="modeMonth">Mês</button>
         <button class="mode-btn" id="modeRange">Intervalo</button>
 
-        <div id="filterMonth" style="display:flex;align-items:center;gap:8px;">
+        <div id="filterPeriodLabel" style="display:flex;align-items:center;gap:6px;color:var(--t2);font-size:var(--ds-text-sm)">
+          <span id="periodLabel">—</span>
+        </div>
+
+        <div id="filterMonth" style="display:none;align-items:center;gap:8px;">
           <select class="filter-select" id="selMes">
             <option value="01">Janeiro</option><option value="02">Fevereiro</option>
             <option value="03">Março</option><option value="04">Abril</option>
@@ -364,9 +380,13 @@
           <option value="all">Todas as unidades</option>
         </select>
 
-        <button class="btn-aplicar" id="btnAplicar">Aplicar</button>
-        <button class="btn-exportar" id="btnExportar">⬇ Export CSV</button>
-        <button class="btn-exportar" id="btnBackup" style="margin-left:8px">☁ Backup</button>
+        <button class="btn-aplicar" id="btnAplicar" style="display:none">Aplicar</button>
+        <button class="btn-exportar" id="btnExportar">
+          <span class="bi" id="exportIcon"></span>Export CSV
+        </button>
+        <button class="btn-exportar" id="btnBackup" style="margin-left:8px">
+          <span class="bi" id="backupIcon"></span><span id="backupLabel">Backup</span>
+        </button>
       </div>
 
       <!-- Resumo consolidado -->
@@ -458,6 +478,13 @@
 
   // ── Filtros ─────────────────────────────────────────────
   const now = new Date();
+  const fmtYMD = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
   const selMes = document.getElementById("selMes");
   const selAno = document.getElementById("selAno");
   selMes.value = String(now.getMonth() + 1).padStart(2, "0");
@@ -470,31 +497,57 @@
   const inpFrom = document.getElementById("inpFrom");
   const inpTo   = document.getElementById("inpTo");
   inpFrom.value = `${now.getFullYear()}-${selMes.value}-01`;
-  inpTo.value   = now.toISOString().slice(0, 10);
+  inpTo.value   = fmtYMD(now);
 
-  let filterMode = "month";
-  document.getElementById("modeMonth").addEventListener("click", () => {
-    filterMode = "month";
-    document.getElementById("modeMonth").classList.add("active");
-    document.getElementById("modeRange").classList.remove("active");
-    document.getElementById("filterMonth").style.display = "flex";
-    document.getElementById("filterRange").style.display = "none";
-  });
-  document.getElementById("modeRange").addEventListener("click", () => {
-    filterMode = "range";
-    document.getElementById("modeRange").classList.add("active");
-    document.getElementById("modeMonth").classList.remove("active");
-    document.getElementById("filterRange").style.display = "flex";
-    document.getElementById("filterMonth").style.display = "none";
-  });
+  // Modo padrão: Hoje (sempre reflete o dia atual ao abrir a tela)
+  let filterMode = "today";
+
+  function setMode(mode) {
+    filterMode = mode;
+    ["today","week","month","range"].forEach(m => {
+      const btn = document.getElementById("mode" + m[0].toUpperCase() + m.slice(1));
+      if (btn) btn.classList.toggle("active", m === mode);
+    });
+    document.getElementById("filterMonth").style.display = mode === "month" ? "flex" : "none";
+    document.getElementById("filterRange").style.display = mode === "range" ? "flex" : "none";
+    document.getElementById("btnAplicar").style.display  = mode === "range" ? "inline-block" : "none";
+    // Auto-fire exceto no Intervalo (que requer escolher datas antes)
+    if (mode !== "range") carregar();
+    else updatePeriodLabel();
+  }
+
+  document.getElementById("modeToday").addEventListener("click", () => setMode("today"));
+  document.getElementById("modeWeek").addEventListener("click",  () => setMode("week"));
+  document.getElementById("modeMonth").addEventListener("click", () => setMode("month"));
+  document.getElementById("modeRange").addEventListener("click", () => setMode("range"));
+
+  // Auto-fire ao mudar mês/ano (já estando no modo "month")
+  selMes.addEventListener("change", () => { if (filterMode === "month") carregar(); });
+  selAno.addEventListener("change", () => { if (filterMode === "month") carregar(); });
 
   function getRange() {
+    if (filterMode === "today") {
+      const t = fmtYMD(now);
+      return { from: t, to: t };
+    }
+    if (filterMode === "week") {
+      const start = new Date(now); start.setDate(start.getDate() - 6);
+      return { from: fmtYMD(start), to: fmtYMD(now) };
+    }
     if (filterMode === "month") {
       const y = selAno.value, m = selMes.value;
       const lastDay = new Date(y, Number(m), 0).getDate();
       return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(lastDay).padStart(2, "0")}` };
     }
     return { from: inpFrom.value, to: inpTo.value };
+  }
+
+  function updatePeriodLabel() {
+    const lbl = document.getElementById("periodLabel");
+    const { from, to } = getRange();
+    if (filterMode === "today")      lbl.textContent = `• ${fmtDate(from)}`;
+    else if (filterMode === "week")  lbl.textContent = `• ${fmtDate(from)} → ${fmtDate(to)} (últimos 7 dias)`;
+    else                              lbl.textContent = "";
   }
 
   // ── Popula unidades no select (primeira carga) ──────────
@@ -514,6 +567,7 @@
 
   // ── Carregar dados ──────────────────────────────────────
   async function carregar() {
+    updatePeriodLabel();
     const { from, to } = getRange();
     const unit = document.getElementById("selUnit").value;
 
@@ -536,6 +590,8 @@
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
       renderHistorico(data.por_dia, data.unit_filter !== "all");
+      // Recarrega divergências junto (função é hoisted)
+      if (typeof carregarDivergencias === "function") carregarDivergencias();
     } catch (e) {
       const msg = `<div class="g-error">${e.message}</div>`;
       ["resumoStrip","unidadeGrid","barChart","historicoList"].forEach(id => {
@@ -547,25 +603,41 @@
   }
 
   document.getElementById("btnAplicar").addEventListener("click", carregar);
+  document.getElementById("selUnit").addEventListener("change", carregar);
   document.getElementById("btnExportar").addEventListener("click", () => {
     const { from, to } = getRange();
     const unit = document.getElementById("selUnit").value;
     window.location.href = `/gerencial/api/exportar?from=${from}&to=${to}&unit=${unit}`;
   });
+
+  // Ícones SVG dos botões de export/backup (padrão v2.1)
+  document.getElementById("exportIcon").innerHTML = AstroShell.icon("download");
+  document.getElementById("backupIcon").innerHTML = AstroShell.icon("cloud");
+
   document.getElementById("btnBackup").addEventListener("click", async () => {
-    const btn = document.getElementById("btnBackup");
+    const btn   = document.getElementById("btnBackup");
+    const lbl   = document.getElementById("backupLabel");
+    const icon  = document.getElementById("backupIcon");
     btn.disabled = true;
-    btn.textContent = "Gerando…";
+    lbl.textContent = "Gerando…";
     try {
       const res  = await fetch("/gerencial/api/backup", { method: "POST" });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      btn.textContent = `✓ Enviado (${data.size_kb} KB)`;
-      setTimeout(() => { btn.textContent = "☁ Backup"; btn.disabled = false; }, 4000);
+      lbl.textContent = `Enviado (${data.size_kb} KB)`;
+      setTimeout(() => {
+        lbl.textContent = "Backup";
+        icon.innerHTML  = AstroShell.icon("cloud");
+        btn.disabled = false;
+      }, 4000);
     } catch (e) {
-      btn.textContent = "Erro!";
+      lbl.textContent = "Erro!";
       alert("Falha no backup: " + e.message);
-      setTimeout(() => { btn.textContent = "☁ Backup"; btn.disabled = false; }, 3000);
+      setTimeout(() => {
+        lbl.textContent = "Backup";
+        icon.innerHTML  = AstroShell.icon("cloud");
+        btn.disabled = false;
+      }, 3000);
     }
   });
 
@@ -748,8 +820,6 @@
     </tr>`).join("");
   }
 
-  document.getElementById("btnAplicar").addEventListener("click", carregarDivergencias, { capture: false });
-  carregarDivergencias();
 </script>
 </body>
 </html>
