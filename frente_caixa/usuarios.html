@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Usuários</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+      --accent: var(--ds-accent-600);
+    }
+
+    .page-actions {
+      display: flex; justify-content: flex-end; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .btn-primary {
+      background: var(--accent); color: #fff; border: none;
+      padding: 10px 18px; border-radius: var(--ds-radius-md);
+      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-secondary {
+      background: var(--card); color: var(--t1); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: var(--ds-radius-md);
+      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
+    }
+    .btn-danger {
+      background: #dc2626; color: #fff; border: none;
+      padding: 10px 16px; border-radius: var(--ds-radius-md);
+      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
+    }
+    .btn-link {
+      background: transparent; border: none; color: var(--accent);
+      font-size: var(--ds-text-xs); font-weight: 600; cursor: pointer;
+      padding: 4px 8px; border-radius: 6px;
+    }
+    .btn-link:hover { background: var(--card2); }
+    .btn-link.danger { color: #dc2626; }
+
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .table-meta  { font-size: var(--ds-text-sm); color: var(--t3); }
+    .u-table { width: 100%; border-collapse: collapse; font-size: var(--ds-text-sm); }
+    .u-table th {
+      text-align: left; padding: 10px var(--ds-space-5);
+      font-size: var(--ds-text-xs); font-weight: 700;
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      color: var(--t3); background: var(--card2);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .u-table td {
+      padding: 12px var(--ds-space-5); border-bottom: 1px solid var(--border);
+      color: var(--t1); vertical-align: middle;
+    }
+    .u-table tr:last-child td { border-bottom: none; }
+
+    .tag {
+      display: inline-block; font-size: 10.5px; font-weight: 700;
+      padding: 3px 8px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .tag-master { background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .tag-ger    { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+    .tag-op     { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+
+    .empty {
+      padding: 40px 20px; text-align: center; color: var(--t3);
+      font-size: var(--ds-text-base);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, .55);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9000; padding: 20px;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal-card {
+      background: var(--card); border-radius: var(--rl);
+      width: min(540px, calc(100vw - 32px));
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, .2);
+    }
+    .modal-header {
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .modal-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .modal-sub   { font-size: var(--ds-text-xs); color: var(--t3); margin-top: 4px; }
+    .modal-body  { padding: 20px 24px; display: grid; gap: 16px; }
+    .modal-footer {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+    }
+
+    .field { display: grid; gap: 6px; }
+    .field-label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .field-input, .field-select {
+      padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); font-size: var(--ds-text-sm);
+      background: var(--card); color: var(--t1); width: 100%;
+      font-family: inherit;
+    }
+    .field-input:focus, .field-select:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, .1);
+    }
+    .field-hint { font-size: var(--ds-text-xs); color: var(--t3); }
+
+    .checkbox-row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .checkbox-item {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      font-size: var(--ds-text-sm); color: var(--t1);
+    }
+    .checkbox-item input { width: 16px; height: 16px; cursor: pointer; }
+
+    .alert-box {
+      padding: 10px 14px; border-radius: var(--ds-radius-md);
+      font-size: var(--ds-text-sm);
+    }
+    .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .alert-info  { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Usuários</h1>
+        <p class="app-page-sub">Gerencie quem tem acesso ao sistema e o perfil de cada um</p>
+      </div>
+
+      <div class="page-actions">
+        <button class="btn-primary" id="btnNew">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Novo usuário
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">Usuários cadastrados</div>
+          <div class="table-meta" id="tableMeta">—</div>
+        </div>
+        <table class="u-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Perfil</th>
+              <th>Unidade</th>
+              <th style="text-align:right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="uBody">
+            <tr><td colspan="5" class="empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal de criar/editar -->
+<div class="modal-backdrop" id="mdForm">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="mdTitle">Novo usuário</div>
+      <div class="modal-sub" id="mdSub">Preencha os dados abaixo</div>
+    </div>
+    <div class="modal-body">
+      <div id="mdAlert" style="display:none"></div>
+
+      <div class="field">
+        <label class="field-label" for="fEmail">E-mail</label>
+        <input type="email" class="field-input" id="fEmail" placeholder="usuario@astrovistorias.com.br" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="fName">Nome completo</label>
+        <input type="text" class="field-input" id="fName" placeholder="Nome do usuário" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label class="field-label">Perfil</label>
+        <div class="checkbox-row">
+          <label class="checkbox-item">
+            <input type="checkbox" id="fMaster"> Master (acesso total à rede)
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="fGerencial"> Gerencial da unidade
+          </label>
+        </div>
+        <div class="field-hint">Master vê todas as unidades. Gerencial acessa o painel da própria unidade.</div>
+      </div>
+
+      <div class="field" id="fUnitWrap">
+        <label class="field-label" for="fUnit">Unidade</label>
+        <select class="field-select" id="fUnit">
+          <option value="">— Selecione —</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="fPassword">Senha</label>
+        <input type="password" class="field-input" id="fPassword" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+        <div class="field-hint" id="fPasswordHint">Mínimo 8 caracteres.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btnCancel">Cancelar</button>
+      <button class="btn-primary" id="btnSave">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de excluir -->
+<div class="modal-backdrop" id="mdDel">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Excluir usuário</div>
+    </div>
+    <div class="modal-body">
+      <div style="color:var(--t1);font-size:var(--ds-text-sm)">
+        Tem certeza que deseja excluir <strong id="delWho">—</strong>?
+        <br><br>
+        <span style="color:var(--t3)">O usuário perderá acesso imediatamente.</span>
+      </div>
+      <div id="delAlert" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btnDelCancel">Cancelar</button>
+      <button class="btn-danger" id="btnDelConfirm">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "usuarios",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Usuários", current: true }
+    ]
+  });
+
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  let state = { usuarios: [], unidades: [], editingEmail: null };
+  let _csrfToken = "";
+
+  async function getCsrf() {
+    if (_csrfToken) return _csrfToken;
+    try {
+      const r = await fetch("/api/csrf-token");
+      const j = await r.json();
+      _csrfToken = j.token || "";
+    } catch { _csrfToken = ""; }
+    return _csrfToken;
+  }
+
+  function perfilTag(u) {
+    if (u.master)    return '<span class="tag tag-master">Master</span>';
+    if (u.gerencial) return '<span class="tag tag-ger">Gerencial</span>';
+    return '<span class="tag tag-op">Operador</span>';
+  }
+
+  function unitNome(uid) {
+    if (!uid) return "—";
+    const u = state.unidades.find(x => x.id === uid);
+    return u ? u.nome : uid;
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/master/api/usuarios", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      state.usuarios = data.usuarios || [];
+      state.unidades = data.unidades || [];
+
+      document.getElementById("tableMeta").textContent =
+        state.usuarios.length === 0 ? "Nenhum usuário"
+        : state.usuarios.length === 1 ? "1 usuário"
+        : `${state.usuarios.length} usuários`;
+
+      const body = document.getElementById("uBody");
+      if (!state.usuarios.length) {
+        body.innerHTML = `<tr><td colspan="5" class="empty">Nenhum usuário cadastrado.</td></tr>`;
+        return;
+      }
+      body.innerHTML = state.usuarios.map(u => `
+        <tr data-email="${escHtml(u.email)}">
+          <td><strong>${escHtml(u.name)}</strong></td>
+          <td style="color:var(--t2)">${escHtml(u.email)}</td>
+          <td>${perfilTag(u)}</td>
+          <td>${escHtml(unitNome(u.unit))}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn-link" data-act="edit" data-email="${escHtml(u.email)}">Editar</button>
+            <button class="btn-link danger" data-act="del" data-email="${escHtml(u.email)}">Excluir</button>
+          </td>
+        </tr>
+      `).join("");
+
+      // Popula select de unidades
+      const sel = document.getElementById("fUnit");
+      sel.innerHTML = '<option value="">— Selecione —</option>' +
+        state.unidades.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.nome)}</option>`).join("");
+    } catch (e) {
+      document.getElementById("uBody").innerHTML =
+        `<tr><td colspan="5" class="empty">Erro ao carregar: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  function openForm(user) {
+    state.editingEmail = user ? user.email : null;
+    document.getElementById("mdTitle").textContent = user ? "Editar usuário" : "Novo usuário";
+    document.getElementById("mdSub").textContent = user
+      ? `Editando ${user.email}`
+      : "Preencha os dados abaixo";
+    document.getElementById("fEmail").value = user ? user.email : "";
+    document.getElementById("fEmail").disabled = !!user;
+    document.getElementById("fName").value = user ? user.name : "";
+    document.getElementById("fMaster").checked = user ? user.master : false;
+    document.getElementById("fGerencial").checked = user ? user.gerencial : false;
+    document.getElementById("fUnit").value = user ? (user.unit || "") : "";
+    document.getElementById("fPassword").value = "";
+    document.getElementById("fPasswordHint").textContent = user
+      ? "Deixe em branco para manter a senha atual. Mínimo 8 caracteres se for trocar."
+      : "Mínimo 8 caracteres.";
+    hideAlert("mdAlert");
+    syncMasterToggle();
+    document.getElementById("mdForm").classList.add("show");
+    setTimeout(() => document.getElementById(user ? "fName" : "fEmail").focus(), 50);
+  }
+
+  function closeForm() {
+    document.getElementById("mdForm").classList.remove("show");
+    state.editingEmail = null;
+  }
+
+  function syncMasterToggle() {
+    const isMaster = document.getElementById("fMaster").checked;
+    document.getElementById("fUnitWrap").style.display = isMaster ? "none" : "";
+    if (isMaster) {
+      document.getElementById("fGerencial").checked = true;
+      document.getElementById("fGerencial").disabled = true;
+    } else {
+      document.getElementById("fGerencial").disabled = false;
+    }
+  }
+
+  function showAlert(id, msg, kind) {
+    const el = document.getElementById(id);
+    el.className = kind === "info" ? "alert-box alert-info" : "alert-box alert-error";
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+  function hideAlert(id) {
+    document.getElementById(id).style.display = "none";
+  }
+
+  async function save() {
+    const payload = {
+      email:     document.getElementById("fEmail").value.trim().toLowerCase(),
+      name:      document.getElementById("fName").value.trim(),
+      master:    document.getElementById("fMaster").checked,
+      gerencial: document.getElementById("fGerencial").checked,
+      unit:      document.getElementById("fUnit").value,
+      password:  document.getElementById("fPassword").value,
+    };
+    if (payload.master) payload.unit = "";
+
+    const editing = !!state.editingEmail;
+    const url = editing
+      ? `/master/api/usuarios/${encodeURIComponent(state.editingEmail)}`
+      : "/master/api/usuarios";
+    const method = editing ? "PUT" : "POST";
+
+    const btn = document.getElementById("btnSave");
+    btn.disabled = true; btn.textContent = "Salvando…";
+    try {
+      const token = await getCsrf();
+      const r = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        showAlert("mdAlert", j.error || "Erro ao salvar.");
+        return;
+      }
+      closeForm();
+      await load();
+    } catch (e) {
+      showAlert("mdAlert", "Erro de rede: " + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "Salvar";
+    }
+  }
+
+  function openDel(user) {
+    state.deletingEmail = user.email;
+    document.getElementById("delWho").textContent = `${user.name} (${user.email})`;
+    hideAlert("delAlert");
+    document.getElementById("mdDel").classList.add("show");
+  }
+  function closeDel() {
+    document.getElementById("mdDel").classList.remove("show");
+    state.deletingEmail = null;
+  }
+  async function confirmDel() {
+    const email = state.deletingEmail;
+    if (!email) return;
+    const btn = document.getElementById("btnDelConfirm");
+    btn.disabled = true; btn.textContent = "Excluindo…";
+    try {
+      const token = await getCsrf();
+      const r = await fetch(`/master/api/usuarios/${encodeURIComponent(email)}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": token },
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        showAlert("delAlert", j.error || "Erro ao excluir.");
+        return;
+      }
+      closeDel();
+      await load();
+    } catch (e) {
+      showAlert("delAlert", "Erro de rede: " + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "Excluir";
+    }
+  }
+
+  // Event bindings
+  document.getElementById("btnNew").addEventListener("click", () => openForm(null));
+  document.getElementById("btnCancel").addEventListener("click", closeForm);
+  document.getElementById("btnSave").addEventListener("click", save);
+  document.getElementById("btnDelCancel").addEventListener("click", closeDel);
+  document.getElementById("btnDelConfirm").addEventListener("click", confirmDel);
+  document.getElementById("fMaster").addEventListener("change", syncMasterToggle);
+  document.getElementById("mdForm").addEventListener("click", (e) => {
+    if (e.target.id === "mdForm") closeForm();
+  });
+  document.getElementById("mdDel").addEventListener("click", (e) => {
+    if (e.target.id === "mdDel") closeDel();
+  });
+  document.getElementById("uBody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const email = btn.dataset.email;
+    const user = state.usuarios.find(u => u.email === email);
+    if (!user) return;
+    if (btn.dataset.act === "edit") openForm(user);
+    else if (btn.dataset.act === "del") openDel(user);
+  });
+
+  load();
+</script>
+
+</body>
+</html>

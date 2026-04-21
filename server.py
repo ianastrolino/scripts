@@ -230,12 +230,40 @@ def handle_unhandled_exception(exc):
     return _json({"success": False, "error": "Erro interno do servidor."}, 500)
 
 # ── Carregamento de config ─────────────────────────────────────────────────────
+# Arquivo persistente no volume — substitui USERS_CONFIG env como fonte de verdade.
+# Seed a partir do env var ocorre na primeira leitura (migracao suave).
+_USERS_FILE = DATA_DIR / "users.json"
+_USERS_LOCK = threading.Lock()
+
+
 def _load_users() -> dict[str, Any]:
+    """Le usuarios do volume. Se arquivo nao existir, faz seed do USERS_CONFIG env."""
+    if _USERS_FILE.exists():
+        try:
+            return json.loads(_USERS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
     raw = os.environ.get("USERS_CONFIG", "{}")
     try:
-        return json.loads(raw)
+        users = json.loads(raw)
     except json.JSONDecodeError:
-        return {}
+        users = {}
+    try:
+        _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _USERS_FILE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(_USERS_FILE)
+    except OSError:
+        pass
+    return users
+
+
+def _save_users(users: dict[str, Any]) -> None:
+    """Persiste usuarios no volume (write atomico)."""
+    _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _USERS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_USERS_FILE)
 
 
 def _load_units() -> dict[str, Any]:
@@ -246,7 +274,7 @@ def _load_units() -> dict[str, Any]:
         return {}
 
 
-# Carrega uma vez no startup (variaveis de ambiente nao mudam em runtime)
+# Carrega uma vez no startup
 USERS: dict[str, Any] = _load_users()
 UNITS: dict[str, Any] = _load_units()
 
@@ -2552,6 +2580,133 @@ def master_api_usuarios_conectados():
         "total":    len(out),
         "ttl_seconds": _ACTIVE_TTL_SECONDS,
     })
+
+
+# ── CRUD de usuarios ───────────────────────────────────────────────────────────
+def _user_public(email: str, u: dict[str, Any]) -> dict[str, Any]:
+    """Serializa usuario sem hash de senha."""
+    return {
+        "email":     email,
+        "name":      u.get("name", email),
+        "unit":      u.get("unit", ""),
+        "master":    bool(u.get("master")),
+        "gerencial": bool(u.get("gerencial")),
+    }
+
+
+def _validate_user_payload(data: dict[str, Any], editing: bool) -> tuple[str, dict[str, Any]] | tuple[None, str]:
+    """Valida payload. Retorna (email_normalizado, dados_saneados) ou (None, erro_msg)."""
+    email = (data.get("email") or "").strip().lower()
+    name  = (data.get("name")  or "").strip()
+    unit  = (data.get("unit")  or "").strip()
+    master    = bool(data.get("master"))
+    gerencial = bool(data.get("gerencial"))
+    password  = (data.get("password") or "")
+
+    if not email or "@" not in email:
+        return None, "E-mail inválido."
+    if not name:
+        return None, "Nome é obrigatório."
+    if not master and not unit:
+        return None, "Usuário não-master precisa de unidade."
+    if unit and unit not in UNITS:
+        return None, f"Unidade '{unit}' não existe."
+    if not editing and len(password) < 8:
+        return None, "Senha deve ter pelo menos 8 caracteres."
+    if editing and password and len(password) < 8:
+        return None, "Nova senha deve ter pelo menos 8 caracteres."
+
+    sanit = {
+        "name":      name,
+        "unit":      "" if master else unit,
+        "master":    master,
+        "gerencial": gerencial or master,
+    }
+    if password:
+        sanit["password_hash"] = _hash_password(password)
+    return email, sanit
+
+
+@app.route("/master/usuarios")
+@master_only_required
+def master_usuarios_page():
+    return _nocache(send_from_directory(UI_DIR, "usuarios.html"))
+
+
+@app.route("/master/api/usuarios", methods=["GET"])
+@master_only_required
+def master_api_usuarios_list():
+    unidades = [{"id": uid, "nome": UNITS[uid].get("nome", uid)} for uid in sorted(UNITS.keys())]
+    with _USERS_LOCK:
+        users = [_user_public(e, u) for e, u in sorted(USERS.items())]
+    return _json({"usuarios": users, "unidades": unidades})
+
+
+@app.route("/master/api/usuarios", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_usuarios_create():
+    data = request.get_json(silent=True) or {}
+    result = _validate_user_payload(data, editing=False)
+    if result[0] is None:
+        return _json({"success": False, "error": result[1]}, 400)
+    email, sanit = result
+    with _USERS_LOCK:
+        if email in USERS:
+            return _json({"success": False, "error": "Já existe usuário com este e-mail."}, 409)
+        USERS[email] = sanit
+        _save_users(USERS)
+    app.logger.info(f"[usuarios] criado: {email}")
+    return _json({"success": True, "usuario": _user_public(email, sanit)})
+
+
+@app.route("/master/api/usuarios/<path:email>", methods=["PUT"])
+@master_only_required
+@csrf_required
+def master_api_usuarios_update(email: str):
+    email = (email or "").strip().lower()
+    data = request.get_json(silent=True) or {}
+    data["email"] = email
+    result = _validate_user_payload(data, editing=True)
+    if result[0] is None:
+        return _json({"success": False, "error": result[1]}, 400)
+    _, sanit = result
+    with _USERS_LOCK:
+        if email not in USERS:
+            return _json({"success": False, "error": "Usuário não encontrado."}, 404)
+        # Proteger ultimo master: se estava master e vai deixar de ser, confirmar que tem outro
+        if USERS[email].get("master") and not sanit.get("master"):
+            outros_masters = [e for e, u in USERS.items() if e != email and u.get("master")]
+            if not outros_masters:
+                return _json({"success": False, "error": "Não é possível remover o status master do último master."}, 400)
+        # Se nao tem nova senha no payload, preserva hash atual
+        if "password_hash" not in sanit:
+            sanit["password_hash"] = USERS[email].get("password_hash", "")
+        USERS[email] = sanit
+        _save_users(USERS)
+    app.logger.info(f"[usuarios] atualizado: {email}")
+    return _json({"success": True, "usuario": _user_public(email, sanit)})
+
+
+@app.route("/master/api/usuarios/<path:email>", methods=["DELETE"])
+@master_only_required
+@csrf_required
+def master_api_usuarios_delete(email: str):
+    email = (email or "").strip().lower()
+    me = session.get("email", "").lower()
+    if email == me:
+        return _json({"success": False, "error": "Você não pode excluir a própria conta."}, 400)
+    with _USERS_LOCK:
+        if email not in USERS:
+            return _json({"success": False, "error": "Usuário não encontrado."}, 404)
+        if USERS[email].get("master"):
+            outros_masters = [e for e, u in USERS.items() if e != email and u.get("master")]
+            if not outros_masters:
+                return _json({"success": False, "error": "Não é possível excluir o último master."}, 400)
+        USERS.pop(email, None)
+        _save_users(USERS)
+    app.logger.info(f"[usuarios] removido: {email}")
+    return _json({"success": True})
 
 
 def _agg_lancamentos(lancamentos: list[dict], fp_keys: tuple) -> dict:
