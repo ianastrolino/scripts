@@ -2834,6 +2834,12 @@ def master_historico_caixa_page():
     return _nocache(send_from_directory(UI_DIR, "historico-caixa.html"))
 
 
+@app.route("/gerencial/bi")
+@master_only_required
+def master_bi_page():
+    return _nocache(send_from_directory(UI_DIR, "bi.html"))
+
+
 @app.route("/master/usuarios-conectados")
 @master_only_required
 def master_usuarios_conectados_page():
