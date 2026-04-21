@@ -3,166 +3,338 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Astrovistorias — Acesso</title>
+  <title>Astro Vistorias — Acesso</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
   <style>
-    :root {
-      --bg: #f4f7f8;
-      --surface: #ffffff;
-      --line: #c8d2d6;
-      --ink: #182023;
-      --muted: #5e6d73;
-      --accent: #d32f2f; /* Vermelho Astro */
-      --accent-strong: #b71c1c;
-      --radius: 6px;
-      --bad: #ffd7d2;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
-      min-height: 100vh;
+      margin: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--bg);
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 15px;
-      color: var(--ink);
-      padding: 20px;
+      padding: var(--ds-space-5);
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+      font-family: var(--ds-font-sans);
+      color: var(--ds-ink);
+      position: relative;
+      overflow: hidden;
     }
-    .card {
-      width: 100%;
-      max-width: 400px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 36px 32px;
+    /* Glow ambiental */
+    body::before, body::after {
+      content: ""; position: absolute; pointer-events: none;
+      border-radius: 50%; filter: blur(80px); opacity: .4;
     }
-    .brand {
+    body::before { width: 520px; height: 520px; background: #d32f2f; top: -120px; right: -120px; }
+    body::after  { width: 420px; height: 420px; background: #2563eb; bottom: -120px; left: -120px; opacity: .25; }
+
+    /* Partículas decorativas (A's sutis flutuando) */
+    .bg-a {
+      position: absolute; opacity: .04;
+      pointer-events: none; width: 200px; height: 200px;
+    }
+    .bg-a img { width: 100%; height: 100%; filter: brightness(0) invert(1); }
+    .bg-a.one { top: 10%; left: 8%; transform: rotate(-15deg); animation: floatBg 14s ease-in-out infinite; }
+    .bg-a.two { bottom: 12%; right: 10%; transform: rotate(20deg); width: 260px; height: 260px; animation: floatBg 18s ease-in-out infinite reverse; }
+    @keyframes floatBg {
+      0%,100% { transform: translateY(0) rotate(-15deg); }
+      50%     { transform: translateY(-30px) rotate(-12deg); }
+    }
+
+    .shell {
+      position: relative;
+      width: 100%; max-width: 420px;
+      z-index: 1;
+    }
+
+    .brand-hero {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: var(--ds-space-6);
     }
-    .brand img {
-      display: block;
-      margin: 0 auto 12px;
-      height: 56px;
-      width: auto;
-      object-fit: contain;
-    }
-    .brand span {
-      display: block;
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 4px;
-    }
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--muted);
-      margin-bottom: 5px;
-    }
-    input[type="email"],
-    input[type="password"] {
-      width: 100%;
-      height: 40px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 0 10px;
-      font: inherit;
-      color: var(--ink);
+    .brand-a {
+      display: inline-flex;
+      width: 88px; height: 88px;
       background: #fff;
-      outline: none;
+      border-radius: var(--ds-radius-xl);
+      align-items: center; justify-content: center;
+      margin-bottom: var(--ds-space-4);
+      box-shadow: 0 10px 30px rgba(211,47,47,.4), inset 0 0 0 1px rgba(255,255,255,.2);
+      animation: floatA 4s ease-in-out infinite;
     }
-    input:focus {
-      border-color: var(--accent);
+    .brand-a img { width: 60px; height: 60px; }
+    @keyframes floatA {
+      0%,100% { transform: translateY(0); box-shadow: 0 10px 30px rgba(211,47,47,.4), inset 0 0 0 1px rgba(255,255,255,.2); }
+      50%     { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(211,47,47,.55), inset 0 0 0 1px rgba(255,255,255,.2); }
     }
-    .field {
-      margin-bottom: 16px;
-    }
-    .btn-login {
-      width: 100%;
-      height: 42px;
-      margin-top: 8px;
-      border: none;
-      border-radius: var(--radius);
-      background: var(--accent);
+    .brand-title {
+      font-size: var(--ds-text-3xl);
+      font-weight: var(--ds-weight-black);
       color: #fff;
-      font: inherit;
-      font-weight: 700;
-      font-size: 15px;
-      cursor: pointer;
+      letter-spacing: var(--ds-tracking-tight);
+      line-height: 1.1;
     }
-    .btn-login:hover { background: var(--accent-strong); }
+    .brand-sub {
+      font-size: var(--ds-text-sm);
+      color: rgba(255,255,255,.65);
+      margin-top: var(--ds-space-2);
+      font-weight: var(--ds-weight-medium);
+    }
+
+    .card {
+      background: rgba(255,255,255,.98);
+      backdrop-filter: blur(12px);
+      border-radius: var(--ds-radius-xl);
+      padding: var(--ds-space-6) var(--ds-space-6) var(--ds-space-5);
+      box-shadow: 0 20px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.05);
+      animation: cardRise 500ms var(--ds-ease);
+    }
+    @keyframes cardRise {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .card-head {
+      text-align: center;
+      margin-bottom: var(--ds-space-5);
+    }
+    .card-eyebrow {
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-bold);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      color: var(--ds-brand);
+      margin-bottom: var(--ds-space-2);
+    }
+    .card-title {
+      font-size: var(--ds-text-xl);
+      font-weight: var(--ds-weight-black);
+      color: var(--ds-ink);
+      letter-spacing: var(--ds-tracking-tight);
+    }
+
     .error-box {
       display: none;
-      background: var(--bad);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-      font-size: 13px;
-      margin-bottom: 16px;
-      color: #6b0000;
+      padding: var(--ds-space-3) var(--ds-space-4);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-danger-soft);
+      border: 1px solid #fecaca;
+      color: var(--ds-danger);
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-semi);
+      margin-bottom: var(--ds-space-4);
+      display: flex; align-items: center; gap: var(--ds-space-2);
     }
-    .hint {
-      margin-top: 16px;
-      font-size: 12px;
-      color: var(--muted);
+    .error-box.is-visible { display: flex; }
+    .error-box-icon { font-size: 16px; }
+
+    .field { margin-bottom: var(--ds-space-4); }
+    .field label {
+      display: block;
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .input-wrap {
+      position: relative;
+    }
+    .input-icon {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      color: var(--ds-ink-subtle); font-size: 16px; pointer-events: none;
+    }
+    .input-wrap input {
+      width: 100%;
+      height: 46px;
+      padding: 0 var(--ds-space-4) 0 44px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+      font: inherit;
+      font-size: var(--ds-text-base);
+      color: var(--ds-ink);
+      outline: none;
+      transition: background var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease),
+                  box-shadow var(--ds-duration-2) var(--ds-ease);
+    }
+    .input-wrap input::placeholder { color: var(--ds-ink-subtle); }
+    .input-wrap input:hover { border-color: var(--ds-line-strong); }
+    .input-wrap input:focus {
+      background: #fff;
+      border-color: var(--ds-brand);
+      box-shadow: 0 0 0 3px var(--ds-brand-soft);
+    }
+    .input-wrap:focus-within .input-icon { color: var(--ds-brand); }
+
+    .btn-login {
+      width: 100%;
+      height: 48px;
+      margin-top: var(--ds-space-2);
+      border: none;
+      border-radius: var(--ds-radius-md);
+      background: linear-gradient(135deg, var(--ds-brand), var(--ds-brand-strong));
+      color: #fff;
+      font: inherit;
+      font-weight: var(--ds-weight-bold);
+      font-size: var(--ds-text-base);
+      letter-spacing: .01em;
+      cursor: pointer;
+      transition: transform var(--ds-duration-2) var(--ds-ease),
+                  box-shadow var(--ds-duration-2) var(--ds-ease),
+                  opacity var(--ds-duration-2) var(--ds-ease);
+      position: relative; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-login:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 26px rgba(211,47,47,.35);
+    }
+    .btn-login:active { transform: translateY(0); }
+    .btn-login:disabled { opacity: .7; cursor: not-allowed; transform: none; }
+    .btn-login-arrow {
+      transition: transform var(--ds-duration-2) var(--ds-ease);
+    }
+    .btn-login:hover .btn-login-arrow { transform: translateX(3px); }
+
+    .card-hint {
       text-align: center;
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      margin-top: var(--ds-space-4);
+      line-height: 1.5;
+    }
+    .card-hint strong { color: var(--ds-ink); font-weight: var(--ds-weight-semi); }
+    .card-hint a {
+      color: var(--ds-accent-600);
+      text-decoration: none;
+      font-weight: var(--ds-weight-semi);
+    }
+    .card-hint a:hover { text-decoration: underline; }
+
+    .shell-foot {
+      text-align: center;
+      margin-top: var(--ds-space-5);
+      font-size: 11px;
+      color: rgba(255,255,255,.45);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      font-weight: var(--ds-weight-bold);
+    }
+
+    @media (max-width: 480px) {
+      .bg-a { display: none; }
+      .brand-a { width: 72px; height: 72px; }
+      .brand-a img { width: 48px; height: 48px; }
+      .brand-title { font-size: var(--ds-text-2xl); }
+      .card { padding: var(--ds-space-5) var(--ds-space-5) var(--ds-space-4); }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand">
-      <img src="logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-      <span>Frente de Caixa — Acesso</span>
+
+  <div class="bg-a one"><img src="/assets/img/astro-a.png" alt=""></div>
+  <div class="bg-a two"><img src="/assets/img/astro-a.png" alt=""></div>
+
+  <div class="shell">
+
+    <div class="brand-hero">
+      <div class="brand-a">
+        <img src="/assets/img/astro-a.png" alt="Astro Vistorias">
+      </div>
+      <div class="brand-title">Astro Vistorias</div>
+      <div class="brand-sub">Sistema integrado de gestão da rede</div>
     </div>
-    <div class="error-box" id="errorBox"></div>
-    <form method="post" action="/login" autocomplete="on">
-      <div class="field">
-        <label for="email">E-mail</label>
-        <input
-          type="email"
-          id="email"
-          name="email"
-          placeholder="voce@astrovistorias.com.br"
-          autocomplete="username"
-          required
-        />
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-eyebrow">Área restrita</div>
+        <div class="card-title">Acessar o sistema</div>
       </div>
-      <div class="field">
-        <label for="password">Senha</label>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          placeholder="••••••••"
-          autocomplete="current-password"
-          required
-        />
+
+      <div class="error-box" id="errorBox">
+        <span class="error-box-icon">⚠</span>
+        <span id="errorText"></span>
       </div>
-      <button type="submit" class="btn-login">Entrar</button>
-    </form>
-    <p class="hint">Acesso restrito a colaboradores @astrovistorias.com.br</p>
-    <p style="text-align:center;margin-top:12px;">
-      <a href="/manual" target="_blank" style="font-size:12px;color:var(--muted);text-decoration:none;">📖 Como usar o sistema</a>
-    </p>
+
+      <form method="post" action="/login" autocomplete="on" id="loginForm">
+        <div class="field">
+          <label for="email">E-mail corporativo</label>
+          <div class="input-wrap">
+            <span class="input-icon">✉</span>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              placeholder="voce@astrovistorias.com.br"
+              autocomplete="username"
+              required
+            />
+          </div>
+        </div>
+        <div class="field">
+          <label for="password">Senha</label>
+          <div class="input-wrap">
+            <span class="input-icon">🔒</span>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+        </div>
+        <button type="submit" class="btn-login" id="btnLogin">
+          <span>Entrar no sistema</span>
+          <span class="btn-login-arrow">→</span>
+        </button>
+      </form>
+
+      <p class="card-hint">
+        Acesso restrito a colaboradores <strong>@astrovistorias.com.br</strong><br>
+        <a href="/manual" target="_blank">📖 Como usar o sistema</a>
+      </p>
+    </div>
+
+    <div class="shell-foot">Astro Vistorias · v2.1 · Painel Astro</div>
+
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const erro = params.get("erro");
-    const box  = document.getElementById("errorBox");
-    if (erro === "dominio") {
-      box.textContent = "Acesso permitido apenas para e-mails @astrovistorias.com.br.";
-      box.style.display = "block";
-    } else if (erro === "credenciais") {
-      box.textContent = "E-mail ou senha invalidos. Verifique e tente novamente.";
-      box.style.display = "block";
+    const erro   = params.get("erro");
+    const box    = document.getElementById("errorBox");
+    const txt    = document.getElementById("errorText");
+
+    const mensagens = {
+      dominio:     "Acesso permitido apenas para e-mails @astrovistorias.com.br.",
+      credenciais: "E-mail ou senha inválidos. Verifique e tente novamente.",
+      bloqueado:   "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+    };
+    if (mensagens[erro]) {
+      txt.textContent = mensagens[erro];
+      box.classList.add("is-visible");
+      box.style.display = "flex";
     }
+
     // Foca no primeiro campo vazio
     const emailEl = document.getElementById("email");
     const pwEl    = document.getElementById("password");
     if (!emailEl.value) emailEl.focus();
     else pwEl.focus();
+
+    // Loading state no submit
+    document.getElementById("loginForm").addEventListener("submit", () => {
+      const btn = document.getElementById("btnLogin");
+      btn.disabled = true;
+      btn.innerHTML = '<span>Validando...</span>';
+    });
   </script>
 </body>
 </html>

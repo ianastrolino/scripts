@@ -4,9 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Astro Vistorias App — Fechamento</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -673,51 +676,19 @@
 </head>
 <body>
 
-  <!-- ═══ HEADER ══════════════════════════════════════════════════════════════ -->
-  <header class="header">
-    <div class="header-brand">
-      <div class="ham-menu" id="hamMenu">
-        <button class="ham-btn" id="hamBtn" type="button">☰</button>
-        <div class="ham-dropdown">
-          <a class="dd-item" id="ddHome" href="">🏠 Home</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item" id="ddCaixa" href="">💰 Caixa do Dia</a>
-          <a class="dd-item active">✓ Fechamento</a>
-          <a class="dd-item" id="ddGerencial" href="" style="display:none">📊 Gerencial</a>
-          <a class="dd-item" id="ddRede" href="/master" style="display:none">🏢 Rede</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item" id="ddReauthTiny" href="" target="_blank">🔑 Reautorizar Tiny</a>
-          <a class="dd-item" id="ddManual" href="" target="_blank">? Ajuda</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item danger" href="/logout">Sair</a>
-        </div>
-      </div>
-      <div class="header-logo-pill">
-        <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-      </div>
-      <div>
-        <div class="brand-name">Astro Vistorias App</div>
-        <div class="brand-sub">Fechamento</div>
-      </div>
+  <!-- Stubs ocultos para compatibilidade com JS legado (mantém IDs vivos) -->
+  <div style="display:none" aria-hidden="true">
+    <div id="hamMenu"><button id="hamBtn" type="button"></button>
+      <a id="ddHome" href=""></a><a id="ddCaixa" href=""></a>
+      <a id="ddGerencial" href=""></a><a id="ddRede" href=""></a>
+      <a id="ddReauthTiny" href=""></a><a id="ddManual" href=""></a>
     </div>
-    <div class="header-status">
-      <div class="hstat">
-        <span class="hstat-dot amber"></span>
-        Fechamento
-      </div>
-      <div class="hstat">
-        📍 <strong id="unidadeLabel">—</strong>
-      </div>
-      <div class="hstat-date" id="statusDate">—</div>
-    </div>
-    <div class="header-right">
-      <div class="user-chip">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <span id="userLabel"></span>
-      </div>
-    </div>
-  </header>
+    <span id="unidadeLabel"></span><span id="statusDate"></span>
+    <span id="userAvatar"></span><span id="userLabel"></span>
+  </div>
 
+  <div id="app-shell"></div>
+  <main id="app-main">
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════════════════════ -->
   <div class="workspace">
 
@@ -1094,6 +1065,25 @@
       </div>
     </div>
   </div>
+
+  </main>
+
+  <script src="/assets/app-shell.js"></script>
+  <script>
+    (function () {
+      const m = window.location.pathname.match(/^\/u\/([^/]+)/);
+      const slug = m ? m[1] : null;
+      AstroShell.init({
+        active: "fechamento",
+        breadcrumbs: [
+          { label: "Operação" },
+          { label: "Fechamento", current: true }
+        ],
+        date: true,
+        unit: slug ? { slug } : null
+      });
+    })();
+  </script>
 
   <script src="app.js"></script>
   <script>

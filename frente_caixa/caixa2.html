@@ -4,9 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Astro Vistorias App — Caixa do Dia</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1584,72 +1587,63 @@
       transform: translateY(-1px);
     }
     #btnAbrirConferencia.visible { display: block; }
+
+    /* ═══ Page actions bar (topo do workspace, novo shell) ═══ */
+    .page-actions {
+      display: flex; justify-content: flex-end; align-items: center;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .page-action-btn {
+      display: inline-flex; align-items: center;
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--r);
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      color: var(--t2);
+      cursor: pointer;
+      box-shadow: var(--s0);
+      transition: all .15s ease;
+    }
+    .page-action-btn:hover {
+      border-color: var(--t5);
+      color: var(--t1);
+      transform: translateY(-1px);
+      box-shadow: var(--s1);
+    }
+    .page-action-btn:active { transform: translateY(0); }
   </style>
 </head>
 <body>
 
-  <!-- ═══ HEADER ══════════════════════════════════════════════ -->
-  <header class="header">
-
-    <div class="header-brand">
-      <div class="ham-menu" id="hamMenu">
-        <button class="ham-btn" id="hamBtn" type="button">☰</button>
-        <div class="ham-dropdown" id="hamDropdown">
-          <a class="dd-item" id="ddHome" href="">🏠 Home</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item active" id="ddCaixa" href="">💰 Caixa do Dia</a>
-          <a class="dd-item" id="ddFechamento" href="">✓ Fechamento</a>
-          <a class="dd-item" id="ddGerencial" href="" style="display:none">📊 Gerencial</a>
-          <a class="dd-item" id="ddRede" href="/master" style="display:none">🏢 Rede</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item" id="ddReauthTiny" href="" target="_blank">🔑 Reautorizar Tiny</a>
-          <a class="dd-item" id="ddManual" href="" target="_blank">? Ajuda</a>
-          <div class="dd-sep"></div>
-          <a class="dd-item danger" href="/logout">Sair</a>
-        </div>
-      </div>
-      <div class="header-logo-pill">
-        <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-      </div>
-      <div>
-        <div class="brand-name">Astro Vistorias App</div>
-        <div class="brand-sub">Caixa do Dia</div>
+  <!-- Stubs ocultos para compatibilidade com JS legado (mantém IDs vivos) -->
+  <div style="display:none" aria-hidden="true">
+    <div id="hamMenu"><button id="hamBtn" type="button"></button>
+      <div id="hamDropdown">
+        <a id="ddHome" href=""></a><a id="ddCaixa" href=""></a>
+        <a id="ddFechamento" href=""></a><a id="ddGerencial" href=""></a>
+        <a id="ddRede" href=""></a>
+        <a id="ddReauthTiny" href=""></a><a id="ddManual" href=""></a>
       </div>
     </div>
+    <span id="statusUnit"></span><span id="statusDate"></span>
+    <span id="userAvatar"></span><span id="userLabel"></span>
+    <a id="linkCaixaL2" href=""></a><a id="linkFechamento" href=""></a>
+  </div>
 
-    <div class="header-status">
-      <div class="hstat">
-        <span class="hstat-dot green"></span>
-        Caixa aberto
-      </div>
-      <div class="hstat">
-        <span class="hstat-dot blue"></span>
-        Tiny ERP
-      </div>
-      <div class="hstat">
-        📍 <strong id="statusUnit">—</strong>
-      </div>
-      <div style="flex:1;"></div>
-      <div class="hstat-date" id="statusDate">—</div>
-      <div id="buildTag" style="font-size:10px;background:#dc2626;color:#fff;padding:2px 8px;border-radius:20px;font-weight:700;box-shadow:0 0 10px rgba(220,38,38,0.3);margin-left:4px;">v11</div>
-    </div>
-
-    <div class="header-right">
-      <nav class="header-nav">
-        <a class="nav-pill active" id="linkCaixaL2" href="">Caixa do Dia</a>
-        <a class="nav-pill" id="linkFechamento" href="">Fechamento</a>
-      </nav>
-      <button id="btnResumo" class="btn-resumo" type="button">📊 Resumo</button>
-      <div class="user-chip">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <span id="userLabel"></span>
-      </div>
-    </div>
-
-  </header>
-
+  <div id="app-shell"></div>
+  <main id="app-main">
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════ -->
   <div class="workspace">
+
+    <!-- Ações da página (Resumo, etc) -->
+    <div class="page-actions">
+      <button id="btnResumo" type="button" class="page-action-btn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-3px"><path d="M3 20V10"/><path d="M9 20V4"/><path d="M15 20v-8"/><path d="M21 20V7"/></svg>
+        Resumo do dia
+      </button>
+    </div>
 
     <!-- Coluna esquerda: formulário / conferência -->
     <div>
@@ -2046,6 +2040,25 @@
       </div>
     </div>
   </div>
+
+  </main>
+
+  <script src="/assets/app-shell.js"></script>
+  <script>
+    (function () {
+      const m = window.location.pathname.match(/^\/u\/([^/]+)/);
+      const slug = m ? m[1] : null;
+      AstroShell.init({
+        active: "caixa",
+        breadcrumbs: [
+          { label: "Operação" },
+          { label: "Caixa do Dia", current: true }
+        ],
+        date: true,
+        unit: slug ? { slug } : null
+      });
+    })();
+  </script>
 
   <script src="caixa.js?v=12"></script>
   <script src="caixa2-init.js?v=12"></script>

@@ -3,170 +3,130 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Astro Vistorias App — Painel Master</title>
+  <title>Astro Vistorias — Painel Master</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
   <style>
-    :root {
-      --bg: #f0f2f5;
-      --surface: #ffffff;
-      --line: #e2e8f0;
-      --ink: #0f172a;
-      --muted: #64748b;
-      --accent: #3b82f6;
-      --green: #059669;
-      --green-bg: #ecfdf5;
-      --amber: #d97706;
-      --amber-bg: #fffbeb;
-      --radius: 10px;
+    /* ── Unit grid (painel master) ──────────────────────────── */
+    .unit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: var(--ds-space-4);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; }
-
-    /* ── Header ── */
-    .topbar {
-      background: #0f172a;
-      padding: 0 28px;
-      height: 56px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-logo { background: #fff; border-radius: 6px; padding: 4px 8px; display: flex; align-items: center; }
-    .brand-logo img { height: 24px; width: auto; }
-    .brand-label { font-size: 13px; font-weight: 700; color: #fff; }
-    .brand-sub { font-size: 11px; color: rgba(255,255,255,.4); }
-    .top-right { display: flex; align-items: center; gap: 12px; }
-    .user-chip { font-size: 12px; color: rgba(255,255,255,.5); }
-    .ham-menu { position: relative; }
-    .ham-btn { width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s; }
-    .ham-btn:hover { background:rgba(255,255,255,.12);color:#fff; }
-    .ham-dropdown { display:none;position:absolute;top:calc(100% + 8px);left:0;background:#1e2535;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:6px;min-width:190px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:200; }
-    .ham-menu.open .ham-dropdown { display:block; }
-    .dd-item { display:block;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:500;color:rgba(255,255,255,.7);text-decoration:none;transition:background .12s,color .12s; }
-    .dd-item:hover { background:rgba(255,255,255,.08);color:#fff; }
-    .dd-item.active { color:#fff;font-weight:700; }
-    .dd-sep { height:1px;background:rgba(255,255,255,.07);margin:4px 6px; }
-    .dd-item.danger { color:rgba(255,80,80,.7); }
-    .dd-item.danger:hover { background:rgba(220,38,38,.15);color:#f87171; }
-
-    /* ── Workspace ── */
-    .workspace { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
-    .page-title { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -.03em; margin-bottom: 4px; }
-    .page-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
-
-    /* ── Unit grid ── */
-    .unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 
     .unit-card {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
       overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
-      transition: box-shadow .15s, border-color .15s;
+      box-shadow: var(--ds-shadow-xs);
+      transition: box-shadow var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease);
     }
-    .unit-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); border-color: #cbd5e1; }
+    .unit-card:hover { box-shadow: var(--ds-shadow-md); border-color: var(--ds-line-strong); }
 
     .unit-header {
-      padding: 16px 20px 12px;
+      padding: var(--ds-space-4) var(--ds-space-5) var(--ds-space-3);
       display: flex; align-items: flex-start; justify-content: space-between;
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid var(--ds-line);
     }
-    .unit-name { font-size: 16px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
-    .unit-id { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .unit-name { font-size: var(--ds-text-xl); font-weight: var(--ds-weight-black); color: var(--ds-ink); letter-spacing: var(--ds-tracking-tight); }
+    .unit-id   { font-size: var(--ds-text-xs); color: var(--ds-ink-muted); margin-top: 2px; }
 
     .status-badge {
-      font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
-      flex-shrink: 0;
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      padding: 3px var(--ds-space-3); border-radius: var(--ds-radius-full);
+      flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
     }
-    .status-badge.open { background: var(--green-bg); color: var(--green); }
-    .status-badge.closed { background: #f1f5f9; color: var(--muted); }
-    .status-badge.loading { background: #f1f5f9; color: #94a3b8; }
+    .status-badge.open    { background: var(--ds-success-soft); color: var(--ds-success); }
+    .status-badge.closed  { background: var(--ds-surface-alt);  color: var(--ds-ink-muted); }
+    .status-badge.loading { background: var(--ds-surface-alt);  color: var(--ds-ink-subtle); }
 
     .tiny-row {
-      padding: 10px 20px; border-bottom: 1px solid var(--line);
+      padding: var(--ds-space-3) var(--ds-space-5);
+      border-bottom: 1px solid var(--ds-line);
       display: flex; align-items: center; justify-content: space-between;
-      font-size: 12px;
+      font-size: var(--ds-text-sm);
     }
-    .tiny-label { color: var(--muted); font-weight: 600; }
-    .tiny-status { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+    .tiny-label { color: var(--ds-ink-muted); font-weight: var(--ds-weight-semi); }
+    .tiny-status { display: flex; align-items: center; gap: 6px; font-weight: var(--ds-weight-bold); }
     .tiny-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .tiny-ok .tiny-dot { background: var(--green); }
-    .tiny-ok .tiny-status { color: var(--green); }
-    .tiny-renovar .tiny-dot { background: var(--amber); }
-    .tiny-renovar .tiny-status { color: var(--amber); }
-    .tiny-erro .tiny-dot, .tiny-ausente .tiny-dot { background: #dc2626; }
-    .tiny-erro .tiny-status, .tiny-ausente .tiny-status { color: #dc2626; }
+    .tiny-ok      .tiny-dot    { background: var(--ds-success); }
+    .tiny-ok      .tiny-status { color: var(--ds-success); }
+    .tiny-renovar .tiny-dot    { background: var(--ds-warning); }
+    .tiny-renovar .tiny-status { color: var(--ds-warning); }
+    .tiny-erro    .tiny-dot,
+    .tiny-ausente .tiny-dot    { background: var(--ds-danger); }
+    .tiny-erro    .tiny-status,
+    .tiny-ausente .tiny-status { color: var(--ds-danger); }
     .tiny-reauth {
-      background: #fef2f2; border: 1px solid #fecaca; color: #dc2626;
-      padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;
-      text-decoration: none; transition: background .15s;
+      background: var(--ds-danger-soft); border: 1px solid #fecaca; color: var(--ds-danger);
+      padding: 4px var(--ds-space-3); border-radius: var(--ds-radius-sm);
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      text-decoration: none; transition: background var(--ds-duration-2) var(--ds-ease);
     }
     .tiny-reauth:hover { background: #fee2e2; }
 
     .unit-stats {
-      padding: 14px 20px;
+      padding: var(--ds-space-4) var(--ds-space-5);
       display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      border-bottom: 1px solid var(--line);
+      gap: var(--ds-space-2);
+      border-bottom: 1px solid var(--ds-line);
     }
     .stat { text-align: center; }
-    .stat-val { font-size: 15px; font-weight: 800; color: var(--ink); }
-    .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 1px; }
+    .stat-val { font-size: var(--ds-text-lg); font-weight: var(--ds-weight-black); color: var(--ds-ink); font-variant-numeric: tabular-nums; }
+    .stat-lbl { font-size: 10px; color: var(--ds-ink-muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
 
     .unit-actions {
-      padding: 12px 20px;
-      display: flex; gap: 8px;
+      padding: var(--ds-space-3) var(--ds-space-5);
+      display: flex; gap: var(--ds-space-2);
     }
     .action-btn {
-      flex: 1; text-align: center; padding: 8px 4px;
-      border-radius: 7px; text-decoration: none;
-      font-size: 12px; font-weight: 600;
-      transition: opacity .15s;
+      flex: 1; text-align: center; padding: var(--ds-space-2) var(--ds-space-1);
+      border-radius: var(--ds-radius-md); text-decoration: none;
+      font-size: var(--ds-text-sm); font-weight: var(--ds-weight-semi);
+      transition: opacity var(--ds-duration-2) var(--ds-ease);
     }
-    .action-btn:hover { opacity: .8; }
-    .action-btn.primary { background: var(--accent); color: #fff; }
-    .action-btn.secondary { background: #f1f5f9; color: var(--ink); }
-    .action-btn.tertiary { background: #ede9fe; color: #6d28d9; }
-
-    .loading-state { color: var(--muted); font-size: 14px; padding: 48px 0; text-align: center; }
+    .action-btn:hover { opacity: .85; }
+    .action-btn.primary   { background: var(--ds-accent-600); color: #fff; }
+    .action-btn.secondary { background: var(--ds-surface-alt); color: var(--ds-ink); }
+    .action-btn.tertiary  { background: #ede9fe; color: #6d28d9; }
   </style>
 </head>
 <body>
 
-<header class="topbar">
-  <div class="brand">
-    <div class="ham-menu" id="hamMenu">
-      <button class="ham-btn" id="hamBtn" type="button">☰</button>
-      <div class="ham-dropdown">
-        <a class="dd-item" href="/home">🏠 Home</a>
-        <div class="dd-sep"></div>
-        <a class="dd-item active">🏢 Painel Rede</a>
-        <a class="dd-item" href="/gerencial">📊 Gerencial Rede</a>
-        <div class="dd-sep"></div>
-        <a class="dd-item danger" href="/logout">Sair</a>
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Unidades</h1>
+        <p class="app-page-sub" id="pageDate"></p>
+      </div>
+
+      <div class="unit-grid" id="unitGrid">
+        <p class="ds-loading">Carregando unidades...</p>
       </div>
     </div>
-    <div class="brand-logo">
-      <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-    </div>
-    <div>
-      <div class="brand-label">Astro Vistorias App</div>
-      <div class="brand-sub">Painel Master</div>
-    </div>
-  </div>
-  <div class="top-right">
-    <span class="user-chip" id="userInfo"></span>
-  </div>
-</header>
-
-<main class="workspace">
-  <div class="page-title">Unidades</div>
-  <p class="page-sub" id="pageDate"></p>
-  <div class="unit-grid" id="unitGrid">
-    <p class="loading-state">Carregando unidades...</p>
   </div>
 </main>
 
+<script src="/assets/app-shell.js"></script>
 <script>
+  AstroShell.init({
+    active: "master",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Painel Master", current: true }
+    ]
+  });
+
   // Data de hoje
   const hoje = new Date().toLocaleDateString("pt-BR", {weekday:"long", day:"2-digit", month:"long", year:"numeric"});
   document.getElementById("pageDate").textContent = hoje.charAt(0).toUpperCase() + hoje.slice(1);
@@ -177,7 +137,7 @@
       const res  = await fetch("/master/api/units");
       const data = await res.json();
       if (!data.units || data.units.length === 0) {
-        grid.innerHTML = '<p class="loading-state">Nenhuma unidade configurada.</p>';
+        grid.innerHTML = '<p class="ds-loading">Nenhuma unidade configurada.</p>';
         return;
       }
       grid.innerHTML = data.units.map(u => `
@@ -205,11 +165,10 @@
         </div>
       `).join("");
 
-      // Carrega status de cada unidade
       data.units.forEach(u => loadUnitStatus(u.id));
       loadTinyHealth();
     } catch (err) {
-      grid.innerHTML = '<p class="loading-state">Erro ao carregar unidades.</p>';
+      grid.innerHTML = '<p class="ds-loading">Erro ao carregar unidades.</p>';
     }
   }
 
@@ -218,10 +177,9 @@
       const res  = await fetch(`/u/${unitId}/api/caixa/estado`);
       const data = await res.json();
       const badge = document.getElementById(`status-${unitId}`);
-      const lançamentos = (data.lancamentos || []).length;
+      const lancamentos = (data.lancamentos || []).length;
       const totais = data.totais || {};
 
-      // Status badge
       if (data.aberto) {
         badge.textContent = "● Aberto";
         badge.className = "status-badge open";
@@ -230,8 +188,7 @@
         badge.className = "status-badge closed";
       }
 
-      // Stats
-      document.getElementById(`lancamentos-${unitId}`).textContent = lançamentos;
+      document.getElementById(`lancamentos-${unitId}`).textContent = lancamentos;
       document.getElementById(`total-${unitId}`).textContent = fmt(totais.total_avista ?? totais.total ?? 0);
       document.getElementById(`fa-${unitId}`).textContent = fmt(totais.faturado ?? 0);
     } catch (_) {
@@ -268,26 +225,7 @@
     } catch (_) {}
   }
 
-  async function loadUserInfo() {
-    try {
-      const res = await fetch("/master/api/units");
-      const data = await res.json();
-      if (data.units && data.units.length > 0) {
-        const infoRes  = await fetch(`/u/${data.units[0].id}/api/info`);
-        const infoData = await infoRes.json();
-        if (infoData.usuario) document.getElementById("userInfo").textContent = infoData.usuario;
-      }
-    } catch (_) {}
-  }
-
   loadUnits();
-  loadUserInfo();
-
-  // Hamburguer
-  const hamBtn  = document.getElementById("hamBtn");
-  const hamMenu = document.getElementById("hamMenu");
-  hamBtn.addEventListener("click", e => { e.stopPropagation(); hamMenu.classList.toggle("open"); });
-  document.addEventListener("click", () => hamMenu.classList.remove("open"));
 </script>
 </body>
 </html>
