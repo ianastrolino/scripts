@@ -110,6 +110,16 @@
         <p class="app-page-sub" id="pageDate"></p>
       </div>
 
+      <div id="opsBar" style="display:flex;gap:var(--ds-space-3);flex-wrap:wrap;align-items:center;margin-bottom:var(--ds-space-5);padding:var(--ds-space-3) var(--ds-space-4);background:var(--ds-surface-alt);border:1px solid var(--ds-line);border-radius:var(--ds-radius-lg)">
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:var(--ds-text-xs);color:var(--ds-ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Modo manutenção</div>
+          <div id="maintStatus" style="font-size:var(--ds-text-sm);color:var(--ds-ink);margin-top:2px">carregando...</div>
+        </div>
+        <button id="maintToggle" class="action-btn secondary" style="min-width:180px">...</button>
+        <button id="smtpTest" class="action-btn tertiary" style="min-width:180px">Testar SMTP</button>
+        <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn secondary" style="min-width:180px">Baixar backup</a>
+      </div>
+
       <div class="unit-grid" id="unitGrid">
         <p class="ds-loading">Carregando unidades...</p>
       </div>
@@ -225,6 +235,98 @@
     } catch (_) {}
   }
 
+  // ── OpsBar (manutencao + SMTP) ──────────────────────────────
+  let _csrfToken = "";
+  async function getCsrf() {
+    if (_csrfToken) return _csrfToken;
+    try {
+      const r = await fetch("/api/csrf-token");
+      const j = await r.json();
+      _csrfToken = j.token || "";
+    } catch { _csrfToken = ""; }
+    return _csrfToken;
+  }
+
+  async function loadMaintStatus() {
+    const statusEl = document.getElementById("maintStatus");
+    const btn = document.getElementById("maintToggle");
+    try {
+      const r = await fetch("/master/api/maintenance");
+      const j = await r.json();
+      if (j.active) {
+        const det = j.detalhe || {};
+        const desde = det.ligado_em || "?";
+        const por = det.por || "?";
+        statusEl.innerHTML = `<strong style="color:var(--ds-danger)">● LIGADO</strong> desde ${desde} por ${por}`;
+        btn.textContent = "Desligar manutencao";
+        btn.dataset.action = "off";
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--ds-success)">● Desligado</span> — sistema operando normalmente`;
+        btn.textContent = "Ligar manutencao";
+        btn.dataset.action = "on";
+      }
+    } catch {
+      statusEl.textContent = "erro ao consultar";
+    }
+  }
+
+  document.getElementById("maintToggle").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+    const label = action === "on" ? "LIGAR" : "DESLIGAR";
+    if (!confirm(`${label} modo manutencao? Isso ${action === "on" ? "bloqueia" : "libera"} acesso das unidades.`)) return;
+    btn.disabled = true;
+    btn.textContent = "...";
+    try {
+      const token = await getCsrf();
+      const r = await fetch(`/master/api/maintenance/${action}`, {
+        method: "POST",
+        headers: { "X-CSRF-Token": token }
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falhou");
+      await loadMaintStatus();
+    } catch (err) {
+      alert("Erro: " + err.message);
+      btn.disabled = false;
+      await loadMaintStatus();
+    }
+  });
+
+  document.getElementById("smtpTest").addEventListener("click", async () => {
+    const to = prompt("Email para receber teste SMTP:", "smiguel2.spv@gmail.com");
+    if (!to) return;
+    const btn = document.getElementById("smtpTest");
+    btn.disabled = true;
+    btn.textContent = "Enviando...";
+    try {
+      const r = await fetch(`/master/api/debug/email-test?to=${encodeURIComponent(to)}`);
+      const d = await r.json();
+      const cfg = d.config || {};
+      const linhas = [
+        `Resultado: ${d.result || "?"}`,
+        d.message ? `${d.message}` : null,
+        d.error ? `Erro: ${d.error}` : null,
+        d.hint ? `Dica: ${d.hint}` : null,
+        "",
+        "Config:",
+        `  SMTP_HOST=${cfg.SMTP_HOST || "(vazio)"}`,
+        `  SMTP_PORT=${cfg.SMTP_PORT ?? "(vazio)"}`,
+        `  SMTP_USER=${cfg.SMTP_USER || "(vazio)"}`,
+        `  SMTP_PASS_len=${cfg.SMTP_PASS_len ?? 0}`,
+        `  ALERT_EMAILS=${(cfg.ALERT_EMAILS_parsed || []).join(", ") || "(vazio)"}`,
+        `  recipients=${(cfg.recipients_used || []).join(", ") || "(vazio)"}`,
+      ].filter(Boolean).join("\n");
+      alert(linhas);
+    } catch (err) {
+      alert("Erro: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Testar SMTP";
+    }
+  });
+
+  loadMaintStatus();
   loadUnits();
 </script>
 </body>

@@ -110,6 +110,65 @@ app.config.update(
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
+# ── Modo manutencao (flag em arquivo no volume persistente) ───────────────────
+_MAINTENANCE_FLAG = DATA_DIR / "maintenance.flag"
+
+def _is_maintenance() -> bool:
+    return _MAINTENANCE_FLAG.exists()
+
+def _set_maintenance(on: bool, who: str = "") -> None:
+    if on:
+        _MAINTENANCE_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _MAINTENANCE_FLAG.write_text(
+            json.dumps({
+                "ligado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+                "por": who or "desconhecido",
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    else:
+        if _MAINTENANCE_FLAG.exists():
+            _MAINTENANCE_FLAG.unlink()
+
+
+@app.before_request
+def _maintenance_gate():
+    """Bloqueia rotas operacionais das unidades quando manutencao esta ativa.
+
+    Libera: /master/*, /gerencial/*, /login, /logout, /health, /api/me,
+    /api/csrf-token, estaticos de /u/<unit>/<file.ext> (html/css/js/png/ico).
+    Bloqueia: /u/<unit>/api/* e /u/<unit>/ (redireciona pra pagina de manutencao).
+    """
+    if not _is_maintenance():
+        return None
+    path = request.path or ""
+    if path.startswith(("/master", "/gerencial", "/login", "/logout", "/health", "/api/me", "/api/csrf-token")):
+        return None
+    if path.startswith("/u/"):
+        parts = path.split("/", 3)  # ["", "u", "<unit>", "<resto>"]
+        resto = parts[3] if len(parts) > 3 else ""
+        if resto.startswith("api/"):
+            return _json({
+                "success": False,
+                "error": "Sistema em manutencao. Voltamos 23/04 as 09:00.",
+                "maintenance": True,
+            }, 503)
+        if "." in resto:  # arquivo estatico (js/css/html/png)
+            return None
+        return Response(
+            "<!doctype html><meta charset='utf-8'><title>Manutencao</title>"
+            "<style>body{font-family:system-ui;background:#0f1117;color:#e5e7eb;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;text-align:center}"
+            ".card{max-width:460px;background:#1a1d27;border:1px solid #2a2e3a;border-radius:16px;padding:40px}"
+            "h1{color:#fff;font-size:22px;margin:0 0 12px}p{color:#9ca3af;font-size:14px;line-height:1.6;margin:0}</style>"
+            "<div class=card><h1>Sistema em manutencao</h1>"
+            "<p>Estamos aplicando melhorias hoje (22/04/2026).<br>"
+            "Voltamos amanha, 23/04, as 09:00.</p></div>",
+            status=503,
+            mimetype="text/html; charset=utf-8",
+        )
+    return None
+
+
 # ── Rate limiting para login (5 tentativas / 60s por IP) ──────────────────────
 _LOGIN_WINDOW  = 60
 _LOGIN_MAX     = 5
@@ -677,6 +736,113 @@ def master_api_backup_download():
     app.logger.info("[backup.download] size_kb=%s filename=%s", len(zip_bytes) // 1024, filename)
     return send_file(io.BytesIO(zip_bytes), mimetype="application/zip",
                      as_attachment=True, download_name=filename)
+
+
+@app.route("/master/api/maintenance", methods=["GET"])
+@master_required
+def master_api_maintenance_status():
+    info = {"active": _is_maintenance()}
+    if info["active"]:
+        try:
+            info["detalhe"] = json.loads(_MAINTENANCE_FLAG.read_text(encoding="utf-8"))
+        except Exception:
+            info["detalhe"] = None
+    return _json(info)
+
+
+@app.route("/master/api/maintenance/on", methods=["POST"])
+@master_required
+@csrf_required
+def master_api_maintenance_on():
+    user = _current_user() or {}
+    _set_maintenance(True, who=user.get("email", ""))
+    app.logger.info("[maintenance] ON by %s", user.get("email"))
+    return _json({"success": True, "active": True})
+
+
+@app.route("/master/api/maintenance/off", methods=["POST"])
+@master_required
+@csrf_required
+def master_api_maintenance_off():
+    user = _current_user() or {}
+    _set_maintenance(False)
+    app.logger.info("[maintenance] OFF by %s", user.get("email"))
+    return _json({"success": True, "active": False})
+
+
+@app.route("/master/api/debug/email-test", methods=["GET"])
+@master_required
+def master_api_debug_email_test():
+    """Envia email de teste para diagnosticar SMTP. Uso: ?to=email@dominio.com.
+
+    Retorna JSON com cada passo do diagnostico (config, conexao, envio).
+    Se falhar, o erro volta na resposta em vez de virar log silencioso.
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+
+    to_override = (request.args.get("to") or "").strip()
+    host   = os.environ.get("SMTP_HOST", "")
+    port   = int(os.environ.get("SMTP_PORT", "465") or 465)
+    user   = os.environ.get("SMTP_USER", "")
+    passwd = os.environ.get("SMTP_PASS", "")
+    alert_emails_raw = os.environ.get("ALERT_EMAILS", "")
+    alert_emails = [e.strip() for e in alert_emails_raw.split(",") if e.strip()]
+    recipients = [to_override] if to_override else alert_emails
+
+    diag = {
+        "config": {
+            "SMTP_HOST": host or "(vazio)",
+            "SMTP_PORT": port,
+            "SMTP_USER": user or "(vazio)",
+            "SMTP_PASS_len": len(passwd),
+            "ALERT_EMAILS_raw": alert_emails_raw,
+            "ALERT_EMAILS_parsed": alert_emails,
+            "recipients_used": recipients,
+            "to_override": to_override or None,
+        },
+        "checks": {
+            "host_ok": bool(host),
+            "user_ok": bool(user),
+            "password_ok": bool(passwd),
+            "recipients_ok": bool(recipients),
+        },
+    }
+    if not all([host, user, passwd, recipients]):
+        diag["result"] = "FALTA_CONFIG"
+        diag["hint"] = "Um ou mais dos campos acima esta vazio. Se ALERT_EMAILS estiver vazio, use ?to= na rota. Se SMTP_* estiver vazio, o email nao sera enviado por ninguem."
+        return _json(diag, 400)
+
+    agora = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    subject = f"[Astrovistorias] Teste SMTP {agora}"
+    html = f"<p>Teste SMTP disparado em <b>{agora}</b>.</p><p>Se voce recebeu esse email, o SMTP esta funcionando.</p>"
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"]    = f"Astrovistorias <{user}>"
+    msg["To"]      = ", ".join(recipients)
+
+    try:
+        with smtplib.SMTP_SSL(host, port, timeout=20) as smtp:
+            smtp.login(user, passwd)
+            smtp.sendmail(user, recipients, msg.as_string())
+        diag["result"] = "ENVIADO"
+        diag["message"] = f"Email enviado para {recipients}. Verifique caixa de entrada e spam."
+        app.logger.info("[email-test] ok to=%s", recipients)
+        return _json(diag)
+    except smtplib.SMTPAuthenticationError as exc:
+        diag["result"] = "AUTH_ERROR"
+        diag["error"] = str(exc)
+        diag["hint"] = "Usuario ou senha SMTP invalidos. Verifique SMTP_USER e SMTP_PASS."
+        return _json(diag, 500)
+    except (smtplib.SMTPConnectError, OSError) as exc:
+        diag["result"] = "CONNECTION_ERROR"
+        diag["error"] = f"{type(exc).__name__}: {exc}"
+        diag["hint"] = "Falha ao conectar no servidor SMTP. Verifique SMTP_HOST e SMTP_PORT (geralmente 465 com SSL ou 587 com STARTTLS)."
+        return _json(diag, 500)
+    except Exception as exc:
+        diag["result"] = "OTHER_ERROR"
+        diag["error"] = f"{type(exc).__name__}: {exc}"
+        return _json(diag, 500)
 
 
 def _human_bytes(n: int) -> str:
