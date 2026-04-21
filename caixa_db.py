@@ -53,6 +53,24 @@ CREATE TABLE IF NOT EXISTS divergencias (
 CREATE INDEX IF NOT EXISTS idx_div_unit_data ON divergencias(unit, data);
 """
 
+_DDL_SNAPSHOT = """
+CREATE TABLE IF NOT EXISTS planilhas_snapshot (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    arquivos    TEXT NOT NULL DEFAULT "",
+    records     TEXT NOT NULL,
+    conferencia TEXT NOT NULL DEFAULT "{}",
+    conferido   TEXT NOT NULL DEFAULT "[]",
+    pdv_base    TEXT NOT NULL DEFAULT "null",
+    origem      TEXT NOT NULL DEFAULT "import",
+    autor       TEXT NOT NULL DEFAULT ""
+);
+CREATE INDEX IF NOT EXISTS idx_snap_unit_data ON planilhas_snapshot(unit, data);
+CREATE INDEX IF NOT EXISTS idx_snap_unit_created ON planilhas_snapshot(unit, created_at);
+"""
+
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
@@ -66,6 +84,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     except sqlite3.OperationalError:
         pass  # column already exists
     conn.executescript(_DDL_DIV)
+    conn.executescript(_DDL_SNAPSHOT)
     return conn
 
 
@@ -164,4 +183,83 @@ def delete_lancamento(unit_dir: Path, lancamento_id: str) -> bool:
     """Remove um lançamento. Retorna True se encontrado."""
     with _connect(unit_dir) as conn:
         cur = conn.execute("DELETE FROM lancamentos WHERE id=?", (lancamento_id,))
+        return cur.rowcount > 0
+
+
+# ── Snapshots de planilhas ────────────────────────────────────────────────────
+
+def insert_snapshot(unit: str, unit_dir: Path, payload: dict[str, Any]) -> int:
+    """Salva um snapshot do estado da conferência/fechamento. Retorna id gerado."""
+    row = {
+        "unit":        unit,
+        "data":        payload.get("data", ""),
+        "created_at":  payload.get("created_at", ""),
+        "arquivos":    json.dumps(payload.get("arquivos", []), ensure_ascii=False),
+        "records":     json.dumps(payload.get("records", []), ensure_ascii=False),
+        "conferencia": json.dumps(payload.get("conferencia", {}), ensure_ascii=False),
+        "conferido":   json.dumps(payload.get("conferido", []), ensure_ascii=False),
+        "pdv_base":    json.dumps(payload.get("pdv_base", None), ensure_ascii=False),
+        "origem":      payload.get("origem", "import"),
+        "autor":       payload.get("autor", ""),
+    }
+    with _connect(unit_dir) as conn:
+        cur = conn.execute(
+            "INSERT INTO planilhas_snapshot "
+            "(unit,data,created_at,arquivos,records,conferencia,conferido,pdv_base,origem,autor) "
+            "VALUES (:unit,:data,:created_at,:arquivos,:records,:conferencia,:conferido,:pdv_base,:origem,:autor)",
+            row,
+        )
+        return int(cur.lastrowid)
+
+
+def list_snapshots(unit: str, unit_dir: Path, date_from: str | None = None, date_to: str | None = None, limit: int = 200) -> list[dict[str, Any]]:
+    """Lista snapshots sem o payload pesado. Retorna meta + contagens."""
+    sql = (
+        "SELECT id, unit, data, created_at, arquivos, origem, autor, "
+        "       length(records) AS records_size, "
+        "       (SELECT json_array_length(s.records) FROM planilhas_snapshot s WHERE s.id = planilhas_snapshot.id) AS records_count "
+        "FROM planilhas_snapshot WHERE unit=? "
+    )
+    params: list[Any] = [unit]
+    if date_from:
+        sql += "AND data >= ? "
+        params.append(date_from)
+    if date_to:
+        sql += "AND data <= ? "
+        params.append(date_to)
+    sql += "ORDER BY created_at DESC LIMIT ?"
+    params.append(int(limit))
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["arquivos"] = json.loads(d.get("arquivos") or "[]")
+        except Exception:
+            d["arquivos"] = []
+        out.append(d)
+    return out
+
+
+def load_snapshot(unit: str, unit_dir: Path, snapshot_id: int) -> dict[str, Any] | None:
+    with _connect(unit_dir) as conn:
+        r = conn.execute(
+            "SELECT * FROM planilhas_snapshot WHERE unit=? AND id=?",
+            (unit, int(snapshot_id)),
+        ).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    for k in ("arquivos", "records", "conferencia", "conferido", "pdv_base"):
+        try:
+            d[k] = json.loads(d.get(k) or "null")
+        except Exception:
+            pass
+    return d
+
+
+def delete_snapshot(unit: str, unit_dir: Path, snapshot_id: int) -> bool:
+    with _connect(unit_dir) as conn:
+        cur = conn.execute("DELETE FROM planilhas_snapshot WHERE unit=? AND id=?", (unit, int(snapshot_id)))
         return cur.rowcount > 0

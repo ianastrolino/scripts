@@ -69,7 +69,9 @@ from flask import Flask, Response, redirect, request, send_from_directory, sessi
 from caixa_helpers import FP_VALIDOS, calcular_totais, validar_lancamento
 from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_load,
                        _connect as _db_connect, load_lancamentos_range as _db_load_range,
-                       insert_divergencia as _db_insert_div, load_divergencias_range as _db_load_div)
+                       insert_divergencia as _db_insert_div, load_divergencias_range as _db_load_div,
+                       insert_snapshot as _db_insert_snap, list_snapshots as _db_list_snap,
+                       load_snapshot as _db_load_snap, delete_snapshot as _db_delete_snap)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -1149,6 +1151,98 @@ def api_auto_map_clients(unit: str):
             raise
         app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Snapshots do fechamento (backup/recuperação de planilhas importadas)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/u/<unit>/api/snapshot", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_snapshot_create(unit: str):
+    try:
+        data  = request.get_json(force=True, silent=True) or {}
+        user  = _current_user() or {}
+        now   = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
+        payload = {
+            "data":        data.get("data") or now.date().isoformat(),
+            "created_at":  now.isoformat(timespec="seconds"),
+            "arquivos":    data.get("arquivos") or [],
+            "records":     data.get("records") or [],
+            "conferencia": data.get("conferencia") or {},
+            "conferido":   data.get("conferido") or [],
+            "pdv_base":    data.get("pdv_base"),
+            "origem":      data.get("origem") or "import",
+            "autor":       user.get("email", ""),
+        }
+        if not payload["records"]:
+            raise ValueError("records vazio")
+        snap_id = _db_insert_snap(unit, _unit_state_dir(unit), payload)
+        return _json({"success": True, "id": snap_id})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/snapshots", methods=["GET"])
+@unit_access_required
+def api_snapshot_list(unit: str):
+    try:
+        date_from = request.args.get("from")
+        date_to   = request.args.get("to")
+        limit     = int(request.args.get("limit", "200"))
+        snaps = _db_list_snap(unit, _unit_state_dir(unit), date_from, date_to, limit)
+        return _json({"success": True, "snapshots": snaps})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/snapshot/<int:snap_id>", methods=["GET"])
+@unit_access_required
+def api_snapshot_load(unit: str, snap_id: int):
+    try:
+        snap = _db_load_snap(unit, _unit_state_dir(unit), snap_id)
+        if not snap:
+            return _json({"success": False, "error": "Snapshot nao encontrado"}, 404)
+        return _json({"success": True, "snapshot": snap})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/snapshot/<int:snap_id>", methods=["DELETE"])
+@unit_access_required
+@csrf_required
+def api_snapshot_delete(unit: str, snap_id: int):
+    user = _current_user() or {}
+    if not user.get("master"):
+        return _json({"success": False, "error": "Apenas usuario master pode remover snapshots"}, 403)
+    try:
+        ok = _db_delete_snap(unit, _unit_state_dir(unit), snap_id)
+        return _json({"success": ok})
+    except Exception as exc:
+        from werkzeug.exceptions import HTTPException
+        if isinstance(exc, HTTPException):
+            raise
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/historico")
+@unit_access_required
+def historico_page(unit: str):
+    return _nocache(send_from_directory(UI_DIR, "historico.html"))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

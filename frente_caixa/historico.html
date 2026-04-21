@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Histórico de snapshots — Astro</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    /* Stubs ocultos de compatibilidade com shell */
+    #hamMenu, #ddHome, #ddCaixa, #ddGerencial, #ddRede, #ddReauthTiny, #ddManual { display:none; }
+
+    body { background: var(--ds-bg); color: var(--ds-ink); font-family: var(--ds-font-sans); margin: 0; }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0;
+      padding: var(--ds-space-6);
+    }
+
+    .page-head {
+      display: flex; flex-direction: column;
+      gap: var(--ds-space-2);
+      margin-bottom: var(--ds-space-5);
+    }
+    .page-eyebrow {
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-bold);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      color: var(--ds-ink-muted);
+    }
+    .page-title {
+      font-size: var(--ds-text-3xl);
+      font-weight: var(--ds-weight-black);
+      letter-spacing: var(--ds-tracking-tight);
+      color: var(--ds-ink);
+    }
+    .page-sub {
+      font-size: var(--ds-text-sm);
+      color: var(--ds-ink-muted);
+      max-width: 640px;
+      line-height: 1.5;
+    }
+
+    .filter-bar {
+      display: flex; align-items: center; gap: var(--ds-space-3);
+      padding: var(--ds-space-3) var(--ds-space-4);
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+      margin-bottom: var(--ds-space-4);
+      flex-wrap: wrap;
+    }
+    .filter-bar label {
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted);
+      text-transform: uppercase;
+      letter-spacing: var(--ds-tracking-wide);
+    }
+    .filter-bar input[type="date"] {
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+      background: var(--ds-surface-alt);
+      color: var(--ds-ink);
+      font: inherit;
+      font-size: var(--ds-text-sm);
+    }
+    .filter-bar button {
+      height: 36px; padding: 0 14px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+      color: var(--ds-ink-muted);
+      font-family: inherit; font-weight: var(--ds-weight-semi);
+      font-size: var(--ds-text-sm);
+      cursor: pointer;
+    }
+    .filter-bar button:hover { border-color: var(--ds-line-strong); color: var(--ds-ink); }
+
+    .list {
+      display: flex; flex-direction: column;
+      gap: var(--ds-space-3);
+    }
+
+    .snap-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: var(--ds-space-4);
+      align-items: center;
+      padding: var(--ds-space-4);
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      box-shadow: var(--ds-shadow-sm);
+      transition: box-shadow var(--ds-duration-2) var(--ds-ease), transform var(--ds-duration-2) var(--ds-ease);
+    }
+    .snap-card:hover { box-shadow: var(--ds-shadow-md); transform: translateY(-1px); }
+
+    .snap-date {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      width: 72px; min-height: 64px;
+      padding: 8px 4px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+    }
+    .snap-date-day {
+      font-size: var(--ds-text-2xl);
+      font-weight: var(--ds-weight-black);
+      line-height: 1;
+      color: var(--ds-ink);
+      letter-spacing: var(--ds-tracking-tight);
+    }
+    .snap-date-mon {
+      font-size: 10px;
+      font-weight: var(--ds-weight-bold);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ds-ink-muted);
+      margin-top: 2px;
+    }
+
+    .snap-main { min-width: 0; }
+    .snap-meta {
+      display: flex; align-items: center; gap: 10px;
+      font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-semi);
+      color: var(--ds-ink-muted);
+      letter-spacing: var(--ds-tracking-wide);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .snap-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      color: var(--ds-ink-muted);
+      font-size: 10.5px; font-weight: var(--ds-weight-bold);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .snap-chip.origem-import  { background: #eef2ff; border-color: #c7d2fe; color: #4338ca; }
+    .snap-chip.origem-autosave { background: #fef7e7; border-color: #fcd9a6; color: #b45309; }
+    .snap-chip.origem-manual  { background: #f0f9ff; border-color: #bae6fd; color: #0369a1; }
+
+    .snap-title {
+      font-size: var(--ds-text-base);
+      font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink);
+      letter-spacing: -.01em;
+      line-height: 1.3;
+      margin-bottom: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .snap-sub {
+      font-size: var(--ds-text-sm);
+      color: var(--ds-ink-muted);
+      font-weight: var(--ds-weight-medium);
+    }
+    .snap-autor {
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-subtle);
+      margin-top: 4px;
+    }
+
+    .snap-actions { display: flex; gap: 6px; }
+    .btn-sm {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: var(--ds-radius-md);
+      font-family: inherit;
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-bold);
+      cursor: pointer;
+      transition: transform var(--ds-duration-2) var(--ds-ease),
+                  box-shadow var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease);
+    }
+    .btn-sm svg { width: 14px; height: 14px; }
+    .btn-restore {
+      background: linear-gradient(135deg, var(--ds-accent-600), var(--ds-accent-700));
+      color: #fff; border: none;
+      box-shadow: 0 2px 8px rgba(37,99,235,.25);
+    }
+    .btn-restore:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(37,99,235,.35); }
+    .btn-secondary {
+      background: var(--ds-surface);
+      color: var(--ds-ink-muted);
+      border: 1px solid var(--ds-line);
+    }
+    .btn-secondary:hover { border-color: var(--ds-line-strong); color: var(--ds-ink); }
+    .btn-danger {
+      background: var(--ds-surface);
+      color: var(--ds-danger);
+      border: 1px solid var(--ds-line);
+    }
+    .btn-danger:hover { border-color: var(--ds-danger); background: var(--ds-danger-soft); }
+
+    .empty {
+      padding: 72px 24px;
+      text-align: center;
+      background: var(--ds-surface);
+      border: 1px dashed var(--ds-line-strong);
+      border-radius: var(--ds-radius-lg);
+      color: var(--ds-ink-muted);
+    }
+    .empty-title { font-weight: var(--ds-weight-bold); font-size: var(--ds-text-base); color: var(--ds-ink); margin-bottom: 6px; }
+    .empty-sub   { font-size: var(--ds-text-sm); }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      padding: 12px 18px;
+      background: var(--ds-ink);
+      color: var(--ds-ink-inverse);
+      border-radius: var(--ds-radius-md);
+      box-shadow: var(--ds-shadow-lg);
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-semi);
+      opacity: 0; transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity var(--ds-duration-2) var(--ds-ease),
+                  transform var(--ds-duration-2) var(--ds-ease);
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: none; }
+
+    @media (max-width: 640px) {
+      .wrap { padding: var(--ds-space-4); }
+      .snap-card { grid-template-columns: auto 1fr; }
+      .snap-actions { grid-column: 1 / -1; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Stubs de compatibilidade -->
+  <div style="display:none" aria-hidden="true">
+    <div id="hamMenu"><button id="hamBtn" type="button"></button>
+      <a id="ddHome" href=""></a><a id="ddCaixa" href=""></a>
+      <a id="ddGerencial" href=""></a><a id="ddRede" href=""></a>
+      <a id="ddReauthTiny" href=""></a><a id="ddManual" href=""></a>
+    </div>
+    <span id="unidadeLabel"></span><span id="statusDate"></span>
+    <span id="userAvatar"></span><span id="userLabel"></span>
+  </div>
+
+  <div id="app-shell"></div>
+
+  <main id="app-main">
+    <div class="wrap">
+
+      <div class="page-head">
+        <div class="page-eyebrow">Recuperação</div>
+        <h1 class="page-title">Histórico de fechamentos</h1>
+        <p class="page-sub">
+          Cada importação de planilha e auto-save gera um snapshot. Use <strong>Restaurar</strong>
+          pra recarregar o fechamento com o estado salvo — útil se a autenticação do Tiny falhar,
+          se a aba fechar, ou se precisar reenviar um dia anterior.
+        </p>
+      </div>
+
+      <div class="filter-bar">
+        <label for="dateFrom">De</label>
+        <input type="date" id="dateFrom">
+        <label for="dateTo">Até</label>
+        <input type="date" id="dateTo">
+        <button id="btnFilter" type="button">Filtrar</button>
+        <button id="btnReload" type="button">Atualizar</button>
+        <span id="countInfo" style="margin-left:auto;font-size:12px;color:var(--ds-ink-muted);font-weight:600;"></span>
+      </div>
+
+      <div id="list" class="list">
+        <div class="empty"><div class="empty-title">Carregando…</div></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/assets/app-shell.js"></script>
+  <script>
+    (function () {
+      const apiBase = (function () {
+        const m = window.location.pathname.match(/^(\/u\/[^/]+)/);
+        return m ? m[1] : '';
+      })();
+      if (window.AstroShell && typeof window.AstroShell.init === 'function') {
+        window.AstroShell.init({ current: 'historico' });
+      }
+
+      const $list = document.getElementById('list');
+      const $count = document.getElementById('countInfo');
+      const $from = document.getElementById('dateFrom');
+      const $to   = document.getElementById('dateTo');
+      const $toast = document.getElementById('toast');
+
+      let csrfToken = '';
+      async function getCsrfToken() {
+        if (csrfToken) return csrfToken;
+        try {
+          const r = await fetch('/api/csrf-token');
+          const j = await r.json();
+          csrfToken = j.token || '';
+        } catch { csrfToken = ''; }
+        return csrfToken;
+      }
+
+      function toast(msg, ms = 2600) {
+        $toast.textContent = msg;
+        $toast.classList.add('show');
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => $toast.classList.remove('show'), ms);
+      }
+
+      const brl = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const parseISODate = s => s ? new Date(s + 'T00:00:00') : null;
+      const MONTHS = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+
+      function fmtDateHeader(iso) {
+        const d = parseISODate(iso);
+        if (!d) return { day: '?', mon: '?' };
+        return { day: String(d.getDate()).padStart(2, '0'), mon: MONTHS[d.getMonth()] };
+      }
+      function fmtCreated(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d)) return iso;
+        return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+
+      function sumRecords(snap) {
+        // usa records_count + tamanho
+        return `${snap.records_count || 0} lançamentos`;
+      }
+
+      function originChip(origem) {
+        const map = {
+          import:    { cls: 'origem-import',   label: 'Importado' },
+          autosave:  { cls: 'origem-autosave', label: 'Auto-save' },
+          manual:    { cls: 'origem-manual',   label: 'Manual' },
+          conference:{ cls: 'origem-manual',   label: 'Conferência' },
+        };
+        const it = map[origem] || { cls: '', label: origem || 'snapshot' };
+        return `<span class="snap-chip ${it.cls}">${it.label}</span>`;
+      }
+
+      function render(snaps) {
+        if (!snaps.length) {
+          $list.innerHTML = `
+            <div class="empty">
+              <div class="empty-title">Nenhum snapshot encontrado</div>
+              <div class="empty-sub">Importe uma planilha no fechamento pra gerar o primeiro backup automaticamente.</div>
+            </div>`;
+          $count.textContent = '';
+          return;
+        }
+        $count.textContent = `${snaps.length} snapshot${snaps.length === 1 ? '' : 's'}`;
+        $list.innerHTML = snaps.map(s => {
+          const h = fmtDateHeader(s.data);
+          const arquivos = Array.isArray(s.arquivos) ? s.arquivos : [];
+          const arquivosTxt = arquivos.length ? arquivos.join(', ') : 'Sem arquivo identificado';
+          return `
+            <div class="snap-card" data-id="${s.id}">
+              <div class="snap-date">
+                <div class="snap-date-day">${h.day}</div>
+                <div class="snap-date-mon">${h.mon}</div>
+              </div>
+              <div class="snap-main">
+                <div class="snap-meta">
+                  ${originChip(s.origem)}
+                  <span>${fmtCreated(s.created_at)}</span>
+                </div>
+                <div class="snap-title" title="${arquivosTxt}">${arquivosTxt}</div>
+                <div class="snap-sub">${sumRecords(s)}</div>
+                ${s.autor ? `<div class="snap-autor">por ${s.autor}</div>` : ''}
+              </div>
+              <div class="snap-actions">
+                <button class="btn-sm btn-secondary" data-action="download" data-id="${s.id}" title="Baixar JSON">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  JSON
+                </button>
+                <button class="btn-sm btn-restore" data-action="restore" data-id="${s.id}" title="Restaurar no fechamento">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                  Restaurar
+                </button>
+                <button class="btn-sm btn-danger" data-action="delete" data-id="${s.id}" title="Remover (master)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+      }
+
+      async function loadSnapshots() {
+        const params = new URLSearchParams();
+        if ($from.value) params.append('from', $from.value);
+        if ($to.value)   params.append('to',   $to.value);
+        $list.innerHTML = `<div class="empty"><div class="empty-title">Carregando…</div></div>`;
+        try {
+          const r = await fetch(`${apiBase}/api/snapshots?${params.toString()}`);
+          const j = await r.json();
+          if (!j.success) throw new Error(j.error || 'Falha ao carregar snapshots');
+          render(j.snapshots || []);
+        } catch (err) {
+          $list.innerHTML = `<div class="empty"><div class="empty-title">Erro ao carregar</div><div class="empty-sub">${err.message}</div></div>`;
+        }
+      }
+
+      async function restoreSnapshot(id) {
+        if (!confirm('Restaurar este snapshot vai SUBSTITUIR o fechamento atual da aba. Deseja continuar?')) return;
+        window.location.href = `${apiBase}/fechamento?snap=${id}`;
+      }
+
+      async function downloadSnapshot(id) {
+        try {
+          const r = await fetch(`${apiBase}/api/snapshot/${id}`);
+          const j = await r.json();
+          if (!j.success) throw new Error(j.error);
+          const snap = j.snapshot;
+          const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `snapshot-${snap.data}-${snap.id}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          toast('Erro: ' + err.message);
+        }
+      }
+
+      async function deleteSnapshot(id) {
+        if (!confirm('Remover este snapshot permanentemente? Apenas usuarios master podem fazer isso.')) return;
+        try {
+          const token = await getCsrfToken();
+          const r = await fetch(`${apiBase}/api/snapshot/${id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-Token': token },
+          });
+          const j = await r.json();
+          if (!j.success) throw new Error(j.error || 'Falha ao remover');
+          toast('Snapshot removido');
+          loadSnapshots();
+        } catch (err) {
+          toast('Erro: ' + err.message);
+        }
+      }
+
+      $list.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (action === 'restore')  restoreSnapshot(id);
+        if (action === 'download') downloadSnapshot(id);
+        if (action === 'delete')   deleteSnapshot(id);
+      });
+
+      document.getElementById('btnFilter').addEventListener('click', loadSnapshots);
+      document.getElementById('btnReload').addEventListener('click', loadSnapshots);
+
+      // Default: últimos 30 dias
+      const today = new Date();
+      const ago30 = new Date(today);
+      ago30.setDate(ago30.getDate() - 30);
+      $from.value = ago30.toISOString().slice(0, 10);
+      $to.value   = today.toISOString().slice(0, 10);
+
+      loadSnapshots();
+    })();
+  </script>
+</body>
+</html>

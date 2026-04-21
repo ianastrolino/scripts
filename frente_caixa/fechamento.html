@@ -1256,7 +1256,7 @@
 
   <script src="app.js"></script>
   <script>
-    (function () {
+    (async function () {
       const apiBase = (function () {
         const m = window.location.pathname.match(/^(\/u\/[^/]+)/);
         return m ? m[1] : '';
@@ -1268,6 +1268,51 @@
         const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
         dateEl.textContent = d.charAt(0).toUpperCase() + d.slice(1);
       }
+
+      // ── Restauração: URL ?snap=<id> ou draft do localStorage ────────────────
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const snapId = params.get('snap');
+        if (snapId) {
+          const r = await fetch(`${apiBase}/api/snapshot/${snapId}`);
+          const j = await r.json();
+          if (j.success && j.snapshot && typeof hydrateFromPayload === 'function') {
+            hydrateFromPayload({
+              records:     j.snapshot.records,
+              arquivos:    j.snapshot.arquivos,
+              conferencia: j.snapshot.conferencia,
+              conferido:   j.snapshot.conferido,
+              pdv_base:    j.snapshot.pdv_base,
+            });
+            if (typeof render === 'function') render();
+            // Remove ?snap= da URL pra não re-restaurar em refresh
+            const clean = new URL(window.location.href);
+            clean.searchParams.delete('snap');
+            window.history.replaceState(null, '', clean.toString());
+            const el = document.createElement('div');
+            el.textContent = `Snapshot #${snapId} restaurado · ${j.snapshot.records.length} lançamento(s)`;
+            el.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:10px 16px;background:#10b981;color:#fff;border-radius:8px;font-weight:700;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:9999;';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 3500);
+          }
+        } else if (typeof loadLocalDraft === 'function') {
+          const draft = loadLocalDraft();
+          if (draft && Array.isArray(draft.records) && draft.records.length) {
+            const when = draft.saved_at ? new Date(draft.saved_at).toLocaleString('pt-BR') : 'anterior';
+            const ok = confirm(
+              `Existe um fechamento salvo localmente de ${when}\n\n` +
+              `${draft.records.length} lançamento(s), ${(draft.arquivos || []).length} arquivo(s).\n\n` +
+              `Deseja restaurar este rascunho?`
+            );
+            if (ok) {
+              hydrateFromPayload(draft);
+              if (typeof render === 'function') render();
+            } else if (typeof clearLocalDraft === 'function') {
+              clearLocalDraft();
+            }
+          }
+        }
+      } catch (e) { console.warn('[restore]', e); }
 
       // Info da unidade / usuário
       fetch(apiBase + '/api/info').then(r => r.json()).then(info => {

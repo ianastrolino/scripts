@@ -48,6 +48,72 @@ const state = {
   pdvBase: null,       // { dinheiro, debito, credito, pix } snapshot do PDV (base para Entradas)
 };
 
+// ── Snapshot/autosave: persistencia contra perda de dados ────────────────────
+function _buildSnapshotPayload(origem) {
+  const firstDate = state.records[0]?.data || "";
+  return {
+    data:        firstDate || "",
+    arquivos:    [...state.sourceFiles],
+    records:     state.records,
+    conferencia: state.conferencia || {},
+    conferido:   [...(state.conferido || [])],
+    pdv_base:    state.pdvBase || null,
+    origem:      origem || "autosave",
+  };
+}
+
+async function saveSnapshotAsync(origem) {
+  if (!state.records.length) return;
+  try {
+    const payload = _buildSnapshotPayload(origem);
+    await apiFetch(`${apiBase}/api/snapshot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.warn("[snapshot] falha ao salvar:", e.message);
+  }
+}
+
+const LS_DRAFT_KEY = `astro.fechamento.draft.${apiBase || "default"}`;
+
+let _lsDebounce = null;
+function autosaveLocal() {
+  if (_lsDebounce) clearTimeout(_lsDebounce);
+  _lsDebounce = setTimeout(() => {
+    try {
+      if (!state.records.length) {
+        localStorage.removeItem(LS_DRAFT_KEY);
+        return;
+      }
+      const payload = _buildSnapshotPayload("autosave");
+      payload.saved_at = new Date().toISOString();
+      localStorage.setItem(LS_DRAFT_KEY, JSON.stringify(payload));
+    } catch (e) { /* quota ou modo privado */ }
+  }, 400);
+}
+
+function loadLocalDraft() {
+  try {
+    const raw = localStorage.getItem(LS_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function clearLocalDraft() {
+  try { localStorage.removeItem(LS_DRAFT_KEY); } catch {}
+}
+
+function hydrateFromPayload(payload) {
+  if (!payload) return;
+  state.records     = Array.isArray(payload.records) ? payload.records : [];
+  state.sourceFiles = Array.isArray(payload.arquivos) ? payload.arquivos : [];
+  state.conferencia = payload.conferencia && typeof payload.conferencia === "object" ? payload.conferencia : {};
+  state.conferido   = new Set(Array.isArray(payload.conferido) ? payload.conferido : []);
+  state.pdvBase     = payload.pdv_base ?? null;
+}
+
 const knownTinyClients = new Map();
 
 // Detecta prefixo /u/<unidade> quando rodando no servidor Railway
@@ -629,6 +695,7 @@ function renderSummary() {
   const unmappedFaturado = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId);
   els.autoMapBtn.hidden = unmappedFaturado.length === 0;
   els.mapClientesBtn.hidden = unmappedFaturado.length === 0;
+  autosaveLocal();
 }
 
 function renderIssues() {
@@ -818,12 +885,15 @@ els.fileInput.addEventListener("change", async (event) => {
   state.conferido = new Set();
   render();
   conferirComPDV();
+  if (imported.length) {
+    saveSnapshotAsync("import").catch(() => {});
+  }
   if (errors.length) {
     alert(errors.join("\n"));
   }
 });
 
-els.loadSampleBtn.addEventListener("click", loadSample);
+if (els.loadSampleBtn) els.loadSampleBtn.addEventListener("click", loadSample);
 els.clearBtn.addEventListener("click", clearBatch);
 els.exportBtn.addEventListener("click", exportConference);
 els.validateBtn.addEventListener("click", render);
