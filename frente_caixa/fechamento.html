@@ -756,6 +756,12 @@
       border: 1px solid rgba(7,16,31,.06);
       animation: modal-in .18s cubic-bezier(.34,1.4,.64,1);
     }
+    /* Variante para modais com tabela longa (confirm/preview de envio Tiny) */
+    .modal-card.modal-card-wide {
+      width: min(1200px, calc(100vw - 32px));
+      max-width: min(1200px, calc(100vw - 32px));
+      max-height: 94vh;
+    }
     @keyframes modal-in {
       from { opacity: 0; transform: translateY(12px) scale(.98); }
       to   { opacity: 1; transform: none; }
@@ -1175,7 +1181,7 @@
 
   <!-- ═══ MODAL CONFIRMAÇÃO DE ENVIO ══════════════════════════════════════════ -->
   <div id="confirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
-    <div class="modal-card" style="max-width:860px;">
+    <div class="modal-card modal-card-wide">
       <div class="modal-header">
         <div>
           <h2 id="confirmModalTitle">Confirmar envio ao Tiny</h2>
@@ -1209,7 +1215,7 @@
 
   <!-- ═══ MODAL SIMULAÇÃO ══════════════════════════════════════════════════════ -->
   <div id="previewModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
-    <div class="modal-card" style="max-width:860px;">
+    <div class="modal-card modal-card-wide">
       <div class="modal-header">
         <h2 id="previewModalTitle">Simulação de envio ao Tiny</h2>
         <button id="previewModalClose" class="btn-ghost" type="button" aria-label="Fechar">✕</button>
