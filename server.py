@@ -74,8 +74,7 @@ from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_
                        load_snapshot as _db_load_snap, delete_snapshot as _db_delete_snap,
                        insert_envio_tiny as _db_insert_envio, list_envios_tiny as _db_list_envios,
                        count_envios_tiny as _db_count_envios,
-                       migrate_imported_json_to_envios as _db_migrate_imported,
-                       update_envio_tiny_status as _db_update_envio_status)
+                       migrate_imported_json_to_envios as _db_migrate_imported)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -776,129 +775,6 @@ def master_api_envios_tiny_migrate():
             resultado[uid] = {"erro": str(exc)}
     app.logger.info("[envios-tiny:migrate] %s", resultado)
     return _json({"success": True, "resultado": resultado})
-
-
-@app.route("/gerencial/api/tiny/limpar-duplicatas", methods=["GET", "POST"])
-@master_required
-@csrf_required
-def master_api_tiny_limpar_duplicatas():
-    """Lista (GET) ou executa (POST) a remocao de contas a receber duplicadas no Tiny.
-
-    Seleciona registros de envios_tiny para a unit informada onde:
-      - status = "enviado"
-      - timestamp comeca com a data informada (YYYY-MM-DD)
-      - resposta_tiny contem id (a conta foi de fato criada no Tiny)
-
-    GET  /gerencial/api/tiny/limpar-duplicatas?unit=<slug>&data=YYYY-MM-DD
-         -> retorna a lista de candidatos (dry-run, nao deleta nada)
-
-    POST /gerencial/api/tiny/limpar-duplicatas
-         body JSON: {"unit": "<slug>", "data": "YYYY-MM-DD"}
-         header: X-CSRF-Token: <token>
-         -> executa DELETE /contas-receber/{id} no Tiny para cada candidato
-            e marca o registro local como status="deletado_dup".
-    """
-    if request.method == "POST":
-        body = request.get_json(silent=True) or {}
-        unit = (body.get("unit") or "").strip()
-        data = (body.get("data") or "").strip()
-    else:
-        unit = (request.args.get("unit") or "").strip()
-        data = (request.args.get("data") or "").strip()
-
-    if not unit or unit not in UNITS:
-        return _json({"success": False, "error": "unit invalida"}, 400)
-    if not data or len(data) != 10:
-        return _json({"success": False, "error": "data invalida (YYYY-MM-DD)"}, 400)
-
-    state_dir = _unit_state_dir(unit)
-    try:
-        all_envios = _db_list_envios(unit, state_dir, status="enviado", limit=5000)
-    except Exception as exc:
-        app.logger.exception("[limpar-dup] falha ao ler envios_tiny unit=%s", unit)
-        return _json({"success": False, "error": f"falha ao ler envios_tiny: {exc}"}, 500)
-
-    candidatos = []
-    for e in all_envios:
-        ts = str(e.get("timestamp", ""))
-        if not ts.startswith(data):
-            continue
-        resp = e.get("resposta_tiny")
-        tiny_id = None
-        if isinstance(resp, dict):
-            tiny_id = resp.get("id")
-        elif isinstance(resp, str) and resp.strip():
-            try:
-                parsed = json.loads(resp)
-                if isinstance(parsed, dict):
-                    tiny_id = parsed.get("id")
-            except Exception:
-                tiny_id = None
-        if not tiny_id:
-            continue
-        candidatos.append({
-            "envio_id":  e.get("id"),
-            "tiny_id":   tiny_id,
-            "cliente":   e.get("cliente", ""),
-            "timestamp": ts,
-            "chave":     e.get("chave_deduplicacao", ""),
-        })
-
-    if request.method == "GET":
-        return _json({
-            "success":    True,
-            "dry_run":    True,
-            "unit":       unit,
-            "data":       data,
-            "total":      len(candidatos),
-            "candidatos": candidatos,
-        })
-
-    if not candidatos:
-        return _json({
-            "success":   True,
-            "dry_run":   False,
-            "unit":      unit,
-            "data":      data,
-            "total":     0,
-            "deletados": 0,
-            "falhas":    0,
-            "detalhes":  [],
-        })
-
-    config = _build_unit_config(unit)
-    _seed_tokens(unit, config)
-    importer = TinyImporter(config, state_dir)
-
-    deletados = 0
-    falhas    = 0
-    detalhes  = []
-    for c in candidatos:
-        tiny_id = c["tiny_id"]
-        try:
-            resp = importer.client.request("DELETE", f"contas-receber/{tiny_id}")
-            _db_update_envio_status(unit, state_dir, c["envio_id"], "deletado_dup",
-                                     resposta_tiny=resp if resp else "")
-            deletados += 1
-            detalhes.append({"tiny_id": tiny_id, "envio_id": c["envio_id"], "status": "ok"})
-        except Exception as exc:
-            falhas += 1
-            detalhes.append({"tiny_id": tiny_id, "envio_id": c["envio_id"],
-                             "status": "erro", "erro": str(exc)})
-            app.logger.warning("[limpar-dup] falha tiny_id=%s: %s", tiny_id, exc)
-
-    app.logger.info("[limpar-dup] unit=%s data=%s total=%d ok=%d falhas=%d",
-                    unit, data, len(candidatos), deletados, falhas)
-    return _json({
-        "success":   True,
-        "dry_run":   False,
-        "unit":      unit,
-        "data":      data,
-        "total":     len(candidatos),
-        "deletados": deletados,
-        "falhas":    falhas,
-        "detalhes":  detalhes,
-    })
 
 
 @app.route("/gerencial/api/backup/download")

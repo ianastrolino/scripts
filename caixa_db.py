@@ -374,23 +374,6 @@ def count_envios_tiny(unit: str, unit_dir: Path) -> dict[str, int]:
     return {r["status"]: r["c"] for r in rows}
 
 
-def update_envio_tiny_status(unit: str, unit_dir: Path, envio_id: int,
-                              new_status: str, erro: str = "",
-                              resposta_tiny: Any = None) -> bool:
-    resposta_str = ""
-    if resposta_tiny is not None:
-        try:
-            resposta_str = json.dumps(resposta_tiny, ensure_ascii=False) if not isinstance(resposta_tiny, str) else resposta_tiny
-        except Exception:
-            resposta_str = str(resposta_tiny)
-    with _connect(unit_dir) as conn:
-        cur = conn.execute(
-            "UPDATE envios_tiny SET status=?, erro=?, resposta_tiny=? WHERE unit=? AND id=?",
-            (new_status, erro, resposta_str, unit, int(envio_id)),
-        )
-        return cur.rowcount > 0
-
-
 def migrate_imported_json_to_envios(unit: str, unit_dir: Path) -> dict[str, int]:
     """Le unit_dir/imported.json e popula envios_tiny. Nao remove o JSON (seguranca).
 
