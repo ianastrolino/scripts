@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Astro Vistorias — Histórico de Caixa</title>
+  <title>Astro Vistorias — Histórico PDV</title>
   <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -188,8 +188,8 @@
     <div class="app-content-wrap">
       <div class="app-page-header">
         <div class="app-page-eyebrow">Rede Astro</div>
-        <h1 class="app-page-title">Histórico de Caixa</h1>
-        <p class="app-page-sub">Consulta linha-a-linha com filtro por período, unidade, forma de pagamento e busca livre</p>
+        <h1 class="app-page-title">Histórico PDV</h1>
+        <p class="app-page-sub">Lançamentos individuais do Caixa do Dia (PDV em tempo real) — linha-a-linha, filtro por período, unidade, FP e busca livre</p>
       </div>
 
       <!-- Filter bar -->
@@ -295,7 +295,7 @@
     active: "historico-caixa",
     breadcrumbs: [
       { label: "Rede" },
-      { label: "Histórico de Caixa", current: true }
+      { label: "Histórico PDV", current: true }
     ]
   });
 
@@ -419,7 +419,10 @@
     const total = filteredLcs.length;
 
     if (total === 0) {
-      tb.innerHTML = `<tr><td colspan="9" class="g-empty">Nenhum lançamento no filtro.</td></tr>`;
+      const msg = allLcs.length === 0
+        ? `Nenhum lançamento do PDV (Caixa do Dia) nesse período.<br><span style="font-size:var(--ds-text-xs);color:var(--t3)">Esta tela mostra apenas lançamentos individuais em tempo real. Envios feitos via planilha ficam em outro fluxo.</span>`
+        : `Nenhum lançamento bate com os filtros atuais.`;
+      tb.innerHTML = `<tr><td colspan="9" class="g-empty">${msg}</td></tr>`;
       document.getElementById("tableMeta").textContent = "0 registro(s)";
       document.getElementById("pager").style.display = "none";
       updateKPIs([]);
