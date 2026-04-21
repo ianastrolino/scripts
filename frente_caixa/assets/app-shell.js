@@ -73,6 +73,12 @@
     search:      _svg('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>'),
     moon:        _svg('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>'),
     sun:         _svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.93 19.07 1.41-1.41"/><path d="m17.66 6.34 1.41-1.41"/>'),
+    wrench:      _svg('<path d="M14.7 6.3a4 4 0 0 0 5.66 5.66l-9.19 9.19a2.83 2.83 0 0 1-4-4z"/><path d="m18 2-3.5 3.5"/>'),
+    download:    _svg('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>'),
+    send:        _svg('<path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/>'),
+    edit:        _svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+    trash:       _svg('<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/>'),
+    plus:        _svg('<path d="M12 5v14M5 12h14"/>'),
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 
@@ -604,5 +610,5 @@
     }
   }
 
-  global.AstroShell = { init };
+  global.AstroShell = { init, icon: (key) => ICONS[key] || "" };
 })(window);

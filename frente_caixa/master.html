@@ -86,15 +86,51 @@
       display: flex; gap: var(--ds-space-2);
     }
     .action-btn {
-      flex: 1; text-align: center; padding: var(--ds-space-2) var(--ds-space-1);
-      border-radius: var(--ds-radius-md); text-decoration: none;
+      flex: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: var(--ds-radius-md);
+      text-decoration: none; cursor: pointer;
+      font-family: inherit;
       font-size: var(--ds-text-sm); font-weight: var(--ds-weight-semi);
-      transition: opacity var(--ds-duration-2) var(--ds-ease);
+      line-height: 1; white-space: nowrap;
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      color: var(--ds-ink);
+      transition: background var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease),
+                  color var(--ds-duration-2) var(--ds-ease);
     }
-    .action-btn:hover { opacity: .85; }
-    .action-btn.primary   { background: var(--ds-accent-600); color: #fff; }
-    .action-btn.secondary { background: var(--ds-surface-alt); color: var(--ds-ink); }
-    .action-btn.tertiary  { background: #ede9fe; color: #6d28d9; }
+    .action-btn:hover {
+      background: var(--ds-surface-alt);
+      border-color: var(--ds-line-strong);
+    }
+    .action-btn:disabled {
+      opacity: .6; cursor: not-allowed;
+    }
+    .action-btn .ab-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; flex-shrink: 0;
+    }
+    .action-btn .ab-icon svg { width: 18px; height: 18px; }
+
+    .action-btn.primary {
+      background: var(--ds-accent-600);
+      border-color: var(--ds-accent-600);
+      color: #fff;
+    }
+    .action-btn.primary:hover {
+      background: var(--ds-accent-700, #1d4ed8);
+      border-color: var(--ds-accent-700, #1d4ed8);
+    }
+
+    .action-btn.danger {
+      background: var(--ds-danger-soft);
+      border-color: #fecaca;
+      color: var(--ds-danger);
+    }
+    .action-btn.danger:hover { background: #fee2e2; }
   </style>
 </head>
 <body>
@@ -115,9 +151,15 @@
           <div style="font-size:var(--ds-text-xs);color:var(--ds-ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Modo manutenção</div>
           <div id="maintStatus" style="font-size:var(--ds-text-sm);color:var(--ds-ink);margin-top:2px">carregando...</div>
         </div>
-        <button id="maintToggle" class="action-btn secondary" style="min-width:180px">...</button>
-        <button id="smtpTest" class="action-btn tertiary" style="min-width:180px">Testar Email</button>
-        <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn secondary" style="min-width:180px">Baixar backup</a>
+        <button id="maintToggle" class="action-btn" style="min-width:200px;flex:0 0 auto">
+          <span class="ab-icon" id="maintIcon"></span><span id="maintLabel">...</span>
+        </button>
+        <button id="smtpTest" class="action-btn" style="min-width:180px;flex:0 0 auto">
+          <span class="ab-icon" id="smtpIcon"></span>Testar e-mail
+        </button>
+        <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn" style="min-width:180px;flex:0 0 auto">
+          <span class="ab-icon" id="backupIcon"></span>Baixar backup
+        </a>
       </div>
 
       <div class="unit-grid" id="unitGrid">
@@ -168,9 +210,15 @@
             <span class="tiny-status"><span class="tiny-dot"></span><span id="tiny-text-${u.id}">verificando...</span></span>
           </div>
           <div class="unit-actions">
-            <a href="/u/${u.id}/caixa2" class="action-btn primary">💰 Caixa do Dia</a>
-            <a href="/u/${u.id}/fechamento" class="action-btn secondary">✓ Fechamento</a>
-            <a href="/u/${u.id}/gerencial" class="action-btn tertiary">📊 Gerencial</a>
+            <a href="/u/${u.id}/caixa2" class="action-btn primary">
+              <span class="ab-icon">${AstroShell.icon("caixa")}</span>Caixa do Dia
+            </a>
+            <a href="/u/${u.id}/fechamento" class="action-btn">
+              <span class="ab-icon">${AstroShell.icon("fechamento")}</span>Fechamento
+            </a>
+            <a href="/u/${u.id}/gerencial" class="action-btn">
+              <span class="ab-icon">${AstroShell.icon("gerencial")}</span>Gerencial
+            </a>
           </div>
         </div>
       `).join("");
@@ -247,9 +295,15 @@
     return _csrfToken;
   }
 
+  // Preenche ícones estáticos dos botões da barra de ops
+  document.getElementById("smtpIcon").innerHTML = AstroShell.icon("send");
+  document.getElementById("backupIcon").innerHTML = AstroShell.icon("download");
+
   async function loadMaintStatus() {
     const statusEl = document.getElementById("maintStatus");
-    const btn = document.getElementById("maintToggle");
+    const btn      = document.getElementById("maintToggle");
+    const lbl      = document.getElementById("maintLabel");
+    const icon     = document.getElementById("maintIcon");
     try {
       const r = await fetch("/master/api/maintenance");
       const j = await r.json();
@@ -258,12 +312,16 @@
         const desde = det.ligado_em || "?";
         const por = det.por || "?";
         statusEl.innerHTML = `<strong style="color:var(--ds-danger)">● LIGADO</strong> desde ${desde} por ${por}`;
-        btn.textContent = "Desligar manutencao";
+        lbl.textContent   = "Desligar manutenção";
+        icon.innerHTML    = AstroShell.icon("wrench");
         btn.dataset.action = "off";
+        btn.classList.add("danger");
       } else {
         statusEl.innerHTML = `<span style="color:var(--ds-success)">● Desligado</span> — sistema operando normalmente`;
-        btn.textContent = "Ligar manutencao";
+        lbl.textContent   = "Ligar manutenção";
+        icon.innerHTML    = AstroShell.icon("wrench");
         btn.dataset.action = "on";
+        btn.classList.remove("danger");
       }
     } catch {
       statusEl.textContent = "erro ao consultar";
@@ -272,11 +330,12 @@
 
   document.getElementById("maintToggle").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
+    const lbl = document.getElementById("maintLabel");
     const action = btn.dataset.action;
     const label = action === "on" ? "LIGAR" : "DESLIGAR";
-    if (!confirm(`${label} modo manutencao? Isso ${action === "on" ? "bloqueia" : "libera"} acesso das unidades.`)) return;
+    if (!confirm(`${label} modo manutenção? Isso ${action === "on" ? "bloqueia" : "libera"} acesso das unidades.`)) return;
     btn.disabled = true;
-    btn.textContent = "...";
+    lbl.textContent = "Aguarde…";
     try {
       const token = await getCsrf();
       const r = await fetch(`/master/api/maintenance/${action}`, {
@@ -288,8 +347,9 @@
       await loadMaintStatus();
     } catch (err) {
       alert("Erro: " + err.message);
-      btn.disabled = false;
       await loadMaintStatus();
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -298,7 +358,8 @@
     if (!to) return;
     const btn = document.getElementById("smtpTest");
     btn.disabled = true;
-    btn.textContent = "Testando...";
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<span class="ab-icon">${AstroShell.icon("send")}</span>Testando…`;
     const qs = (extra) => `/master/api/debug/email-test?to=${encodeURIComponent(to)}${extra ? "&" + extra : ""}`;
     // Testa os dois providers. O que nao estiver configurado volta FALTA_CONFIG.
     const combos = [
@@ -335,7 +396,7 @@
       alert("Erro: " + err.message);
     } finally {
       btn.disabled = false;
-      btn.textContent = "Testar Email";
+      btn.innerHTML = originalHTML;
     }
   });
 
