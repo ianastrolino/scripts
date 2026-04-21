@@ -345,6 +345,50 @@ function _genUuid() {
   });
 }
 
+// ── Placas recentes (autocomplete do formulario) ─────────────────────────────
+const PLACAS_KEY = `caixa.placasRecentes${apiBase.replace(/\//g, "_") || ""}`;
+const PLACAS_MAX = 100;
+
+function _loadPlacasRecentes() {
+  try {
+    const raw = localStorage.getItem(PLACAS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+function _savePlacasRecentes(arr) {
+  try { localStorage.setItem(PLACAS_KEY, JSON.stringify(arr.slice(0, PLACAS_MAX))); } catch {}
+}
+function upsertPlacaRecente(placa, cliente, cpf) {
+  if (!placa) return;
+  const list = _loadPlacasRecentes();
+  const idx = list.findIndex(x => x.placa === placa);
+  const entry = { placa, cliente: cliente || "", cpf: cpf || "", lastUsed: Date.now() };
+  if (idx >= 0) list.splice(idx, 1);
+  list.unshift(entry);
+  _savePlacasRecentes(list);
+  renderPlacasDatalist();
+}
+function renderPlacasDatalist() {
+  const dl = document.getElementById("dlPlacasRecentes");
+  if (!dl) return;
+  const list = _loadPlacasRecentes();
+  dl.innerHTML = list.map(e =>
+    `<option value="${e.placa}">${e.cliente ? escHtml(e.cliente) : ""}</option>`
+  ).join("");
+}
+function autoPreencherPorPlaca(placa) {
+  if (!placa) return;
+  const entry = _loadPlacasRecentes().find(x => x.placa === placa);
+  if (!entry) return;
+  const clienteEl = document.getElementById("fCliente");
+  const cpfEl = document.getElementById("fCpf");
+  if (clienteEl && !clienteEl.value.trim() && entry.cliente) clienteEl.value = entry.cliente;
+  if (cpfEl && !cpfEl.value.trim() && entry.cpf) cpfEl.value = mascaraCpfCnpj(entry.cpf);
+  validarFormulario();
+}
+
 async function lancar() {
   if (state.launching) return;
   state.launching = true;
@@ -390,6 +434,9 @@ async function lancar() {
     const jaExiste = state.lancamentos.some(l => l.id === res.lancamento.id);
     if (!jaExiste) state.lancamentos.push(res.lancamento);
     state.totais = res.totais;
+
+    // Memoriza placa/cliente/cpf para autocomplete futuro
+    upsertPlacaRecente(res.lancamento.placa, res.lancamento.cliente, res.lancamento.cpf);
 
     // Feedback visual imediato
     msg.style.color = "var(--accent)";
@@ -614,6 +661,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const clean = this.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
     if (this.value !== clean) this.value = clean;
   });
+
+  // Autocomplete: ao escolher uma placa do datalist (ou digitar uma ja salva),
+  // preenche cliente/cpf se ainda estiverem vazios. Change dispara no select.
+  document.getElementById("fPlaca").addEventListener("change", function () {
+    autoPreencherPorPlaca(this.value.trim().toUpperCase());
+  });
+  document.getElementById("fPlaca").addEventListener("blur", function () {
+    autoPreencherPorPlaca(this.value.trim().toUpperCase());
+  });
+
+  renderPlacasDatalist();
 
   document.getElementById("ePlaca").addEventListener("input", function () {
     const pos = this.selectionStart;

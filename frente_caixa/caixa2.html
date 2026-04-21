@@ -1504,6 +1504,13 @@
       vertical-align: middle;
     }
     .conf-row:last-child td { border-bottom: none; }
+    .conf-row.matched td { background: rgba(34, 197, 94, .06); }
+    .conf-row.matched .conf-input { border-color: var(--din); background: rgba(34, 197, 94, .05); }
+    .conf-input::placeholder {
+      color: var(--t5);
+      font-weight: 500;
+      opacity: .6;
+    }
     .conf-fp-label {
       display: flex;
       align-items: center;
@@ -1710,7 +1717,8 @@
             <label for="fPlaca">Placa do veículo</label>
             <input id="fPlaca" class="placa" type="text" maxlength="7"
                    placeholder="ABC1D23" autocomplete="off" spellcheck="false"
-                   inputmode="text">
+                   inputmode="text" list="dlPlacasRecentes">
+            <datalist id="dlPlacasRecentes"></datalist>
             <span id="placaError" style="display:none;font-size:11.5px;font-weight:600;color:var(--red);margin-top:3px;"></span>
           </div>
 
@@ -2121,8 +2129,8 @@
     })();
   </script>
 
-  <script src="caixa.js?v=14"></script>
-  <script src="caixa2-init.js?v=14"></script>
-  <script src="caixa2.js?v=14"></script>
+  <script src="caixa.js?v=15"></script>
+  <script src="caixa2-init.js?v=15"></script>
+  <script src="caixa2.js?v=15"></script>
 </body>
 </html>

@@ -303,12 +303,21 @@ function abrirConferencia() {
   document.getElementById("cPdvPix").textContent   = fmtConf(pdvPix);
   document.getElementById("cPdvTotal").textContent = fmtConf(pdvDin + pdvDeb + pdvCrd + pdvPix);
 
-  ["cFisDin","cFisDeb","cFisCrd","cFisPix"].forEach(id => { document.getElementById(id).value = ""; });
+  // Placeholder de cada input fisico mostra o valor do PDV como dica (nao pre-preenche)
+  const fmtPlaceholder = v => Number(v || 0).toFixed(2).replace(".", ",");
+  const placeholders = [["cFisDin", pdvDin], ["cFisDeb", pdvDeb], ["cFisCrd", pdvCrd], ["cFisPix", pdvPix]];
+  placeholders.forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = "";
+    el.placeholder = v > 0 ? fmtPlaceholder(v) : "0,00";
+  });
   ["cDiffDin","cDiffDeb","cDiffCrd","cDiffPix","cDiffTotal"].forEach(id => {
     const el = document.getElementById(id);
     el.textContent = "—";
     el.className = "conf-diff";
   });
+  document.querySelectorAll("#confCard .conf-row.matched").forEach(tr => tr.classList.remove("matched"));
   const alert = document.getElementById("confAlert");
   alert.className = "conf-alert";
   alert.textContent = "";
@@ -341,11 +350,17 @@ function calcularConferencia() {
 
   const renderDiff = (elId, pdv, fis, filled) => {
     const el = document.getElementById(elId);
-    if (!filled) { el.textContent = "—"; el.className = "conf-diff"; return; }
+    const row = el ? el.closest("tr.conf-row") : null;
+    if (!filled) {
+      el.textContent = "—"; el.className = "conf-diff";
+      if (row) row.classList.remove("matched");
+      return;
+    }
     const diff = fis - pdv;
     const abs  = Math.abs(diff);
     el.textContent = (diff >= 0 ? "+" : "−") + fmtConf(abs);
     el.className   = "conf-diff " + (abs < 0.01 ? "ok" : abs <= 5 ? "warn" : "err");
+    if (row) row.classList.toggle("matched", abs < 0.01);
   };
 
   renderDiff("cDiffDin",   pdvDin,   fisDin,   document.getElementById("cFisDin").value !== "");
