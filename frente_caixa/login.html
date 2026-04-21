@@ -117,6 +117,8 @@
 
     .error-box {
       display: none;
+      align-items: center;
+      gap: var(--ds-space-2);
       padding: var(--ds-space-3) var(--ds-space-4);
       border-radius: var(--ds-radius-md);
       background: var(--ds-danger-soft);
@@ -125,7 +127,6 @@
       font-size: var(--ds-text-sm);
       font-weight: var(--ds-weight-semi);
       margin-bottom: var(--ds-space-4);
-      display: flex; align-items: center; gap: var(--ds-space-2);
     }
     .error-box.is-visible { display: flex; }
     .error-box-icon { font-size: 16px; }
@@ -320,7 +321,6 @@
     if (mensagens[erro]) {
       txt.textContent = mensagens[erro];
       box.classList.add("is-visible");
-      box.style.display = "flex";
     }
 
     // Foca no primeiro campo vazio
