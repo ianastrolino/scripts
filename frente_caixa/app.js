@@ -45,6 +45,7 @@ const state = {
   filter: "todos",
   conferencia: {},     // { recordId: { status, pdv_valor, pdv_fp, pdv_hora } }
   conferido: new Set(), // IDs confirmados manualmente apesar de divergencia/sem_pdv
+  pdvBase: null,       // { dinheiro, debito, credito, pix } snapshot do PDV (base para Entradas)
 };
 
 const knownTinyClients = new Map();
@@ -531,9 +532,31 @@ function renderSummary() {
   const pending = state.records.filter((record) => recordIssues(record).length > 0).length;
   const firstDate = state.records[0]?.data || "";
   const dueDate = firstDate ? lastDayOfMonth(firstDate) : "";
-  const cashInputs = [...document.querySelectorAll("[data-cash]")].reduce((acc, input) => acc + parseMoney(input.value), 0);
   const returnAmount = parseMoney(els.returnAmount.value);
   const netTotal = total - returnAmount;
+
+  // Entradas físicas: PDV base + AV confirmadas como sem_pdv (para refletir fechamento final)
+  if (state.pdvBase) {
+    const eff = { ...state.pdvBase };
+    for (const r of avRecords) {
+      if (!state.conferido.has(r.id)) continue;
+      const conf = state.conferencia[r.id];
+      if (!conf || conf.status !== "sem_pdv") continue;
+      const fp = r.avPagamento;
+      if (fp && eff[fp] !== undefined) eff[fp] += Number(r.preco) || 0;
+    }
+    ["dinheiro", "debito", "credito", "pix"].forEach((k) => {
+      const v = eff[k] || 0;
+      const disp = document.querySelector(`.pdv-val[data-pdv-cash="${k}"]`);
+      const inp  = document.querySelector(`.money-input[data-cash="${k}"]`);
+      if (disp) {
+        disp.textContent = v > 0 ? formatMoney(v) : "—";
+        disp.classList.toggle("is-empty", !(v > 0));
+      }
+      if (inp) inp.value = v > 0 ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+    });
+  }
+  const cashInputs = [...document.querySelectorAll("[data-cash]")].reduce((acc, input) => acc + parseMoney(input.value), 0);
 
   els.cashDate.textContent = formatDateBr(firstDate);
   els.sourceFile.textContent = state.sourceFiles.length ? `${state.sourceFiles.length} arquivo(s)` : "Nenhum arquivo";

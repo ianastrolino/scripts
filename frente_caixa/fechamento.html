@@ -1338,21 +1338,17 @@
           chip.className   = 'pdv-banner-chip' + (absD < 0.01 ? '' : ' warn');
           banner.classList.add('show');
 
-          // Entradas físicas: agora vêm do PDV (read-only) em vez do lançamento físico manual
-          const cashKeys = ['dinheiro', 'debito', 'credito', 'pix'];
-          cashKeys.forEach((k) => {
-            const v = Number((c.pdv && c.pdv[k]) || 0);
-            const disp = document.querySelector(`.pdv-val[data-pdv-cash="${k}"]`);
-            const inp  = document.querySelector(`.money-input[data-cash="${k}"]`);
-            if (disp) {
-              disp.textContent = v > 0 ? fmt(v) : '—';
-              disp.classList.toggle('is-empty', !(v > 0));
-            }
-            if (inp) {
-              inp.value = v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-              inp.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-          });
+          // Entradas físicas: agora vêm do PDV (read-only). Guarda baseline no state
+          // para que renderSummary adicione AV 'sem_pdv' confirmadas.
+          if (typeof state !== 'undefined' && c.pdv) {
+            state.pdvBase = {
+              dinheiro: Number(c.pdv.dinheiro) || 0,
+              debito:   Number(c.pdv.debito)   || 0,
+              credito:  Number(c.pdv.credito)  || 0,
+              pix:      Number(c.pdv.pix)      || 0,
+            };
+            if (typeof renderSummary === 'function') renderSummary();
+          }
         }
       } catch (e) {}
     })();
