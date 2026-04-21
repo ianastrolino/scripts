@@ -95,6 +95,25 @@ CREATE INDEX IF NOT EXISTS idx_envios_unit_ts   ON envios_tiny(unit, timestamp);
 CREATE INDEX IF NOT EXISTS idx_envios_status    ON envios_tiny(unit, status);
 """
 
+_DDL_HISTORICO_TINY = """
+CREATE TABLE IF NOT EXISTS historico_tiny (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit          TEXT NOT NULL,
+    id_tiny       TEXT NOT NULL,
+    data          TEXT NOT NULL DEFAULT "",
+    cliente       TEXT NOT NULL DEFAULT "",
+    categoria_id  TEXT NOT NULL DEFAULT "",
+    categoria     TEXT NOT NULL DEFAULT "",
+    servico_norm  TEXT NOT NULL DEFAULT "",
+    valor         REAL NOT NULL DEFAULT 0,
+    historico     TEXT NOT NULL DEFAULT "",
+    fetched_at    TEXT NOT NULL,
+    UNIQUE(unit, id_tiny)
+);
+CREATE INDEX IF NOT EXISTS idx_hist_unit_data ON historico_tiny(unit, data);
+CREATE INDEX IF NOT EXISTS idx_hist_unit_cat  ON historico_tiny(unit, servico_norm);
+"""
+
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
@@ -110,6 +129,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
     conn.executescript(_DDL_ENVIOS)
+    conn.executescript(_DDL_HISTORICO_TINY)
     return conn
 
 
@@ -377,6 +397,63 @@ def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to
             (unit, date_from, date_to),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def upsert_historico_tiny(unit: str, unit_dir: Path, row: dict[str, Any]) -> bool:
+    """Insere ou atualiza registro em historico_tiny. Retorna True se novo, False se atualizou."""
+    payload = {
+        "unit":         unit,
+        "id_tiny":      str(row.get("id_tiny", "")),
+        "data":         row.get("data", ""),
+        "cliente":      row.get("cliente", ""),
+        "categoria_id": str(row.get("categoria_id", "")),
+        "categoria":    row.get("categoria", ""),
+        "servico_norm": row.get("servico_norm", ""),
+        "valor":        float(row.get("valor", 0) or 0),
+        "historico":    row.get("historico", ""),
+        "fetched_at":   row.get("fetched_at", ""),
+    }
+    with _connect(unit_dir) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO historico_tiny "
+                "(unit,id_tiny,data,cliente,categoria_id,categoria,servico_norm,valor,historico,fetched_at) "
+                "VALUES (:unit,:id_tiny,:data,:cliente,:categoria_id,:categoria,:servico_norm,:valor,:historico,:fetched_at)",
+                payload,
+            )
+            return True
+        except sqlite3.IntegrityError:
+            conn.execute(
+                "UPDATE historico_tiny SET data=:data, cliente=:cliente, categoria_id=:categoria_id, "
+                "categoria=:categoria, servico_norm=:servico_norm, valor=:valor, historico=:historico, "
+                "fetched_at=:fetched_at WHERE unit=:unit AND id_tiny=:id_tiny",
+                payload,
+            )
+            return False
+
+
+def load_historico_tiny_mes(unit: str | None, unit_dir: Path, ano_mes: str) -> list[dict[str, Any]]:
+    """Carrega registros de historico_tiny de um mês (ex: '2026-04'). unit=None traz todas."""
+    sql = "SELECT * FROM historico_tiny WHERE data LIKE ? "
+    params: list[Any] = [f"{ano_mes}-%"]
+    if unit:
+        sql += "AND unit=? "
+        params.append(unit)
+    sql += "ORDER BY data ASC"
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_historico_tiny(unit: str, unit_dir: Path, ano_mes: str | None = None) -> int:
+    sql = "SELECT COUNT(*) AS c FROM historico_tiny WHERE unit=?"
+    params: list[Any] = [unit]
+    if ano_mes:
+        sql += " AND data LIKE ?"
+        params.append(f"{ano_mes}-%")
+    with _connect(unit_dir) as conn:
+        r = conn.execute(sql, params).fetchone()
+    return int(r["c"] if r else 0)
 
 
 def count_envios_tiny(unit: str, unit_dir: Path) -> dict[str, int]:

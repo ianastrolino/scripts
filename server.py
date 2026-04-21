@@ -75,6 +75,9 @@ from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_
                        insert_envio_tiny as _db_insert_envio, list_envios_tiny as _db_list_envios,
                        count_envios_tiny as _db_count_envios,
                        load_envios_validos_range as _db_load_envios_range,
+                       upsert_historico_tiny as _db_upsert_hist,
+                       load_historico_tiny_mes as _db_load_hist_mes,
+                       count_historico_tiny as _db_count_hist,
                        migrate_imported_json_to_envios as _db_migrate_imported)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
@@ -845,6 +848,199 @@ def master_api_envios_tiny_migrate():
             resultado[uid] = {"erro": str(exc)}
     app.logger.info("[envios-tiny:migrate] %s", resultado)
     return _json({"success": True, "resultado": resultado})
+
+
+_BI_CATEGORIAS_BLACKLIST = {"APORTE", "RENDIMENTO", "JUROS", "MULTA", "DEPOSITO"}
+
+
+def _e_categoria_de_servico(nome: str) -> bool:
+    """Filtra categorias que NAO sao servicos (aportes, rendimentos, etc)."""
+    up = (nome or "").strip().upper()
+    if not up:
+        return False
+    return not any(termo in up for termo in _BI_CATEGORIAS_BLACKLIST)
+
+
+@app.route("/gerencial/api/bi/sync-historico", methods=["POST"])
+@master_required
+@csrf_required
+def master_api_bi_sync_historico():
+    """Puxa contas a receber do Tiny de uma unidade num mes e salva em historico_tiny.
+
+    Body: { unit: "barueri", mes: "2026-04" }
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        unit = (data.get("unit") or "").strip()
+        mes  = (data.get("mes")  or "").strip()  # "AAAA-MM"
+        if unit not in UNITS:
+            return _json({"success": False, "error": "unit invalida"}, 400)
+        try:
+            ano, mm = mes.split("-")
+            ano, mm = int(ano), int(mm)
+            data_ini = dt.date(ano, mm, 1)
+            data_fim = (data_ini.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+        except Exception:
+            return _json({"success": False, "error": "mes invalido (use AAAA-MM)"}, 400)
+
+        config    = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        importer  = TinyImporter(config, state_dir)
+        client    = importer.client
+
+        # Converte AAAA-MM-DD -> DD/MM/AAAA (formato esperado pelo Tiny)
+        def _br(d: dt.date) -> str:
+            return d.strftime("%d/%m/%Y")
+
+        todos: list[dict] = []
+        offset = 0
+        limit  = 100
+        while True:
+            params = {
+                "limit": limit, "offset": offset,
+                "dataInicial": _br(data_ini), "dataFinal": _br(data_fim),
+            }
+            resp = client.request("GET", "contas-receber", params=params)
+            page = resp.get("itens", [])
+            todos.extend(page)
+            if len(page) < limit:
+                break
+            offset += limit
+
+        # GET detalhe em paralelo pra pegar categoria (lista nao retorna)
+        from concurrent.futures import ThreadPoolExecutor
+        def _fetch_detalhe(item: dict) -> dict | None:
+            try:
+                return client.request("GET", f"contas-receber/{item['id']}")
+            except Exception as exc:
+                app.logger.warning("[bi.sync] falha detalhe id=%s: %s", item.get("id"), exc)
+                return None
+
+        detalhes: list[dict] = []
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            for d in pool.map(_fetch_detalhe, todos):
+                if d:
+                    detalhes.append(d)
+
+        ts_now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        novos = 0
+        atualizados = 0
+        for d in detalhes:
+            cat = d.get("categoria") or {}
+            cat_id = str(cat.get("id", "")) if isinstance(cat, dict) else ""
+            cat_nome = cat.get("descricao") or cat.get("nome") or "" if isinstance(cat, dict) else ""
+            contato = d.get("cliente") or d.get("contato") or {}
+            cliente = contato.get("nome", "") if isinstance(contato, dict) else ""
+            data_emi = d.get("dataEmissao") or d.get("data") or ""
+            # Tiny pode devolver em DD/MM/AAAA — normaliza pra AAAA-MM-DD
+            if "/" in data_emi:
+                try:
+                    dd, mm2, yy = data_emi.split("/")
+                    data_emi = f"{yy}-{mm2.zfill(2)}-{dd.zfill(2)}"
+                except Exception:
+                    pass
+            servico_norm = apply_alias(config, "servico", (cat_nome or "").strip().upper())
+            row = {
+                "id_tiny":      d.get("id", ""),
+                "data":         data_emi,
+                "cliente":      clean_text(cliente).upper(),
+                "categoria_id": cat_id,
+                "categoria":    cat_nome,
+                "servico_norm": servico_norm,
+                "valor":        float(d.get("valor", 0) or 0),
+                "historico":    d.get("historico", ""),
+                "fetched_at":   ts_now,
+            }
+            if _db_upsert_hist(unit, state_dir, row):
+                novos += 1
+            else:
+                atualizados += 1
+
+        return _json({
+            "success": True,
+            "unit": unit, "mes": mes,
+            "total_api": len(todos),
+            "detalhes_ok": len(detalhes),
+            "novos": novos,
+            "atualizados": atualizados,
+            "total_tabela": _db_count_hist(unit, state_dir, mes),
+        })
+    except Exception as exc:
+        app.logger.exception("[bi.sync-historico] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/gerencial/api/bi/faturamento", methods=["GET"])
+@master_required
+def master_api_bi_faturamento():
+    """Agrega historico_tiny do mes. Params: mes=AAAA-MM (obrigatorio), unit=<slug> (opcional)."""
+    try:
+        mes  = (request.args.get("mes") or "").strip()
+        unit = (request.args.get("unit") or "").strip() or None
+        if not mes or len(mes) != 7 or mes[4] != "-":
+            return _json({"success": False, "error": "mes invalido (use AAAA-MM)"}, 400)
+
+        units_iter = [unit] if unit and unit in UNITS else list(UNITS.keys())
+        registros: list[dict] = []
+        por_unit: dict[str, dict] = {}
+        for uid in units_iter:
+            state_dir = _unit_state_dir(uid)
+            try:
+                lista = _db_load_hist_mes(uid, state_dir, mes)
+            except Exception as exc:
+                app.logger.warning("[bi.faturamento] falha unit=%s: %s", uid, exc)
+                lista = []
+            for r in lista:
+                r["unit"] = uid
+                r["unit_nome"] = UNITS.get(uid, {}).get("nome", uid)
+            registros.extend(lista)
+            sub_total = sum(float(r.get("valor", 0) or 0) for r in lista if _e_categoria_de_servico(r.get("categoria", "")))
+            por_unit[uid] = {
+                "nome": UNITS.get(uid, {}).get("nome", uid),
+                "total": round(sub_total, 2),
+                "count": sum(1 for r in lista if _e_categoria_de_servico(r.get("categoria", ""))),
+            }
+
+        # Filtra: so categorias de servico (exclui aportes/rendimentos/etc)
+        servicos = [r for r in registros if _e_categoria_de_servico(r.get("categoria", ""))]
+
+        total_geral = sum(float(r.get("valor", 0) or 0) for r in servicos)
+        count_total = len(servicos)
+
+        por_servico: dict[str, dict] = {}
+        for r in servicos:
+            key = (r.get("servico_norm") or r.get("categoria") or "").strip().upper() or "(sem categoria)"
+            b = por_servico.setdefault(key, {"servico": key, "count": 0, "total": 0.0})
+            b["count"] += 1
+            b["total"] += float(r.get("valor", 0) or 0)
+        ranking_servicos = sorted(
+            [{**v, "total": round(v["total"], 2)} for v in por_servico.values()],
+            key=lambda x: x["total"], reverse=True,
+        )
+
+        por_cliente: dict[str, dict] = {}
+        for r in servicos:
+            key = (r.get("cliente") or "").strip().upper() or "(sem cliente)"
+            b = por_cliente.setdefault(key, {"cliente": key, "count": 0, "total": 0.0})
+            b["count"] += 1
+            b["total"] += float(r.get("valor", 0) or 0)
+        ranking_clientes = sorted(
+            [{**v, "total": round(v["total"], 2)} for v in por_cliente.values()],
+            key=lambda x: x["total"], reverse=True,
+        )
+
+        return _json({
+            "success": True,
+            "mes": mes,
+            "total": round(total_geral, 2),
+            "count": count_total,
+            "por_unit": por_unit,
+            "ranking_servicos": ranking_servicos,
+            "ranking_clientes": ranking_clientes,
+        })
+    except Exception as exc:
+        app.logger.exception("[bi.faturamento] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/gerencial/api/backup/download")
