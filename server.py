@@ -74,6 +74,7 @@ from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_
                        load_snapshot as _db_load_snap, delete_snapshot as _db_delete_snap,
                        insert_envio_tiny as _db_insert_envio, list_envios_tiny as _db_list_envios,
                        count_envios_tiny as _db_count_envios,
+                       load_envios_validos_range as _db_load_envios_range,
                        migrate_imported_json_to_envios as _db_migrate_imported)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
@@ -1392,6 +1393,17 @@ def api_send(unit: str):
         try:
             ts_now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
             records_by_chave = {r.get("id", ""): r for r in records if r.get("id")}
+
+            def _fp_normalizado(r: dict) -> str:
+                """Resolve fp pro gerencial: FA/faturado→faturado, AV→avPagamento (dinheiro/pix/...)."""
+                fp_raw = (r.get("fp", "") or "").strip()
+                av_pag = (r.get("avPagamento", "") or "").strip().lower()
+                if fp_raw.upper() == "FA":
+                    return "faturado"
+                if fp_raw.upper() == "AV":
+                    return av_pag if av_pag and av_pag != "pendente" else "avista"
+                return fp_raw.lower()
+
             for e in results["enviados"]:
                 chave = e["chave"]
                 r = records_by_chave.get(chave, {})
@@ -1403,7 +1415,7 @@ def api_send(unit: str):
                     "cliente":            r.get("cliente", e.get("cliente", "")),
                     "servico":            r.get("servico", ""),
                     "valor":              float(r.get("preco", 0) or 0),
-                    "fp":                 r.get("fp", ""),
+                    "fp":                 _fp_normalizado(r),
                     "status":             "enviado",
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
@@ -1422,7 +1434,7 @@ def api_send(unit: str):
                     "cliente":            r.get("cliente", p.get("cliente", "")),
                     "servico":            r.get("servico", ""),
                     "valor":              float(r.get("preco", 0) or 0),
-                    "fp":                 r.get("fp", ""),
+                    "fp":                 _fp_normalizado(r),
                     "status":             status,
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
@@ -1439,7 +1451,7 @@ def api_send(unit: str):
                     "cliente":            r.get("cliente", f.get("cliente", "")),
                     "servico":            r.get("servico", ""),
                     "valor":              float(r.get("preco", 0) or 0),
-                    "fp":                 r.get("fp", ""),
+                    "fp":                 _fp_normalizado(r),
                     "status":             "falha",
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
@@ -2370,30 +2382,63 @@ def unit_gerencial(unit: str):
 @app.route("/u/<unit>/api/gerencial/historico")
 @gerencial_required
 def api_gerencial_historico(unit: str):
+    """Histórico financeiro: envios_tiny até ontem (verdade consolidada) + PDV de hoje (parcial).
+
+    Dias anteriores: fonte é `envios_tiny` (o que foi efetivamente ao Tiny ERP).
+    Hoje: fonte é o PDV (`lancamentos`), porque ainda não foi enviado ao Tiny.
+    """
     try:
         date_from = request.args.get("from", "")
         date_to   = request.args.get("to", "")
         dt.date.fromisoformat(date_from)
         dt.date.fromisoformat(date_to)
 
-        unit_dir    = _unit_state_dir(unit)
-        lancamentos = _db_load_range(unit, unit_dir, date_from, date_to)
+        unit_dir = _unit_state_dir(unit)
+        today    = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
 
-        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran")
+        # Corte: envios_tiny de date_from até min(date_to, ontem). PDV só do dia de hoje.
+        # Se date_to < hoje: usa todo o range em envios_tiny, sem PDV.
+        # Se date_to >= hoje: envios até ontem + PDV de hoje.
+        incluir_hoje = (date_to >= today >= date_from)
+        envios_ate = min(date_to, (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()) if incluir_hoje else date_to
+
+        def _norm_fp(fp: str) -> str:
+            f = (fp or "").strip().lower()
+            if f == "fa": return "faturado"
+            if f == "av": return "avista"
+            return f
+
+        registros: list[dict] = []
+        if envios_ate >= date_from:
+            envios = _db_load_envios_range(unit, unit_dir, date_from, envios_ate)
+            for e in envios:
+                registros.append({
+                    "data":    e.get("data_lancamento") or "",
+                    "placa":   e.get("placa", ""),
+                    "cliente": e.get("cliente", ""),
+                    "servico": e.get("servico", ""),
+                    "valor":   float(e.get("valor", 0) or 0),
+                    "fp":      _norm_fp(e.get("fp", "")),
+                    "fonte":   "tiny",
+                })
+        if incluir_hoje:
+            for lc in _db_load_range(unit, unit_dir, today, today):
+                registros.append({**lc, "fonte": "pdv"})
+
+        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran", "avista")
         totais: dict[str, float] = {fp: 0.0 for fp in fp_keys}
-        for lc in lancamentos:
+        for lc in registros:
             fp = lc.get("fp", "")
             if fp in totais:
                 totais[fp] += float(lc.get("valor", 0))
 
         total  = sum(totais.values())
         avista = total - totais["faturado"] - totais["detran"]
-        count  = len(lancamentos)
+        count  = len(registros)
 
-        # Agrupa por dia
         by_day: dict[str, list] = {}
-        for lc in lancamentos:
-            by_day.setdefault(lc["data"], []).append(lc)
+        for lc in registros:
+            by_day.setdefault(lc.get("data", ""), []).append(lc)
 
         por_dia = []
         for data in sorted(by_day.keys()):
@@ -2404,6 +2449,7 @@ def api_gerencial_historico(unit: str):
                 if fp in dt_fp:
                     dt_fp[fp] += float(lc.get("valor", 0))
             dtotal = sum(dt_fp.values())
+            fontes = {lc.get("fonte", "") for lc in dlcs}
             por_dia.append({
                 "data":      data,
                 "total":     round(dtotal, 2),
@@ -2415,14 +2461,15 @@ def api_gerencial_historico(unit: str):
                 "credito":   round(dt_fp["credito"], 2),
                 "pix":       round(dt_fp["pix"], 2),
                 "count":     len(dlcs),
+                "fonte":     "pdv" if fontes == {"pdv"} else ("tiny" if fontes == {"tiny"} else "misto"),
+                "parcial":   data == today and "pdv" in fontes,
                 "lancamentos": dlcs,
             })
 
-        # Ranking de serviços
         svc_count: dict[str, int]   = {}
         svc_total: dict[str, float] = {}
-        for lc in lancamentos:
-            s = lc.get("servico", "").strip()
+        for lc in registros:
+            s = (lc.get("servico", "") or "").strip()
             if s:
                 svc_count[s] = svc_count.get(s, 0) + 1
                 svc_total[s] = svc_total.get(s, 0.0) + float(lc.get("valor", 0))
@@ -2437,6 +2484,7 @@ def api_gerencial_historico(unit: str):
             "success":  True,
             "unidade":  ud.get("nome", unit),
             "periodo":  {"from": date_from, "to": date_to},
+            "fonte":    {"tiny_ate": envios_ate, "pdv_hoje": incluir_hoje, "hoje": today},
             "resumo": {
                 "total":        round(total, 2),
                 "avista":       round(avista, 2),
@@ -2470,17 +2518,39 @@ def api_gerencial_exportar(unit: str):
         dt.date.fromisoformat(date_from)
         dt.date.fromisoformat(date_to)
 
-        unit_dir    = _unit_state_dir(unit)
-        lancamentos = _db_load_range(unit, unit_dir, date_from, date_to)
+        unit_dir = _unit_state_dir(unit)
+        today    = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        incluir_hoje = (date_to >= today >= date_from)
+        envios_ate = min(date_to, (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()) if incluir_hoje else date_to
+
+        def _norm_fp(fp):
+            f = (fp or "").strip().lower()
+            if f == "fa": return "faturado"
+            if f == "av": return "avista"
+            return f
+
+        linhas = []
+        if envios_ate >= date_from:
+            for e in _db_load_envios_range(unit, unit_dir, date_from, envios_ate):
+                linhas.append({
+                    "data": e.get("data_lancamento", ""), "hora": "",
+                    "placa": e.get("placa", ""), "cliente": e.get("cliente", ""),
+                    "cpf": "", "servico": e.get("servico", ""),
+                    "valor": e.get("valor", 0), "fp": _norm_fp(e.get("fp", "")),
+                    "fonte": "tiny",
+                })
+        if incluir_hoje:
+            for lc in _db_load_range(unit, unit_dir, today, today):
+                linhas.append({**lc, "fonte": "pdv"})
 
         out = io.StringIO()
         w   = csv.writer(out)
-        w.writerow(["Data", "Hora", "Placa", "Cliente", "CPF/CNPJ", "Servico", "Valor", "FP"])
-        for lc in lancamentos:
+        w.writerow(["Data", "Hora", "Placa", "Cliente", "CPF/CNPJ", "Servico", "Valor", "FP", "Fonte"])
+        for lc in linhas:
             w.writerow([
                 lc.get("data", ""), lc.get("hora", ""), lc.get("placa", ""),
                 lc.get("cliente", ""), lc.get("cpf", ""), lc.get("servico", ""),
-                lc.get("valor", ""), lc.get("fp", ""),
+                lc.get("valor", ""), lc.get("fp", ""), lc.get("fonte", ""),
             ])
 
         nome = UNITS.get(unit, {}).get("nome", unit)

@@ -365,6 +365,20 @@ def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
     return out
 
 
+def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to: str) -> list[dict[str, Any]]:
+    """Lê envios_tiny que representam registros efetivamente no Tiny (exclui falhas).
+    Usado pelo Gerencial/Histórico como fonte financeira consolidada."""
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(
+            "SELECT data_lancamento, placa, cliente, servico, valor, fp, status, timestamp "
+            "FROM envios_tiny "
+            "WHERE unit=? AND data_lancamento>=? AND data_lancamento<=? AND status!='falha' "
+            "ORDER BY data_lancamento ASC",
+            (unit, date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def count_envios_tiny(unit: str, unit_dir: Path) -> dict[str, int]:
     with _connect(unit_dir) as conn:
         rows = conn.execute(

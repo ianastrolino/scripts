@@ -207,12 +207,36 @@
     .svc-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
     .rank-num { font-size: var(--ds-text-xs); color: var(--ds-ink-muted); font-weight: var(--ds-weight-bold); }
 
+    /* ── Badge de fonte dos dados ────────────────────────── */
+    .fonte-badge {
+      grid-column: 1 / -1;
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      padding: 6px 12px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--ds-radius-full);
+      width: fit-content;
+      margin-bottom: var(--ds-space-2);
+    }
+
     /* ── Historico por dia ───────────────────────────────── */
     .day-group {
       background: var(--card); border: 1px solid var(--border);
       border-radius: var(--rl); margin-bottom: var(--ds-space-2);
       overflow: hidden;
       box-shadow: var(--ds-shadow-xs);
+    }
+    .day-group.parcial { border-color: #fbbf24; background: #fffbeb; }
+    .day-parcial {
+      display: inline-block;
+      font-size: var(--ds-text-xs);
+      background: #fbbf24; color: #78350f;
+      padding: 1px 8px;
+      border-radius: var(--ds-radius-full);
+      font-weight: var(--ds-weight-semi);
+      margin-left: 8px;
+      vertical-align: middle;
     }
     .day-summary {
       display: flex; align-items: center; gap: var(--ds-space-3);
@@ -520,7 +544,7 @@
       if (!data.success) throw new Error(data.error || "Erro ao carregar.");
       lastData = data;
       if (data.unidade) document.getElementById("hdrUnidade").textContent = data.unidade;
-      renderResumo(data.resumo);
+      renderResumo(data.resumo, data.fonte);
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
       renderHistorico(data.por_dia);
@@ -541,7 +565,7 @@
   });
 
   // ── Render: resumo ──────────────────────────────────────
-  function renderResumo(r) {
+  function renderResumo(r, fonte) {
     const tiles = [
       { cls: "t-total",  label: "Total Geral",    val: brl(r.total),        sub: `${r.count} lançamentos` },
       { cls: "t-av",     label: "À Vista",         val: brl(r.avista),       sub: "Dinheiro · Débito · Crédito · PIX" },
@@ -550,7 +574,10 @@
       { cls: "t-count",  label: "Lançamentos",     val: r.count,             sub: "" },
       { cls: "t-ticket", label: "Ticket Médio",    val: brl(r.ticket_medio), sub: "" },
     ];
-    document.getElementById("resumoStrip").innerHTML = tiles.map(t => `
+    const fonteBadge = fonte && fonte.pdv_hoje
+      ? `<div class="fonte-badge">📊 Consolidado Tiny (até ${fmtDate(fonte.tiny_ate)}) + PDV de hoje (parcial)</div>`
+      : (fonte ? `<div class="fonte-badge">📊 Consolidado Tiny</div>` : "");
+    document.getElementById("resumoStrip").innerHTML = fonteBadge + tiles.map(t => `
       <div class="r-tile ${t.cls}">
         <div class="r-label">${t.label}</div>
         <div class="r-value">${t.val}</div>
@@ -635,10 +662,11 @@
         <td><span class="fp-chip ${lc.fp || ""}">${fpLabel(lc.fp)}</span></td>
       </tr>`).join("");
 
+      const parcialBadge = d.parcial ? '<span class="day-parcial">hoje · parcial</span>' : "";
       return `
-        <div class="day-group" data-date="${d.data}">
+        <div class="day-group${d.parcial ? " parcial" : ""}" data-date="${d.data}">
           <div class="day-summary" onclick="toggleDay(this)">
-            <div class="day-date">${fmtDate(d.data)}</div>
+            <div class="day-date">${fmtDate(d.data)} ${parcialBadge}</div>
             <div class="day-count">${d.count} lanç.</div>
             <div class="day-chips">${chips}</div>
             <div class="day-total">${brl(d.total)}</div>
@@ -663,7 +691,8 @@
 
   function fpLabel(fp) {
     const m = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito",
-                pix: "PIX", faturado: "Faturado", detran: "DETRAN" };
+                pix: "PIX", faturado: "Faturado", detran: "DETRAN",
+                avista: "À Vista" };
     const lbl = m[fp] || fp || "—";
     const ico = (window.AstroShell && AstroShell.fpIcon && fp) ? AstroShell.fpIcon(fp) : "";
     return ico ? `<span class="fp-ico">${ico}</span>${lbl}` : lbl;
