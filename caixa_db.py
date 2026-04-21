@@ -71,6 +71,30 @@ CREATE INDEX IF NOT EXISTS idx_snap_unit_data ON planilhas_snapshot(unit, data);
 CREATE INDEX IF NOT EXISTS idx_snap_unit_created ON planilhas_snapshot(unit, created_at);
 """
 
+_DDL_ENVIOS = """
+CREATE TABLE IF NOT EXISTS envios_tiny (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit               TEXT NOT NULL,
+    chave_deduplicacao TEXT NOT NULL,
+    timestamp          TEXT NOT NULL,
+    data_lancamento    TEXT NOT NULL DEFAULT "",
+    placa              TEXT NOT NULL DEFAULT "",
+    cliente            TEXT NOT NULL DEFAULT "",
+    servico            TEXT NOT NULL DEFAULT "",
+    valor              REAL NOT NULL DEFAULT 0,
+    fp                 TEXT NOT NULL DEFAULT "",
+    status             TEXT NOT NULL,
+    arquivo            TEXT NOT NULL DEFAULT "",
+    linha              INTEGER NOT NULL DEFAULT 0,
+    resposta_tiny      TEXT NOT NULL DEFAULT "",
+    erro               TEXT NOT NULL DEFAULT "",
+    UNIQUE(unit, chave_deduplicacao)
+);
+CREATE INDEX IF NOT EXISTS idx_envios_unit_data ON envios_tiny(unit, data_lancamento);
+CREATE INDEX IF NOT EXISTS idx_envios_unit_ts   ON envios_tiny(unit, timestamp);
+CREATE INDEX IF NOT EXISTS idx_envios_status    ON envios_tiny(unit, status);
+"""
+
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
@@ -85,6 +109,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
         pass  # column already exists
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
+    conn.executescript(_DDL_ENVIOS)
     return conn
 
 
@@ -263,3 +288,124 @@ def delete_snapshot(unit: str, unit_dir: Path, snapshot_id: int) -> bool:
     with _connect(unit_dir) as conn:
         cur = conn.execute("DELETE FROM planilhas_snapshot WHERE unit=? AND id=?", (unit, int(snapshot_id)))
         return cur.rowcount > 0
+
+
+# ── Envios Tiny (historico de todos os envios: ok, pulado, falha) ─────────────
+
+def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> bool:
+    """Grava um envio na tabela envios_tiny. Retorna True se inseriu novo, False se ja existia.
+
+    Modo espelho: nao e a fonte de verdade ainda — grava em paralelo ao imported.json.
+    """
+    row = {
+        "unit":               unit,
+        "chave_deduplicacao": payload.get("chave_deduplicacao", ""),
+        "timestamp":          payload.get("timestamp", ""),
+        "data_lancamento":    payload.get("data_lancamento", ""),
+        "placa":              payload.get("placa", ""),
+        "cliente":            payload.get("cliente", ""),
+        "servico":            payload.get("servico", ""),
+        "valor":              float(payload.get("valor", 0) or 0),
+        "fp":                 payload.get("fp", ""),
+        "status":             payload.get("status", ""),
+        "arquivo":            payload.get("arquivo", ""),
+        "linha":              int(payload.get("linha", 0) or 0),
+        "resposta_tiny":      json.dumps(payload.get("resposta_tiny"), ensure_ascii=False) if payload.get("resposta_tiny") is not None else "",
+        "erro":               payload.get("erro", ""),
+    }
+    with _connect(unit_dir) as conn:
+        try:
+            conn.execute(
+                "INSERT INTO envios_tiny "
+                "(unit, chave_deduplicacao, timestamp, data_lancamento, placa, cliente, servico, valor, fp, status, arquivo, linha, resposta_tiny, erro) "
+                "VALUES (:unit,:chave_deduplicacao,:timestamp,:data_lancamento,:placa,:cliente,:servico,:valor,:fp,:status,:arquivo,:linha,:resposta_tiny,:erro)",
+                row,
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False  # UNIQUE violation — ja tinha sido gravado
+
+
+def has_envio_tiny(unit: str, unit_dir: Path, chave_deduplicacao: str) -> bool:
+    with _connect(unit_dir) as conn:
+        r = conn.execute(
+            "SELECT 1 FROM envios_tiny WHERE unit=? AND chave_deduplicacao=? LIMIT 1",
+            (unit, chave_deduplicacao),
+        ).fetchone()
+    return r is not None
+
+
+def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
+                     date_to: str | None = None, status: str | None = None,
+                     limit: int = 500) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM envios_tiny WHERE unit=? "
+    params: list[Any] = [unit]
+    if date_from:
+        sql += "AND data_lancamento >= ? "
+        params.append(date_from)
+    if date_to:
+        sql += "AND data_lancamento <= ? "
+        params.append(date_to)
+    if status:
+        sql += "AND status = ? "
+        params.append(status)
+    sql += "ORDER BY timestamp DESC LIMIT ?"
+    params.append(int(limit))
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("resposta_tiny"):
+            try:
+                d["resposta_tiny"] = json.loads(d["resposta_tiny"])
+            except Exception:
+                pass
+        out.append(d)
+    return out
+
+
+def count_envios_tiny(unit: str, unit_dir: Path) -> dict[str, int]:
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(
+            "SELECT status, COUNT(*) AS c FROM envios_tiny WHERE unit=? GROUP BY status",
+            (unit,),
+        ).fetchall()
+    return {r["status"]: r["c"] for r in rows}
+
+
+def migrate_imported_json_to_envios(unit: str, unit_dir: Path) -> dict[str, int]:
+    """Le unit_dir/imported.json e popula envios_tiny. Nao remove o JSON (seguranca).
+
+    Retorna {migrados, duplicados, invalidos}.
+    """
+    json_path = unit_dir / "imported.json"
+    if not json_path.exists():
+        return {"migrados": 0, "duplicados": 0, "invalidos": 0}
+    try:
+        raw = json.loads(json_path.read_text())
+    except Exception:
+        return {"migrados": 0, "duplicados": 0, "invalidos": 0}
+    imported = raw.get("imported", {}) if isinstance(raw, dict) else {}
+    migrados = 0
+    duplicados = 0
+    invalidos = 0
+    for chave, meta in imported.items():
+        if not isinstance(meta, dict):
+            invalidos += 1
+            continue
+        status = "ja_existia_tiny" if meta.get("motivo", "").startswith("ja existia") else "enviado"
+        row = {
+            "chave_deduplicacao": chave,
+            "timestamp":          meta.get("enviado_em", ""),
+            "data_lancamento":    (meta.get("enviado_em", "") or "")[:10],
+            "arquivo":            meta.get("arquivo", ""),
+            "linha":              meta.get("linha", 0) or 0,
+            "status":             status,
+            "resposta_tiny":      meta.get("resposta"),
+        }
+        if insert_envio_tiny(unit, unit_dir, row):
+            migrados += 1
+        else:
+            duplicados += 1
+    return {"migrados": migrados, "duplicados": duplicados, "invalidos": invalidos}

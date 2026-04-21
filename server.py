@@ -71,7 +71,10 @@ from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_
                        _connect as _db_connect, load_lancamentos_range as _db_load_range,
                        insert_divergencia as _db_insert_div, load_divergencias_range as _db_load_div,
                        insert_snapshot as _db_insert_snap, list_snapshots as _db_list_snap,
-                       load_snapshot as _db_load_snap, delete_snapshot as _db_delete_snap)
+                       load_snapshot as _db_load_snap, delete_snapshot as _db_delete_snap,
+                       insert_envio_tiny as _db_insert_envio, list_envios_tiny as _db_list_envios,
+                       count_envios_tiny as _db_count_envios,
+                       migrate_imported_json_to_envios as _db_migrate_imported)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -715,6 +718,65 @@ def master_api_debug_storage():
     })
 
 
+@app.route("/gerencial/api/envios-tiny", methods=["GET"])
+@master_required
+def master_api_envios_tiny_list():
+    """Lista envios para o Tiny no intervalo. Modo espelho — pode faltar historico antigo
+    que ainda esta so no imported.json. Use POST /gerencial/api/envios-tiny/migrate uma vez
+    para importar o JSON para a tabela.
+
+    Params: ?unit=<slug>&from=YYYY-MM-DD&to=YYYY-MM-DD&status=<enviado|ja_existia_tiny|ja_importado_local|falha>&limit=500
+    """
+    unit       = (request.args.get("unit") or "").strip()
+    date_from  = (request.args.get("from") or "").strip() or None
+    date_to    = (request.args.get("to") or "").strip() or None
+    status     = (request.args.get("status") or "").strip() or None
+    try:
+        limit = max(1, min(int(request.args.get("limit", 500)), 5000))
+    except Exception:
+        limit = 500
+
+    units_to_query = [unit] if unit and unit in UNITS else list(UNITS.keys())
+    out = []
+    totals: dict[str, dict[str, int]] = {}
+    for uid in units_to_query:
+        state_dir = _unit_state_dir(uid)
+        try:
+            envios = _db_list_envios(uid, state_dir, date_from=date_from, date_to=date_to,
+                                      status=status, limit=limit)
+            counts = _db_count_envios(uid, state_dir)
+        except Exception as exc:
+            app.logger.warning("[envios-tiny] falha unit=%s: %s", uid, exc)
+            envios = []
+            counts = {}
+        for e in envios:
+            e["unit"] = uid
+            e["unit_nome"] = UNITS[uid].get("nome", uid)
+        out.extend(envios)
+        totals[uid] = counts
+    out.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    return _json({"success": True, "envios": out[:limit], "totais": totals})
+
+
+@app.route("/gerencial/api/envios-tiny/migrate", methods=["POST"])
+@master_required
+@csrf_required
+def master_api_envios_tiny_migrate():
+    """One-shot: le imported.json de cada unidade e popula envios_tiny.
+    Idempotente — rodar de novo so insere o que faltava.
+    """
+    resultado = {}
+    for uid in UNITS:
+        state_dir = _unit_state_dir(uid)
+        try:
+            resultado[uid] = _db_migrate_imported(uid, state_dir)
+        except Exception as exc:
+            app.logger.exception("[envios-tiny:migrate] falha unit=%s", uid)
+            resultado[uid] = {"erro": str(exc)}
+    app.logger.info("[envios-tiny:migrate] %s", resultado)
+    return _json({"success": True, "resultado": resultado})
+
+
 @app.route("/gerencial/api/backup/download")
 @master_required
 def master_api_backup_download():
@@ -1249,6 +1311,68 @@ def api_send(unit: str):
 
         # Salva estado uma unica vez apos processar todos (escrita atomica)
         save_state(state_path, st)
+
+        # Modo espelho: grava na tabela envios_tiny em paralelo ao imported.json.
+        # Nao afeta decisao (quem consulta duplicata ainda le do JSON). Falha aqui
+        # e logada mas nao derruba a resposta do envio.
+        try:
+            ts_now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+            records_by_chave = {r.get("id", ""): r for r in records if r.get("id")}
+            for e in results["enviados"]:
+                chave = e["chave"]
+                r = records_by_chave.get(chave, {})
+                _db_insert_envio(unit, state_dir, {
+                    "chave_deduplicacao": chave,
+                    "timestamp":          ts_now,
+                    "data_lancamento":    r.get("data", "") or "",
+                    "placa":              r.get("placa", ""),
+                    "cliente":            r.get("cliente", e.get("cliente", "")),
+                    "servico":            r.get("servico", ""),
+                    "valor":              float(r.get("preco", 0) or 0),
+                    "fp":                 r.get("fp", ""),
+                    "status":             "enviado",
+                    "arquivo":            r.get("origemArquivo", "manual_ui"),
+                    "linha":              int(r.get("linhaOrigem", 0) or 0),
+                    "resposta_tiny":      imported.get(chave, {}).get("resposta"),
+                })
+            for p in results["pulados"]:
+                chave = p["chave"]
+                r = records_by_chave.get(chave, {})
+                motivo = p.get("motivo", "")
+                status = "ja_existia_tiny" if "existia no Tiny" in motivo else "ja_importado_local"
+                _db_insert_envio(unit, state_dir, {
+                    "chave_deduplicacao": chave,
+                    "timestamp":          ts_now,
+                    "data_lancamento":    r.get("data", "") or "",
+                    "placa":              r.get("placa", ""),
+                    "cliente":            r.get("cliente", p.get("cliente", "")),
+                    "servico":            r.get("servico", ""),
+                    "valor":              float(r.get("preco", 0) or 0),
+                    "fp":                 r.get("fp", ""),
+                    "status":             status,
+                    "arquivo":            r.get("origemArquivo", "manual_ui"),
+                    "linha":              int(r.get("linhaOrigem", 0) or 0),
+                    "erro":               motivo,
+                })
+            for f in results["falhas"]:
+                chave = f["chave"]
+                r = records_by_chave.get(chave, {})
+                _db_insert_envio(unit, state_dir, {
+                    "chave_deduplicacao": chave,
+                    "timestamp":          ts_now,
+                    "data_lancamento":    r.get("data", "") or "",
+                    "placa":              r.get("placa", ""),
+                    "cliente":            r.get("cliente", f.get("cliente", "")),
+                    "servico":            r.get("servico", ""),
+                    "valor":              float(r.get("preco", 0) or 0),
+                    "fp":                 r.get("fp", ""),
+                    "status":             "falha",
+                    "arquivo":            r.get("origemArquivo", "manual_ui"),
+                    "linha":              int(r.get("linhaOrigem", 0) or 0),
+                    "erro":               f.get("erro", ""),
+                })
+        except Exception as mirror_exc:
+            app.logger.warning("[envios_tiny:mirror] falha ao gravar tabela: %s", mirror_exc)
 
         return _json({
             "success": True, "summary": results,
