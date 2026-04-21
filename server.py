@@ -142,6 +142,15 @@ def _maintenance_gate():
     /api/csrf-token, estaticos de /u/<unit>/<file.ext> (html/css/js/png/ico).
     Bloqueia: /u/<unit>/api/* e /u/<unit>/ (redireciona pra pagina de manutencao).
     """
+    # Registra presenca do usuario logado (para painel "Usuarios conectados")
+    try:
+        email = session.get("email")
+        if email:
+            user = USERS.get(email)
+            if user:
+                _mark_user_active(email, user)
+    except Exception:
+        pass
     if not _is_maintenance():
         return None
     path = request.path or ""
@@ -261,6 +270,38 @@ def _verify_password(password: str, stored: str) -> bool:
 def _current_user() -> dict[str, Any] | None:
     email = session.get("email")
     return USERS.get(email) if email else None
+
+
+# ── Tracking de usuarios conectados ────────────────────────────────────────────
+# Dict in-memory + lock. Single-worker basta para o volume atual (< 30 usuarios).
+# Se migrar para multi-worker/multi-instance, trocar por SQLite ou Redis.
+_ACTIVE_USERS: dict[str, dict[str, Any]] = {}
+_ACTIVE_USERS_LOCK = threading.Lock()
+_ACTIVE_TTL_SECONDS = 180   # 3 min sem atividade = desconectado
+
+def _mark_user_active(email: str, user: dict[str, Any]) -> None:
+    if not email:
+        return
+    now_ts = time.time()
+    with _ACTIVE_USERS_LOCK:
+        _ACTIVE_USERS[email] = {
+            "email":    email,
+            "nome":     user.get("name", email),
+            "unit":     user.get("unit", ""),
+            "master":   bool(user.get("master")),
+            "gerencial": bool(user.get("gerencial") or user.get("master")),
+            "last_seen": now_ts,
+            "last_path": (request.path or "")[:120],
+            "last_ip":   request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip(),
+        }
+
+def _get_active_users() -> list[dict[str, Any]]:
+    cutoff = time.time() - _ACTIVE_TTL_SECONDS
+    with _ACTIVE_USERS_LOCK:
+        expirados = [e for e, info in _ACTIVE_USERS.items() if info["last_seen"] < cutoff]
+        for e in expirados:
+            _ACTIVE_USERS.pop(e, None)
+        return sorted(_ACTIVE_USERS.values(), key=lambda x: -x["last_seen"])
 
 
 # ── CSRF ───────────────────────────────────────────────────────────────────────
@@ -2482,6 +2523,37 @@ def master_historico_caixa_page():
     return _nocache(send_from_directory(UI_DIR, "historico-caixa.html"))
 
 
+@app.route("/master/usuarios-conectados")
+@master_only_required
+def master_usuarios_conectados_page():
+    return _nocache(send_from_directory(UI_DIR, "usuarios_conectados.html"))
+
+
+@app.route("/master/api/usuarios-conectados")
+@master_only_required
+def master_api_usuarios_conectados():
+    ativos = _get_active_users()
+    now_ts = time.time()
+    out = []
+    for info in ativos:
+        idle = int(now_ts - info["last_seen"])
+        out.append({
+            "email":     info["email"],
+            "nome":      info["nome"],
+            "unit":      info["unit"],
+            "master":    info["master"],
+            "gerencial": info["gerencial"],
+            "idle_seconds": idle,
+            "last_path": info["last_path"],
+            "last_ip":   info["last_ip"],
+        })
+    return _json({
+        "usuarios": out,
+        "total":    len(out),
+        "ttl_seconds": _ACTIVE_TTL_SECONDS,
+    })
+
+
 def _agg_lancamentos(lancamentos: list[dict], fp_keys: tuple) -> dict:
     totais: dict[str, float] = {fp: 0.0 for fp in fp_keys}
     for lc in lancamentos:
@@ -3026,7 +3098,7 @@ def _cron_loop() -> None:
             if now.hour == 0 and now.minute == 0 and last_backup != today:
                 last_backup = today
                 _executar_backup()
-            if now.hour == 9 and now.minute == 0 and last_tokens != today:
+            if now.hour == 8 and now.minute == 0 and last_tokens != today:
                 last_tokens = today
                 app.logger.info("[cron] Health check dos tokens Tiny")
                 _verificar_saude_tokens()

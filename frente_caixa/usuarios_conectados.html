@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Usuários Conectados</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+      --accent: var(--ds-accent-600);
+    }
+    .kpi-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--ds-space-4); margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi-label {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: var(--ds-tracking-wide); margin-bottom: 4px;
+    }
+    .kpi-value { font-size: 28px; font-weight: 800; color: var(--t1); line-height: 1.1; }
+    .kpi-sub   { font-size: var(--ds-text-sm); color: var(--t3); margin-top: 4px; }
+
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .table-meta  { font-size: var(--ds-text-sm); color: var(--t3); }
+    .uc-table { width: 100%; border-collapse: collapse; font-size: var(--ds-text-sm); }
+    .uc-table th {
+      text-align: left; padding: 10px var(--ds-space-5);
+      font-size: var(--ds-text-xs); font-weight: 700;
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      color: var(--t3); background: var(--card2);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .uc-table td {
+      padding: 12px var(--ds-space-5); border-bottom: 1px solid var(--border);
+      color: var(--t1); vertical-align: middle;
+    }
+    .uc-table tr:last-child td { border-bottom: none; }
+
+    .tag {
+      display: inline-block; font-size: 10.5px; font-weight: 700;
+      padding: 3px 8px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .tag-master { background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .tag-ger    { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+    .tag-op     { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+
+    .idle-green  { color: #16a34a; font-weight: 700; }
+    .idle-yellow { color: #d97706; font-weight: 700; }
+    .idle-gray   { color: var(--t3); }
+
+    .empty {
+      padding: 40px 20px; text-align: center; color: var(--t3);
+      font-size: var(--ds-text-base);
+    }
+    .dot-live {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #16a34a; margin-right: 8px; vertical-align: middle;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .35; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Usuários Conectados</h1>
+        <p class="app-page-sub">Quem está ativo no sistema agora — considera atividade nos últimos <span id="ttlMin">3</span> minutos</p>
+      </div>
+
+      <div class="kpi-strip">
+        <div class="kpi">
+          <div class="kpi-label"><span class="dot-live"></span>Online agora</div>
+          <div class="kpi-value" id="kpiTotal">—</div>
+          <div class="kpi-sub" id="kpiSub">atualiza a cada 30s</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">Sessões ativas</div>
+          <div class="table-meta" id="tableMeta">—</div>
+        </div>
+        <table class="uc-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Perfil</th>
+              <th>Unidade</th>
+              <th>Última página</th>
+              <th>IP</th>
+              <th>Inativo há</th>
+            </tr>
+          </thead>
+          <tbody id="ucBody">
+            <tr><td colspan="7" class="empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "usuarios-conectados",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Usuários Conectados", current: true }
+    ]
+  });
+
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function idleLabel(sec) {
+    if (sec < 30) return { txt: "agora", cls: "idle-green" };
+    if (sec < 60) return { txt: `${sec}s`, cls: "idle-green" };
+    const min = Math.floor(sec / 60);
+    return { txt: `${min} min`, cls: min < 2 ? "idle-yellow" : "idle-gray" };
+  }
+
+  function perfilTag(u) {
+    if (u.master)    return '<span class="tag tag-master">Master</span>';
+    if (u.gerencial) return '<span class="tag tag-ger">Gerencial</span>';
+    return '<span class="tag tag-op">Operador</span>';
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/master/api/usuarios-conectados", { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      document.getElementById("ttlMin").textContent = Math.round((data.ttl_seconds || 180) / 60);
+      document.getElementById("kpiTotal").textContent = data.total;
+      document.getElementById("tableMeta").textContent =
+        data.total === 0 ? "Ninguém online agora"
+        : data.total === 1 ? "1 sessão ativa"
+        : `${data.total} sessões ativas`;
+
+      const body = document.getElementById("ucBody");
+      if (!data.usuarios.length) {
+        body.innerHTML = `<tr><td colspan="7" class="empty">Ninguém conectado nos últimos ${Math.round((data.ttl_seconds || 180) / 60)} minutos.</td></tr>`;
+        return;
+      }
+      body.innerHTML = data.usuarios.map(u => {
+        const idle = idleLabel(u.idle_seconds);
+        const unit = u.master ? "—" : (u.unit || "—");
+        return `<tr>
+          <td><strong>${escHtml(u.nome)}</strong></td>
+          <td style="color:var(--t2)">${escHtml(u.email)}</td>
+          <td>${perfilTag(u)}</td>
+          <td>${escHtml(unit)}</td>
+          <td style="color:var(--t3);font-family:ui-monospace,monospace;font-size:12px">${escHtml(u.last_path)}</td>
+          <td style="color:var(--t3);font-family:ui-monospace,monospace;font-size:12px">${escHtml(u.last_ip || "—")}</td>
+          <td class="${idle.cls}">${idle.txt}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      document.getElementById("ucBody").innerHTML =
+        `<tr><td colspan="7" class="empty">Erro ao carregar: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  load();
+  setInterval(load, 30_000);
+</script>
+
+</body>
+</html>
