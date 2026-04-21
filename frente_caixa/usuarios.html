@@ -26,30 +26,81 @@
       display: flex; justify-content: flex-end; gap: var(--ds-space-3);
       margin-bottom: var(--ds-space-4);
     }
-    .btn-primary {
-      background: var(--accent); color: #fff; border: none;
-      padding: 10px 18px; border-radius: var(--ds-radius-md);
-      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
-      display: inline-flex; align-items: center; gap: 8px;
+
+    /* Action buttons — alinhados ao padrão do Painel Master */
+    .btn, .btn-primary, .btn-secondary, .btn-danger {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: var(--ds-radius-md);
+      font-family: inherit;
+      font-size: var(--ds-text-sm); font-weight: var(--ds-weight-semi);
+      line-height: 1; white-space: nowrap;
+      cursor: pointer; text-decoration: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--t1);
+      transition: background var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease),
+                  color var(--ds-duration-2) var(--ds-ease);
     }
-    .btn-primary:hover { filter: brightness(1.05); }
-    .btn-secondary {
-      background: var(--card); color: var(--t1); border: 1px solid var(--border);
-      padding: 10px 16px; border-radius: var(--ds-radius-md);
-      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
+    .btn:hover, .btn-secondary:hover {
+      background: var(--card2);
+      border-color: var(--ds-line-strong);
+    }
+    .btn:disabled, .btn-primary:disabled, .btn-danger:disabled {
+      opacity: .6; cursor: not-allowed;
+    }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--ds-accent-700, #1d4ed8);
+      border-color: var(--ds-accent-700, #1d4ed8);
     }
     .btn-danger {
-      background: #dc2626; color: #fff; border: none;
-      padding: 10px 16px; border-radius: var(--ds-radius-md);
-      font-weight: 600; font-size: var(--ds-text-sm); cursor: pointer;
+      background: #dc2626;
+      border-color: #dc2626;
+      color: #fff;
     }
-    .btn-link {
-      background: transparent; border: none; color: var(--accent);
-      font-size: var(--ds-text-xs); font-weight: 600; cursor: pointer;
-      padding: 4px 8px; border-radius: 6px;
+    .btn-danger:hover {
+      background: #b91c1c;
+      border-color: #b91c1c;
     }
-    .btn-link:hover { background: var(--card2); }
-    .btn-link.danger { color: #dc2626; }
+    .btn .bi, .btn-primary .bi, .btn-secondary .bi, .btn-danger .bi {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; flex-shrink: 0;
+    }
+    .btn .bi svg, .btn-primary .bi svg, .btn-secondary .bi svg, .btn-danger .bi svg {
+      width: 18px; height: 18px;
+    }
+
+    /* Botões compactos de linha (Editar / Excluir) */
+    .btn-row {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--t2);
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-semi);
+      padding: 6px 10px; border-radius: var(--ds-radius-md);
+      cursor: pointer;
+      transition: background var(--ds-duration-2) var(--ds-ease),
+                  border-color var(--ds-duration-2) var(--ds-ease),
+                  color var(--ds-duration-2) var(--ds-ease);
+    }
+    .btn-row:hover {
+      background: var(--card2);
+      border-color: var(--border);
+      color: var(--t1);
+    }
+    .btn-row.danger { color: #dc2626; }
+    .btn-row.danger:hover { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+    .btn-row .bi {
+      display: inline-flex; width: 14px; height: 14px;
+    }
+    .btn-row .bi svg { width: 14px; height: 14px; }
 
     .table-wrap {
       background: var(--card); border: 1px solid var(--border);
@@ -162,10 +213,7 @@
 
       <div class="page-actions">
         <button class="btn-primary" id="btnNew">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Novo usuário
+          <span class="bi" id="newIcon"></span>Novo usuário
         </button>
       </div>
 
@@ -277,6 +325,9 @@
     ]
   });
 
+  // Ícones dos botões principais (padrão v2.1)
+  document.getElementById("newIcon").innerHTML = AstroShell.icon("plus");
+
   const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   let state = { usuarios: [], unidades: [], editingEmail: null };
@@ -329,8 +380,12 @@
           <td>${perfilTag(u)}</td>
           <td>${escHtml(unitNome(u.unit))}</td>
           <td style="text-align:right;white-space:nowrap">
-            <button class="btn-link" data-act="edit" data-email="${escHtml(u.email)}">Editar</button>
-            <button class="btn-link danger" data-act="del" data-email="${escHtml(u.email)}">Excluir</button>
+            <button class="btn-row" data-act="edit" data-email="${escHtml(u.email)}">
+              <span class="bi">${AstroShell.icon("edit")}</span>Editar
+            </button>
+            <button class="btn-row danger" data-act="del" data-email="${escHtml(u.email)}">
+              <span class="bi">${AstroShell.icon("trash")}</span>Excluir
+            </button>
           </td>
         </tr>
       `).join("");
