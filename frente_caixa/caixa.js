@@ -194,21 +194,24 @@ function renderServicos() {
   const lcs = state.lancamentos || [];
   if (!lcs.length) { el.innerHTML = ""; return; }
 
-  const counts = {};
+  const stats = {};
   lcs.forEach(lc => {
     const s = (lc.servico || "").trim();
-    if (s) counts[s] = (counts[s] || 0) + 1;
+    if (!s) return;
+    if (!stats[s]) stats[s] = { count: 0, total: 0 };
+    stats[s].count += 1;
+    stats[s].total += Number(lc.valor) || 0;
   });
 
   const MAX = 5;
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const sorted = Object.entries(stats).sort((a, b) => b[1].total - a[1].total);
   const visible = sorted.slice(0, MAX);
   const extra = sorted.length - MAX;
 
-  el.innerHTML = visible.map(([name, n]) => {
+  el.innerHTML = visible.map(([name, s]) => {
     const label = name.length > 18 ? name.slice(0, 17) + "…" : name;
-    return `<span class="svc-chip" title="${escHtml(name)}">
-      ${escHtml(label)}<span class="svc-chip-count">×${n}</span>
+    return `<span class="svc-chip" title="${escHtml(name)} — ${brl(s.total)} (${s.count})">
+      ${escHtml(label)}<span class="svc-chip-value">${brl(s.total)}</span><span class="svc-chip-count">×${s.count}</span>
     </span>`;
   }).join("") + (extra > 0
     ? `<span class="svc-chip svc-chip-more">+${extra} mais</span>`
