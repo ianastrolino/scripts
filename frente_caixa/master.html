@@ -131,6 +131,39 @@
       color: var(--ds-danger);
     }
     .action-btn.danger:hover { background: #fee2e2; }
+
+    /* Pulse verde quando chega um lancamento novo */
+    @keyframes newLancPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.55); border-color: var(--ds-success); }
+      60%  { box-shadow: 0 0 0 14px rgba(34,197,94,0);   border-color: var(--ds-success); }
+      100% { box-shadow: var(--ds-shadow-xs); border-color: var(--ds-line); }
+    }
+    .unit-card.pulse-new { animation: newLancPulse 2.2s ease-out 1; }
+    .unit-card.tiny-alert { border-color: var(--ds-danger); }
+
+    .unit-last {
+      padding: 6px var(--ds-space-5);
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      border-bottom: 1px solid var(--ds-line);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .unit-last.fresh { color: var(--ds-success); font-weight: var(--ds-weight-semi); }
+
+    .refresh-bar {
+      display: flex; align-items: center; gap: 8px;
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      margin-bottom: var(--ds-space-3);
+    }
+    .refresh-bar .rb-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ds-success);
+      animation: rbPulse 2s ease-in-out infinite;
+    }
+    .refresh-bar.loading .rb-dot { background: var(--ds-warning); animation: rbSpin 0.8s linear infinite; }
+    @keyframes rbPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+    @keyframes rbSpin  { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
   </style>
 </head>
 <body>
@@ -160,6 +193,11 @@
         <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn" style="min-width:180px;flex:0 0 auto">
           <span class="ab-icon" id="backupIcon"></span>Baixar backup
         </a>
+      </div>
+
+      <div class="refresh-bar" id="refreshBar">
+        <span class="rb-dot"></span>
+        <span id="refreshText">Atualizando a cada 30s · última às <span id="refreshLast">—</span></span>
       </div>
 
       <div class="unit-grid" id="unitGrid">
@@ -205,6 +243,10 @@
             <div class="stat"><div class="stat-val" id="total-${u.id}">—</div><div class="stat-lbl">Total AV</div></div>
             <div class="stat"><div class="stat-val" id="fa-${u.id}">—</div><div class="stat-lbl">A Faturar</div></div>
           </div>
+          <div class="unit-last" id="last-${u.id}">
+            <span>Última atividade</span>
+            <span id="last-text-${u.id}">—</span>
+          </div>
           <div class="tiny-row" id="tiny-row-${u.id}">
             <span class="tiny-label">Tiny</span>
             <span class="tiny-status"><span class="tiny-dot"></span><span id="tiny-text-${u.id}">verificando...</span></span>
@@ -223,16 +265,67 @@
         </div>
       `).join("");
 
-      data.units.forEach(u => loadUnitStatus(u.id));
-      loadTinyHealth();
+      await refreshAll();
+      // Auto-refresh a cada 30s
+      setInterval(refreshAll, 30_000);
     } catch (err) {
       grid.innerHTML = '<p class="ds-loading">Erro ao carregar unidades.</p>';
     }
   }
 
+  // Snapshot do ultimo refresh por unidade pra detectar delta
+  const _lastSnapshot = {};
+
+  async function refreshAll() {
+    const bar = document.getElementById("refreshBar");
+    bar.classList.add("loading");
+    try {
+      // Status por unidade (em paralelo) + tiny-health consolidado + units/status pra 'ultima_atividade'
+      const unitIds = Array.from(document.querySelectorAll(".unit-card")).map(el => el.id.replace("card-", ""));
+      await Promise.all([
+        ...unitIds.map(loadUnitStatus),
+        loadTinyHealth(),
+        loadUnitsAggregate(),
+      ]);
+      const now = new Date();
+      document.getElementById("refreshLast").textContent = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } finally {
+      bar.classList.remove("loading");
+    }
+  }
+
+  async function loadUnitsAggregate() {
+    try {
+      const r = await fetch("/master/api/units/status", { cache: "no-store" });
+      const d = await r.json();
+      (d.status || []).forEach(u => {
+        const el = document.getElementById(`last-text-${u.id}`);
+        const wrap = document.getElementById(`last-${u.id}`);
+        if (!el || !wrap) return;
+        const ultima = u.hoje?.ultima_atividade;
+        if (!ultima) { el.textContent = "—"; wrap.classList.remove("fresh"); return; }
+        const txt = fmtRelative(ultima);
+        el.textContent = txt;
+        // "fresh" = últimos 2 min
+        const diffMs = Date.now() - new Date(ultima).getTime();
+        wrap.classList.toggle("fresh", diffMs < 2 * 60_000);
+      });
+    } catch (_) {}
+  }
+
+  function fmtRelative(iso) {
+    const t = new Date(iso).getTime();
+    if (isNaN(t)) return "—";
+    const diff = Math.max(0, Math.floor((Date.now() - t) / 1000));
+    if (diff < 60)       return `há ${diff}s`;
+    if (diff < 3600)     return `há ${Math.floor(diff / 60)} min`;
+    if (diff < 86400)    return `há ${Math.floor(diff / 3600)}h`;
+    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
   async function loadUnitStatus(unitId) {
     try {
-      const res  = await fetch(`/u/${unitId}/api/caixa/estado`);
+      const res  = await fetch(`/u/${unitId}/api/caixa/estado`, { cache: "no-store" });
       const data = await res.json();
       const badge = document.getElementById(`status-${unitId}`);
       const lancamentos = (data.lancamentos || []).length;
@@ -249,6 +342,19 @@
       document.getElementById(`lancamentos-${unitId}`).textContent = lancamentos;
       document.getElementById(`total-${unitId}`).textContent = fmt(totais.total_avista ?? totais.total ?? 0);
       document.getElementById(`fa-${unitId}`).textContent = fmt(totais.faturado ?? 0);
+
+      // Delta: se contagem aumentou desde o ultimo refresh, pulse no card
+      const prev = _lastSnapshot[unitId];
+      if (prev !== undefined && lancamentos > prev) {
+        const card = document.getElementById(`card-${unitId}`);
+        if (card) {
+          card.classList.remove("pulse-new");
+          // reflow pra reiniciar a animacao
+          void card.offsetWidth;
+          card.classList.add("pulse-new");
+        }
+      }
+      _lastSnapshot[unitId] = lancamentos;
     } catch (_) {
       const badge = document.getElementById(`status-${unitId}`);
       if (badge) { badge.textContent = "—"; badge.className = "status-badge closed"; }
@@ -261,11 +367,12 @@
 
   async function loadTinyHealth() {
     try {
-      const res = await fetch("/master/api/tiny-health");
+      const res = await fetch("/master/api/tiny-health", { cache: "no-store" });
       const data = await res.json();
       (data.units || []).forEach(u => {
-        const row = document.getElementById(`tiny-row-${u.id}`);
+        const row  = document.getElementById(`tiny-row-${u.id}`);
         const text = document.getElementById(`tiny-text-${u.id}`);
+        const card = document.getElementById(`card-${u.id}`);
         if (!row || !text) return;
         row.classList.remove("tiny-ok","tiny-renovar","tiny-erro","tiny-ausente");
         const labels = {
@@ -276,9 +383,20 @@
         };
         row.classList.add(`tiny-${u.status}`);
         text.textContent = labels[u.status] || u.status;
+
+        // Remove link antigo se houver (evita duplicar em refreshes)
+        row.querySelectorAll(".tiny-reauth").forEach(n => n.remove());
         if (u.status === "ausente" || u.status === "erro") {
-          row.innerHTML += `<a class="tiny-reauth" href="/u/${u.id}/auth" target="_blank">Reautorizar</a>`;
+          const a = document.createElement("a");
+          a.className   = "tiny-reauth";
+          a.href        = `/u/${u.id}/auth`;
+          a.target      = "_blank";
+          a.rel         = "noopener";
+          a.textContent = "Reautorizar";
+          row.appendChild(a);
         }
+        // Borda vermelha no card inteiro quando Tiny problema
+        if (card) card.classList.toggle("tiny-alert", u.status === "ausente" || u.status === "erro");
       });
     } catch (_) {}
   }
