@@ -2992,6 +2992,61 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostico-envios")
+@unit_access_required
+def api_diagnostico_envios(unit: str):
+    """Diagnostico read-only dos envios do dia pra auditoria/conferencia.
+    Params: ?data=AAAA-MM-DD (default: hoje)."""
+    try:
+        data = request.args.get("data") or dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        state_dir = _unit_state_dir(unit)
+        try:
+            envios = _db_load_envios_range(unit, state_dir, data, data)
+        except Exception:
+            envios = []
+        por_status: dict[str, int] = {}
+        por_fp:     dict[str, int] = {}
+        por_servico: dict[str, int] = {}
+        por_cliente: dict[str, list] = {}
+        total_valor = 0.0
+        for e in envios:
+            st = e.get("status", "?")
+            fp = e.get("fp", "?")
+            sv = (e.get("servico") or "?").upper()
+            cl = (e.get("cliente") or "?").upper()
+            por_status[st] = por_status.get(st, 0) + 1
+            por_fp[fp]     = por_fp.get(fp, 0) + 1
+            por_servico[sv] = por_servico.get(sv, 0) + 1
+            por_cliente.setdefault(cl, []).append({
+                "placa": e.get("placa", ""), "servico": sv,
+                "valor": float(e.get("valor", 0) or 0), "fp": fp,
+            })
+            total_valor += float(e.get("valor", 0) or 0)
+        # Flag duplicatas potenciais: mesmo cliente + mesma placa + mesmo servico
+        duplicatas = []
+        seen: dict[tuple, int] = {}
+        for e in envios:
+            k = ((e.get("cliente") or "").upper(), (e.get("placa") or "").upper(), (e.get("servico") or "").upper())
+            seen[k] = seen.get(k, 0) + 1
+        for k, n in seen.items():
+            if n > 1:
+                duplicatas.append({"cliente": k[0], "placa": k[1], "servico": k[2], "ocorrencias": n})
+        return _json({
+            "unit": unit, "data": data,
+            "total_envios": len(envios),
+            "total_valor": round(total_valor, 2),
+            "por_status": por_status,
+            "por_fp": por_fp,
+            "por_servico": por_servico,
+            "duplicatas_potenciais": duplicatas,
+            "clientes_unicos": len(por_cliente),
+            "por_cliente": {cl: items for cl, items in sorted(por_cliente.items())},
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/caixa/reabrir", methods=["POST"])
 @unit_access_required
 @csrf_required
