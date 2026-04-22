@@ -114,6 +114,15 @@
       font-weight: 600;
     }
     .num-cell.muted { color: var(--t3); font-weight: 500; }
+
+    .uc-btn-export {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 6px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); cursor: pointer;
+      background: var(--ds-accent-600); color: #fff; border-color: var(--ds-accent-600);
+      transition: background .15s ease;
+    }
+    .uc-btn-export:hover { background: var(--ds-accent-700); }
   </style>
 </head>
 <body>
@@ -140,7 +149,10 @@
       <div class="table-wrap">
         <div class="table-head">
           <div class="table-title">Sessões ativas</div>
-          <div class="table-meta" id="tableMeta">—</div>
+          <div style="display:flex;align-items:center;gap:var(--ds-space-3)">
+            <div class="table-meta" id="tableMeta">—</div>
+            <button type="button" id="btnExportOnline" class="uc-btn-export" title="Baixar CSV de quem está online agora">Exportar CSV</button>
+          </div>
         </div>
         <table class="uc-table">
           <thead>
@@ -168,11 +180,14 @@
             <div class="table-title">Histórico de sessões</div>
             <div class="table-meta" id="histMeta" style="margin-top:4px">—</div>
           </div>
-          <div class="period-tabs" role="tablist" aria-label="Período">
-            <button class="period-tab" data-periodo="hoje" type="button">Hoje</button>
-            <button class="period-tab is-active" data-periodo="7d" type="button">7 dias</button>
-            <button class="period-tab" data-periodo="30d" type="button">30 dias</button>
-            <button class="period-tab" data-periodo="tudo" type="button">Tudo</button>
+          <div style="display:flex;align-items:center;gap:var(--ds-space-3)">
+            <div class="period-tabs" role="tablist" aria-label="Período">
+              <button class="period-tab" data-periodo="hoje" type="button">Hoje</button>
+              <button class="period-tab is-active" data-periodo="7d" type="button">7 dias</button>
+              <button class="period-tab" data-periodo="30d" type="button">30 dias</button>
+              <button class="period-tab" data-periodo="tudo" type="button">Tudo</button>
+            </div>
+            <button type="button" id="btnExportHist" class="uc-btn-export" title="Baixar CSV do histórico do período selecionado">Exportar CSV</button>
           </div>
         </div>
         <table class="uc-table">
@@ -332,6 +347,13 @@
       periodoAtual = btn.dataset.periodo;
       loadHistorico();
     });
+  });
+
+  document.getElementById("btnExportOnline").addEventListener("click", () => {
+    window.location.href = "/master/api/usuarios-conectados.csv";
+  });
+  document.getElementById("btnExportHist").addEventListener("click", () => {
+    window.location.href = `/master/api/usuarios-sessoes.csv?periodo=${encodeURIComponent(periodoAtual)}`;
   });
 
   loadHistorico();

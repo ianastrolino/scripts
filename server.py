@@ -3538,12 +3538,39 @@ def master_api_usuarios_conectados():
     })
 
 
-@app.route("/master/api/usuarios-sessoes")
+@app.route("/master/api/usuarios-conectados.csv")
 @master_view_required
-def master_api_usuarios_sessoes():
-    """Agregacoes por usuario das sessoes ja encerradas (JSONL) + sessoes em
-    andamento (_ACTIVE_USERS). Suporta filtro de periodo: hoje | 7d | 30d | tudo."""
-    periodo = (request.args.get("periodo") or "7d").lower()
+def master_api_usuarios_conectados_csv():
+    """Export CSV dos usuarios ativos neste instante (janela de 3 min)."""
+    import csv, io
+    ativos = _get_active_users()
+    now_ts = time.time()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["email", "nome", "perfil", "unidade", "idle_segundos", "ultima_rota", "ultimo_ip"])
+    for info in ativos:
+        if info.get("master"):        perfil = "master"
+        elif info.get("matriz"):      perfil = "matriz"
+        elif info.get("gerencial"):   perfil = "gerencial"
+        else:                         perfil = "operador"
+        w.writerow([
+            info.get("email", ""),
+            info.get("nome", ""),
+            perfil,
+            info.get("unit", ""),
+            int(now_ts - info.get("last_seen", now_ts)),
+            info.get("last_path", ""),
+            info.get("last_ip", ""),
+        ])
+    hoje = dt.date.today().isoformat()
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="conectados_astro_{hoje}.csv"'
+    return resp
+
+
+def _sessoes_agg(periodo_raw: str) -> tuple[list[dict], str]:
+    """Agrega sessoes por usuario (JSONL + em andamento). Retorna (lista_ordenada, periodo_efetivo)."""
+    periodo = (periodo_raw or "7d").lower()
     tz = ZoneInfo("America/Sao_Paulo")
     now_dt = dt.datetime.now(tz)
     if periodo == "hoje":
@@ -3631,12 +3658,55 @@ def master_api_usuarios_sessoes():
         avg = int(a["total_s"] / a["logins"]) if a["logins"] else 0
         out.append({**a, "avg_s": avg})
     out.sort(key=lambda x: (-x["logins"], -x["total_s"], x["email"]))
+    return out, periodo
 
+
+@app.route("/master/api/usuarios-sessoes")
+@master_view_required
+def master_api_usuarios_sessoes():
+    """Agregacoes por usuario das sessoes ja encerradas (JSONL) + sessoes em
+    andamento (_ACTIVE_USERS). Suporta filtro de periodo: hoje | 7d | 30d | tudo."""
+    out, periodo = _sessoes_agg(request.args.get("periodo", ""))
     return _json({
         "usuarios": out,
         "periodo":  periodo,
         "total":    len(out),
     })
+
+
+@app.route("/master/api/usuarios-sessoes.csv")
+@master_view_required
+def master_api_usuarios_sessoes_csv():
+    """Export CSV do historico de sessoes por usuario. Mesmo filtro de periodo."""
+    import csv, io
+    out, periodo = _sessoes_agg(request.args.get("periodo", ""))
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["email", "nome", "unidade", "perfil", "logins", "tempo_total_s", "tempo_total_hms", "media_s", "ultima_sessao"])
+    for u in out:
+        if u.get("master"):          perfil = "master"
+        elif u.get("matriz"):        perfil = "matriz"
+        elif u.get("gerencial"):     perfil = "gerencial"
+        else:                        perfil = "operador"
+        total = int(u.get("total_s") or 0)
+        h, rem = divmod(total, 3600)
+        m, s   = divmod(rem, 60)
+        hms = f"{h:02d}:{m:02d}:{s:02d}"
+        w.writerow([
+            u.get("email", ""),
+            u.get("nome", ""),
+            u.get("unit", ""),
+            perfil,
+            u.get("logins", 0),
+            total,
+            hms,
+            u.get("avg_s", 0),
+            u.get("last", ""),
+        ])
+    hoje = dt.date.today().isoformat()
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="sessoes_astro_{periodo}_{hoje}.csv"'
+    return resp
 
 
 # ── CRUD de usuarios ───────────────────────────────────────────────────────────
@@ -3693,18 +3763,58 @@ def master_usuarios_page():
     return _nocache(send_from_directory(UI_DIR, "usuarios.html"))
 
 
+def _usuarios_perfil_str(u: dict[str, Any]) -> str:
+    if u.get("master"):    return "master"
+    if u.get("matriz"):    return "matriz"
+    if u.get("gerencial"): return "gerencial"
+    return "operador"
+
+
+def _usuarios_filtered() -> list[dict]:
+    """Aplica os mesmos filtros opcionais do JSON (perfil, unit, q)."""
+    f_perfil = (request.args.get("perfil") or "").strip().lower()
+    f_unit   = (request.args.get("unit")   or "").strip()
+    f_q      = (request.args.get("q")      or "").strip().lower()
+    with _USERS_LOCK:
+        out = []
+        for email, u in sorted(USERS.items()):
+            if u.get("convidado") or not u.get("password_hash"):
+                continue
+            if f_perfil and _usuarios_perfil_str(u) != f_perfil:
+                continue
+            if f_unit and (u.get("unit") or "") != f_unit:
+                continue
+            if f_q and f_q not in email.lower() and f_q not in (u.get("name", "").lower()):
+                continue
+            out.append((email, u))
+    return out
+
+
 @app.route("/master/api/usuarios", methods=["GET"])
 @master_view_required
 def master_api_usuarios_list():
     unidades = [{"id": uid, "nome": UNITS[uid].get("nome", uid)} for uid in sorted(UNITS.keys())]
-    with _USERS_LOCK:
-        # Usuarios com convite pendente (sem senha ativada) nao aparecem aqui.
-        # Eles ficam so na lista de Convites pendentes ate concluirem a ativacao.
-        users = [
-            _user_public(e, u) for e, u in sorted(USERS.items())
-            if not u.get("convidado") and u.get("password_hash")
-        ]
+    filtered = _usuarios_filtered()
+    users = [_user_public(e, u) for e, u in filtered]
     return _json({"usuarios": users, "unidades": unidades})
+
+
+@app.route("/master/api/usuarios.csv")
+@master_view_required
+def master_api_usuarios_csv():
+    """Export CSV com os mesmos filtros opcionais (perfil, unit, q) da rota JSON."""
+    import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["email", "nome", "perfil", "unidade_id", "unidade_nome"])
+    for email, u in _usuarios_filtered():
+        unit_id = u.get("unit") or ""
+        unit_nome = UNITS.get(unit_id, {}).get("nome", unit_id) if unit_id else ""
+        w.writerow([email, u.get("name", ""), _usuarios_perfil_str(u), unit_id, unit_nome])
+    hoje = dt.date.today().isoformat()
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="usuarios_astro_{hoje}.csv"'
+    return resp
 
 
 def _is_privileged_target(sanit_new: dict[str, Any], current: dict[str, Any] | None = None) -> bool:
@@ -4174,6 +4284,48 @@ def master_api_convites_list():
     out.sort(key=lambda i: (i["status"] != "pendente", i["criado_em"]), reverse=False)
     out.sort(key=lambda i: i["criado_em"], reverse=True)
     return _json({"convites": out})
+
+
+@app.route("/master/api/convites.csv")
+@master_only_required
+def master_api_convites_csv():
+    """Export CSV de convites. Filtro opcional ?status=pendente|usado|expirado|revogado."""
+    import csv, io
+    f_status = (request.args.get("status") or "").strip().lower()
+    with _INVITES_LOCK:
+        invites = _load_invites()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["email", "nome", "perfil", "unidade", "criado_por", "criado_em", "expira_em", "status", "token_short"])
+    rows = []
+    for token, inv in invites.items():
+        status = _invite_status(inv)
+        if f_status and status != f_status:
+            continue
+        perfil = inv.get("perfil", {}) or {}
+        if perfil.get("master"):       perfil_str = "master"
+        elif perfil.get("matriz"):     perfil_str = "matriz"
+        elif perfil.get("gerencial"):  perfil_str = "gerencial"
+        else:                          perfil_str = "operador"
+        rows.append({
+            "email":      inv.get("email", ""),
+            "nome":       inv.get("name", ""),
+            "perfil":     perfil_str,
+            "unidade":    perfil.get("unit", ""),
+            "criado_por": inv.get("criado_por", ""),
+            "criado_em":  inv.get("criado_em", ""),
+            "expira_em":  inv.get("expira_em", ""),
+            "status":     status,
+            "token_short": token[:10],
+        })
+    rows.sort(key=lambda r: r["criado_em"], reverse=True)
+    for r in rows:
+        w.writerow([r["email"], r["nome"], r["perfil"], r["unidade"], r["criado_por"],
+                    r["criado_em"], r["expira_em"], r["status"], r["token_short"]])
+    hoje = dt.date.today().isoformat()
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="convites_astro_{hoje}.csv"'
+    return resp
 
 
 @app.route("/master/api/convites/<token>", methods=["DELETE"])

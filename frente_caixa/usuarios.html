@@ -27,6 +27,32 @@
       margin-bottom: var(--ds-space-4);
     }
 
+    .filters-bar {
+      display: flex; gap: var(--ds-space-3); flex-wrap: wrap;
+      margin-bottom: var(--ds-space-4);
+    }
+    .filter {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); padding: 6px 10px;
+    }
+    .filter label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .filter input, .filter select {
+      border: none; background: transparent; font: inherit;
+      font-size: var(--ds-text-sm); color: var(--t1);
+      outline: none; min-width: 140px;
+    }
+    .btn-clear {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 6px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--border); cursor: pointer;
+      background: var(--card); color: var(--t1);
+    }
+    .btn-clear:hover { background: var(--card2); }
+
     /* Action buttons — alinhados ao padrão do Painel Master */
     .btn, .btn-primary, .btn-secondary, .btn-danger {
       display: inline-flex; align-items: center; justify-content: center;
@@ -213,9 +239,35 @@
       </div>
 
       <div class="page-actions">
+        <button class="btn-secondary" id="btnExportUsers" title="Baixar CSV dos usuários cadastrados, respeitando os filtros aplicados">Exportar CSV</button>
+        <button class="btn-secondary" id="btnExportConvites" title="Baixar CSV de todos os convites (pendentes e histórico)">Exportar convites</button>
         <button class="btn-primary" id="btnNew">
           <span class="bi" id="newIcon"></span>Novo usuário
         </button>
+      </div>
+
+      <div class="filters-bar" id="filtersBar">
+        <div class="filter">
+          <label>Perfil</label>
+          <select id="filterPerfil">
+            <option value="">Todos</option>
+            <option value="master">Master</option>
+            <option value="matriz">Matriz</option>
+            <option value="gerencial">Gerencial</option>
+            <option value="operador">Operador de PDV</option>
+          </select>
+        </div>
+        <div class="filter">
+          <label>Unidade</label>
+          <select id="filterUnit">
+            <option value="">Todas</option>
+          </select>
+        </div>
+        <div class="filter">
+          <label>Buscar</label>
+          <input type="text" id="filterQ" placeholder="nome ou e-mail" autocomplete="off">
+        </div>
+        <button type="button" class="btn-clear" id="btnClearFilters">Limpar</button>
       </div>
 
       <div class="table-wrap">
@@ -401,13 +453,33 @@
     return u ? u.nome : uid;
   }
 
+  function buildFiltersQs() {
+    const perfil = document.getElementById("filterPerfil").value;
+    const unit   = document.getElementById("filterUnit").value;
+    const q      = document.getElementById("filterQ").value.trim();
+    const qs = new URLSearchParams();
+    if (perfil) qs.set("perfil", perfil);
+    if (unit)   qs.set("unit",   unit);
+    if (q)      qs.set("q",      q);
+    return qs;
+  }
+
+  function refreshUnitFilterOptions() {
+    const sel = document.getElementById("filterUnit");
+    if (sel.options.length > 1) return; // já populado
+    sel.innerHTML = '<option value="">Todas</option>' +
+      state.unidades.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.nome)}</option>`).join("");
+  }
+
   async function load() {
     try {
-      const r = await fetch("/master/api/usuarios", { cache: "no-store" });
+      const qs = buildFiltersQs();
+      const r = await fetch("/master/api/usuarios?" + qs.toString(), { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const data = await r.json();
       state.usuarios = data.usuarios || [];
       state.unidades = data.unidades || [];
+      refreshUnitFilterOptions();
 
       document.getElementById("tableMeta").textContent =
         state.usuarios.length === 0 ? "Nenhum usuário"
@@ -749,6 +821,27 @@
     if (!token) return;
     if (btn.dataset.act === "reenviar") reenviarConvite(token);
     else if (btn.dataset.act === "revogar") revogarConvite(token);
+  });
+
+  // Filtros + export
+  let _deb;
+  document.getElementById("filterPerfil").addEventListener("change", load);
+  document.getElementById("filterUnit").addEventListener("change", load);
+  document.getElementById("filterQ").addEventListener("input", () => {
+    clearTimeout(_deb); _deb = setTimeout(load, 300);
+  });
+  document.getElementById("btnClearFilters").addEventListener("click", () => {
+    document.getElementById("filterPerfil").value = "";
+    document.getElementById("filterUnit").value = "";
+    document.getElementById("filterQ").value = "";
+    load();
+  });
+  document.getElementById("btnExportUsers").addEventListener("click", () => {
+    const qs = buildFiltersQs();
+    window.location.href = "/master/api/usuarios.csv?" + qs.toString();
+  });
+  document.getElementById("btnExportConvites").addEventListener("click", () => {
+    window.location.href = "/master/api/convites.csv";
   });
 
   load();
