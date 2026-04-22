@@ -991,7 +991,16 @@ def master_api_units_status():
         except Exception:
             lancamentos = []
         totais = calcular_totais(lancamentos)
-        ultima = max((lc.get("timestamp", "") for lc in lancamentos), default=None)
+        ultimo_lc = max(lancamentos, key=lambda x: x.get("timestamp", ""), default=None) if lancamentos else None
+        ultima = ultimo_lc.get("timestamp", "") if ultimo_lc else None
+        ultimo_resumo = None
+        if ultimo_lc:
+            ultimo_resumo = {
+                "placa":   ultimo_lc.get("placa", "") or "",
+                "servico": ultimo_lc.get("servico", "") or "",
+                "valor":   float(ultimo_lc.get("valor", 0) or 0),
+                "fp":      ultimo_lc.get("fp", "") or "",
+            }
         status.append({
             "id":   uid,
             "nome": ud.get("nome", uid),
@@ -999,6 +1008,7 @@ def master_api_units_status():
                 "lancamentos":    len(lancamentos),
                 "total":          totais["total"],
                 "ultima_atividade": ultima,
+                "ultimo": ultimo_resumo,
             },
         })
     return _json({"status": status, "data": today})

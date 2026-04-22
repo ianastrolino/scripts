@@ -142,13 +142,24 @@
     .unit-card.tiny-alert { border-color: var(--ds-danger); }
 
     .unit-last {
-      padding: 6px var(--ds-space-5);
+      padding: 6px var(--ds-space-5) 8px;
       font-size: var(--ds-text-xs);
       color: var(--ds-ink-muted);
       border-bottom: 1px solid var(--ds-line);
+    }
+    .unit-last-top {
       display: flex; justify-content: space-between; align-items: center;
     }
-    .unit-last.fresh { color: var(--ds-success); font-weight: var(--ds-weight-semi); }
+    .unit-last.fresh .unit-last-top { color: var(--ds-success); font-weight: var(--ds-weight-semi); }
+    .unit-last-extra {
+      margin-top: 3px;
+      font-size: 11px;
+      color: var(--ds-ink-subtle);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+    }
+    .unit-last-extra .sep { color: var(--ds-line-strong); margin: 0 5px; }
+    .unit-last-extra .val { color: var(--ds-ink-muted); font-weight: var(--ds-weight-semi); }
 
     .refresh-bar {
       display: flex; align-items: center; gap: 8px;
@@ -244,8 +255,11 @@
             <div class="stat"><div class="stat-val" id="fa-${u.id}">—</div><div class="stat-lbl">A Faturar</div></div>
           </div>
           <div class="unit-last" id="last-${u.id}">
-            <span>Última atividade</span>
-            <span id="last-text-${u.id}">—</span>
+            <div class="unit-last-top">
+              <span>Última atividade</span>
+              <span id="last-text-${u.id}">—</span>
+            </div>
+            <div class="unit-last-extra" id="last-extra-${u.id}"></div>
           </div>
           <div class="tiny-row" id="tiny-row-${u.id}">
             <span class="tiny-label">Tiny</span>
@@ -301,16 +315,38 @@
       (d.status || []).forEach(u => {
         const el = document.getElementById(`last-text-${u.id}`);
         const wrap = document.getElementById(`last-${u.id}`);
+        const extra = document.getElementById(`last-extra-${u.id}`);
         if (!el || !wrap) return;
         const ultima = u.hoje?.ultima_atividade;
-        if (!ultima) { el.textContent = "—"; wrap.classList.remove("fresh"); return; }
-        const txt = fmtRelative(ultima);
-        el.textContent = txt;
-        // "fresh" = últimos 2 min
+        if (!ultima) {
+          el.textContent = "—";
+          wrap.classList.remove("fresh");
+          if (extra) extra.textContent = "";
+          return;
+        }
+        el.textContent = fmtRelative(ultima);
         const diffMs = Date.now() - new Date(ultima).getTime();
         wrap.classList.toggle("fresh", diffMs < 2 * 60_000);
+
+        // Linha leve com detalhes do ultimo lancamento
+        const ult = u.hoje?.ultimo;
+        if (extra) {
+          if (ult && (ult.placa || ult.servico || ult.valor)) {
+            const placa = ult.placa ? esc(ult.placa) : "";
+            const servico = ult.servico ? esc(ult.servico.length > 22 ? ult.servico.slice(0, 20) + "…" : ult.servico) : "";
+            const valor = (ult.valor != null) ? `<span class="val">${fmt(ult.valor)}</span>` : "";
+            const parts = [placa, servico, valor].filter(Boolean);
+            extra.innerHTML = parts.join('<span class="sep">·</span>');
+          } else {
+            extra.textContent = "";
+          }
+        }
       });
     } catch (_) {}
+  }
+
+  function esc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   function fmtRelative(iso) {
