@@ -136,13 +136,18 @@
     }
     .field input::placeholder { color: var(--t6); }
 
+    .field select option {
+      background: var(--ds-surface);
+      color: var(--ds-ink);
+    }
+
     .field input:hover:not(:focus), .field select:hover:not(:focus) {
-      border-color: #b8c6d6;
-      background: #f2f5f9;
+      border-color: var(--ds-line-strong);
+      background: var(--ds-surface-alt);
     }
     .field input:focus, .field select:focus {
       border-color: var(--focus);
-      background: #fff;
+      background: var(--ds-surface);
       box-shadow: 0 0 0 3px var(--focus-r);
     }
 
@@ -902,7 +907,11 @@
     .edit-field input:focus, .edit-field select:focus {
       border-color: var(--focus);
       box-shadow: 0 0 0 3px var(--focus-r);
-      background: #fff;
+      background: var(--ds-surface);
+    }
+    .edit-field select option {
+      background: var(--ds-surface);
+      color: var(--ds-ink);
     }
     .edit-field input.placa { text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
 
