@@ -190,7 +190,9 @@
         </select>
 
         <button class="btn-primary" id="btnAplicar">Aplicar</button>
-        <button class="btn-ghost" id="btnSync" title="Importa o mês selecionado do Tiny (pode levar 1-5 min).">Sincronizar do Tiny</button>
+        <button class="btn-ghost" id="btnSync" title="Importa o mês via API do Tiny (rápido, sem forma de recebimento).">Sincronizar do Tiny</button>
+        <button class="btn-ghost" id="btnImport" title="Importa planilha XLS de Contas a Receber exportada do Tiny (traz forma de recebimento, situação e taxas).">Importar XLS</button>
+        <input type="file" id="fileXls" accept=".xls,.xlsx" style="display:none">
         <span class="sync-status" id="syncStatus"></span>
       </div>
 
@@ -211,6 +213,23 @@
               <th class="num">Total</th>
             </tr></thead>
             <tbody id="unitBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Por forma de recebimento (so aparece se tem XLS importado) -->
+      <div class="g-section" id="formaSection" style="display:none">
+        <div class="g-section-title">Por forma de recebimento <span style="font-size:var(--ds-text-xs); font-weight:500; color:var(--t2); margin-left:8px">· do XLS do Tiny</span></div>
+        <div class="table-wrap">
+          <table class="rank">
+            <thead><tr>
+              <th>Forma</th>
+              <th class="num" style="width:90px">Qtd</th>
+              <th class="num" style="width:150px">Valor documento</th>
+              <th class="num" style="width:150px">Recebido</th>
+              <th class="num" style="width:110px">Taxas</th>
+            </tr></thead>
+            <tbody id="formaBody"><tr><td colspan="5" class="g-empty">—</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -334,6 +353,7 @@
 
       renderCards(j);
       renderUnidades(j.por_unit);
+      renderPorForma(j.por_forma, j.tem_xls);
       renderPorDiaCategoria(j.por_dia_categoria);
       renderRanking("svcBody", j.ranking_servicos, "servico");
       renderRanking("cliBody", j.ranking_clientes, "cliente");
@@ -351,11 +371,18 @@
   function renderCards(j) {
     const el = document.getElementById("cardsStrip");
     const unidadesCount = Object.keys(j.por_unit || {}).length;
-    el.innerHTML = `
+    const base = `
       <div class="card"><div class="lbl">Faturamento total</div><div class="val">${brl(j.total)}</div><div class="sub">mês ${escHtml(j.mes)}</div></div>
       <div class="card"><div class="lbl">Lançamentos</div><div class="val">${Number(j.count).toLocaleString("pt-BR")}</div><div class="sub">${unidadesCount} unidade(s)</div></div>
       <div class="card"><div class="lbl">Ticket médio</div><div class="val">${brl(j.count ? j.total / j.count : 0)}</div><div class="sub">por lançamento</div></div>
     `;
+    // Cards extras só aparecem se tem XLS importado (tem situacao/forma preenchidos)
+    const extra = j.tem_xls ? `
+      <div class="card"><div class="lbl">Recebido</div><div class="val">${brl(j.recebido_total)}</div><div class="sub">${Number(j.recebido_count||0).toLocaleString("pt-BR")} pagos</div></div>
+      <div class="card"><div class="lbl">A faturar</div><div class="val">${brl(j.a_faturar_total)}</div><div class="sub">${Number(j.a_faturar_count||0).toLocaleString("pt-BR")} em aberto</div></div>
+      <div class="card"><div class="lbl">Taxas de cartão</div><div class="val">${brl(j.taxas_cartao_total)}</div><div class="sub">deduzido no mês</div></div>
+    ` : "";
+    el.innerHTML = base + extra;
   }
 
   function renderUnidades(porUnit) {
@@ -381,6 +408,25 @@
     const d = new Date(`${iso}T00:00:00`);
     const dow = ["dom","seg","ter","qua","qui","sex","sáb"][d.getDay()] || "";
     return `${m[3]}/${m[2]} <span style="color:var(--t2);font-weight:500">${dow}</span>`;
+  }
+
+  function renderPorForma(lista, temXls) {
+    const sec = document.getElementById("formaSection");
+    const tbody = document.getElementById("formaBody");
+    if (!temXls || !lista || !lista.length) {
+      sec.style.display = "none";
+      return;
+    }
+    sec.style.display = "";
+    tbody.innerHTML = lista.map(r => `
+      <tr>
+        <td>${escHtml(r.forma)}</td>
+        <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
+        <td class="num">${brl(r.total)}</td>
+        <td class="num">${r.recebido > 0 ? brl(r.recebido) : '<span style="color:var(--t2)">—</span>'}</td>
+        <td class="num">${r.taxas > 0 ? brl(r.taxas) : '<span style="color:var(--t2)">—</span>'}</td>
+      </tr>
+    `).join("");
   }
 
   function renderPorDiaCategoria(lista) {
@@ -459,8 +505,66 @@
     }
   }
 
+  // Importar XLS
+  async function importarXls(file) {
+    const unit = document.getElementById("selUnit").value;
+    if (!unit || unit === "all") {
+      alert("Escolha uma unidade específica antes de importar o XLS.");
+      return;
+    }
+    if (!file) return;
+
+    const btn = document.getElementById("btnImport");
+    const status = document.getElementById("syncStatus");
+    btn.disabled = true;
+    status.className = "sync-status";
+    status.textContent = `Importando ${file.name}…`;
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("unit", unit);
+
+    try {
+      let token = await getCsrf();
+      let r = await fetch("/gerencial/api/bi/importar-xls", {
+        method: "POST",
+        headers: { "X-CSRF-Token": token },
+        body: form,
+      });
+      if (r.status === 403) {
+        token = await getCsrf(true);
+        const f2 = new FormData();
+        f2.append("file", file);
+        f2.append("unit", unit);
+        r = await fetch("/gerencial/api/bi/importar-xls", {
+          method: "POST",
+          headers: { "X-CSRF-Token": token },
+          body: f2,
+        });
+      }
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "Erro.");
+      status.className = "sync-status ok";
+      status.textContent = `OK · linhas: ${j.linhas_xls} · novos: ${j.novos} · atualizados: ${j.atualizados} · meses: ${(j.meses||[]).join(", ")}`;
+      carregar();
+    } catch (e) {
+      status.className = "sync-status err";
+      status.textContent = "Erro: " + e.message;
+    } finally {
+      btn.disabled = false;
+      document.getElementById("fileXls").value = "";
+    }
+  }
+
   document.getElementById("btnAplicar").addEventListener("click", carregar);
   document.getElementById("btnSync").addEventListener("click", sincronizar);
+  document.getElementById("btnImport").addEventListener("click", () => {
+    document.getElementById("fileXls").click();
+  });
+  document.getElementById("fileXls").addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) importarXls(f);
+  });
   inpMes.addEventListener("change", carregar);
   document.getElementById("selUnit").addEventListener("change", carregar);
 

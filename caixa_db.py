@@ -114,6 +114,18 @@ CREATE INDEX IF NOT EXISTS idx_hist_unit_data ON historico_tiny(unit, data);
 CREATE INDEX IF NOT EXISTS idx_hist_unit_cat  ON historico_tiny(unit, servico_norm);
 """
 
+# Colunas extras (vindas do XLS de Contas a Receber do Tiny). Aplicadas via ALTER
+# em _connect() — se a coluna ja existe, sqlite levanta OperationalError, que e ignorado.
+_MIGRATE_HIST_EXTRA = [
+    'ALTER TABLE historico_tiny ADD COLUMN situacao TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE historico_tiny ADD COLUMN forma_recebimento TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE historico_tiny ADD COLUMN meio_recebimento TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE historico_tiny ADD COLUMN data_liquidacao TEXT NOT NULL DEFAULT ""',
+    'ALTER TABLE historico_tiny ADD COLUMN valor_recebido REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE historico_tiny ADD COLUMN taxas REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE historico_tiny ADD COLUMN numero_documento TEXT NOT NULL DEFAULT ""',
+]
+
 
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
@@ -130,6 +142,12 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.executescript(_DDL_SNAPSHOT)
     conn.executescript(_DDL_ENVIOS)
     conn.executescript(_DDL_HISTORICO_TINY)
+    for sql in _MIGRATE_HIST_EXTRA:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # coluna ja existe
+    conn.commit()
     return conn
 
 
@@ -400,33 +418,59 @@ def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to
 
 
 def upsert_historico_tiny(unit: str, unit_dir: Path, row: dict[str, Any]) -> bool:
-    """Insere ou atualiza registro em historico_tiny. Retorna True se novo, False se atualizou."""
+    """Insere ou atualiza registro em historico_tiny. Retorna True se novo, False se atualizou.
+
+    Aceita campos extra vindos do XLS (situacao, forma_recebimento, meio_recebimento,
+    data_liquidacao, valor_recebido, taxas, numero_documento). Se ausentes, vira "" / 0.
+    No UPDATE, campos extras vazios NAO sobrescrevem valores ja salvos — assim o sync
+    pela API (que nao tem esses dados) nao apaga o que o XLS trouxe.
+    """
     payload = {
-        "unit":         unit,
-        "id_tiny":      str(row.get("id_tiny", "")),
-        "data":         row.get("data", ""),
-        "cliente":      row.get("cliente", ""),
-        "categoria_id": str(row.get("categoria_id", "")),
-        "categoria":    row.get("categoria", ""),
-        "servico_norm": row.get("servico_norm", ""),
-        "valor":        float(row.get("valor", 0) or 0),
-        "historico":    row.get("historico", ""),
-        "fetched_at":   row.get("fetched_at", ""),
+        "unit":              unit,
+        "id_tiny":           str(row.get("id_tiny", "")),
+        "data":              row.get("data", ""),
+        "cliente":           row.get("cliente", ""),
+        "categoria_id":      str(row.get("categoria_id", "")),
+        "categoria":         row.get("categoria", ""),
+        "servico_norm":      row.get("servico_norm", ""),
+        "valor":             float(row.get("valor", 0) or 0),
+        "historico":         row.get("historico", ""),
+        "fetched_at":        row.get("fetched_at", ""),
+        "situacao":          row.get("situacao", ""),
+        "forma_recebimento": row.get("forma_recebimento", ""),
+        "meio_recebimento":  row.get("meio_recebimento", ""),
+        "data_liquidacao":   row.get("data_liquidacao", ""),
+        "valor_recebido":    float(row.get("valor_recebido", 0) or 0),
+        "taxas":             float(row.get("taxas", 0) or 0),
+        "numero_documento":  row.get("numero_documento", ""),
     }
     with _connect(unit_dir) as conn:
         try:
             conn.execute(
                 "INSERT INTO historico_tiny "
-                "(unit,id_tiny,data,cliente,categoria_id,categoria,servico_norm,valor,historico,fetched_at) "
-                "VALUES (:unit,:id_tiny,:data,:cliente,:categoria_id,:categoria,:servico_norm,:valor,:historico,:fetched_at)",
+                "(unit,id_tiny,data,cliente,categoria_id,categoria,servico_norm,valor,historico,fetched_at,"
+                " situacao,forma_recebimento,meio_recebimento,data_liquidacao,valor_recebido,taxas,numero_documento) "
+                "VALUES (:unit,:id_tiny,:data,:cliente,:categoria_id,:categoria,:servico_norm,:valor,:historico,:fetched_at,"
+                " :situacao,:forma_recebimento,:meio_recebimento,:data_liquidacao,:valor_recebido,:taxas,:numero_documento)",
                 payload,
             )
             return True
         except sqlite3.IntegrityError:
+            # Preserva campos extra quando row nao os traz: usa COALESCE com valor atual
+            # via expressao condicional (sqlite: IIF).
             conn.execute(
-                "UPDATE historico_tiny SET data=:data, cliente=:cliente, categoria_id=:categoria_id, "
-                "categoria=:categoria, servico_norm=:servico_norm, valor=:valor, historico=:historico, "
-                "fetched_at=:fetched_at WHERE unit=:unit AND id_tiny=:id_tiny",
+                "UPDATE historico_tiny SET "
+                "  data=:data, cliente=:cliente, categoria_id=:categoria_id, "
+                "  categoria=:categoria, servico_norm=:servico_norm, valor=:valor, historico=:historico, "
+                "  fetched_at=:fetched_at, "
+                "  situacao=IIF(:situacao='', situacao, :situacao), "
+                "  forma_recebimento=IIF(:forma_recebimento='', forma_recebimento, :forma_recebimento), "
+                "  meio_recebimento=IIF(:meio_recebimento='', meio_recebimento, :meio_recebimento), "
+                "  data_liquidacao=IIF(:data_liquidacao='', data_liquidacao, :data_liquidacao), "
+                "  valor_recebido=IIF(:valor_recebido=0, valor_recebido, :valor_recebido), "
+                "  taxas=IIF(:taxas=0, taxas, :taxas), "
+                "  numero_documento=IIF(:numero_documento='', numero_documento, :numero_documento) "
+                "WHERE unit=:unit AND id_tiny=:id_tiny",
                 payload,
             )
             return False

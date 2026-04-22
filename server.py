@@ -970,6 +970,181 @@ def master_api_bi_sync_historico():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+_XLS_HEADER_ALIAS = {
+    # chave normalizada (lower, sem acento, strip) -> nome canonico do nosso schema
+    "id": "id_tiny",
+    "cliente": "cliente",
+    "data emissao": "data_emissao",
+    "data vencimento": "data_vencimento",
+    "data liquidacao": "data_liquidacao",
+    "valor documento": "valor",
+    "saldo": "saldo",
+    "situacao": "situacao",
+    "numero documento": "numero_documento",
+    "numero no banco": "numero_banco",
+    "categoria": "categoria",
+    "historico": "historico",
+    "forma de recebimento": "forma_recebimento",
+    "meio de recebimento": "meio_recebimento",
+    "taxas": "taxas",
+    "competencia": "competencia",
+    "recebimento": "recebimento",
+    "recebido": "valor_recebido",
+}
+
+
+def _norm_header(s: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    return " ".join(s.lower().split())
+
+
+def _br_to_iso(d: str) -> str:
+    """Converte DD/MM/AAAA -> AAAA-MM-DD. Aceita ISO e retorna como vier."""
+    if not d:
+        return ""
+    s = str(d).strip()
+    if "/" in s:
+        try:
+            dd, mm, yy = s.split("/")
+            return f"{yy}-{mm.zfill(2)}-{dd.zfill(2)}"
+        except Exception:
+            return s
+    return s
+
+
+def _parse_xls_contas_receber(file_bytes: bytes) -> list[dict]:
+    """Le um XLS de Contas a Receber exportado do Tiny e devolve linhas normalizadas.
+
+    Usa olefile + xlrd porque xlrd.open_workbook direto falha com o compound doc
+    gerado pelo Tiny (seen[2]==4). Extraindo a stream Workbook crua funciona.
+    """
+    import olefile, xlrd, io
+    ole = olefile.OleFileIO(io.BytesIO(file_bytes))
+    try:
+        wb_data = ole.openstream("Workbook").read()
+    finally:
+        ole.close()
+    book = xlrd.open_workbook(file_contents=wb_data, formatting_info=False)
+    sh = book.sheet_by_index(0)
+    if sh.nrows < 2:
+        return []
+    header = [_norm_header(sh.cell_value(0, c)) for c in range(sh.ncols)]
+    col_idx: dict[str, int] = {}
+    for i, h in enumerate(header):
+        canon = _XLS_HEADER_ALIAS.get(h)
+        if canon:
+            col_idx[canon] = i
+
+    def _cell(ri: int, key: str):
+        i = col_idx.get(key)
+        return sh.cell_value(ri, i) if i is not None else ""
+
+    out: list[dict] = []
+    for ri in range(1, sh.nrows):
+        id_tiny = str(_cell(ri, "id_tiny") or "").strip()
+        if not id_tiny:
+            continue
+        # Tiny as vezes devolve id como float (ex: 901531101.0)
+        if id_tiny.endswith(".0"):
+            id_tiny = id_tiny[:-2]
+        try:
+            valor = float(_cell(ri, "valor") or 0)
+        except Exception:
+            valor = 0.0
+        try:
+            valor_receb = float(_cell(ri, "valor_recebido") or 0)
+        except Exception:
+            valor_receb = 0.0
+        try:
+            taxas = float(_cell(ri, "taxas") or 0)
+        except Exception:
+            taxas = 0.0
+        out.append({
+            "id_tiny":           id_tiny,
+            "data":              _br_to_iso(_cell(ri, "data_emissao")),
+            "cliente":           str(_cell(ri, "cliente") or "").strip(),
+            "categoria":         str(_cell(ri, "categoria") or "").strip(),
+            "valor":             valor,
+            "historico":         str(_cell(ri, "historico") or "").strip(),
+            "situacao":          str(_cell(ri, "situacao") or "").strip(),
+            "forma_recebimento": str(_cell(ri, "forma_recebimento") or "").strip(),
+            "meio_recebimento":  str(_cell(ri, "meio_recebimento") or "").strip(),
+            "data_liquidacao":   _br_to_iso(_cell(ri, "data_liquidacao")),
+            "valor_recebido":    valor_receb,
+            "taxas":             taxas,
+            "numero_documento":  str(_cell(ri, "numero_documento") or "").strip(),
+        })
+    return out
+
+
+@app.route("/gerencial/api/bi/importar-xls", methods=["POST"])
+@master_required
+@csrf_required
+def master_api_bi_importar_xls():
+    """Importa um XLS de 'Contas a Receber' do Tiny. Upsert em historico_tiny.
+
+    Multipart form: file=<xls>, unit=<slug>
+    """
+    try:
+        unit = (request.form.get("unit") or "").strip()
+        if unit not in UNITS:
+            return _json({"success": False, "error": "unit invalida"}, 400)
+        if "file" not in request.files:
+            return _json({"success": False, "error": "arquivo ausente (campo 'file')"}, 400)
+        up = request.files["file"]
+        if not up or not up.filename:
+            return _json({"success": False, "error": "arquivo vazio"}, 400)
+        raw = up.read()
+        if len(raw) > 20 * 1024 * 1024:
+            return _json({"success": False, "error": "arquivo muito grande (max 20MB)"}, 400)
+
+        config    = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        try:
+            linhas = _parse_xls_contas_receber(raw)
+        except Exception as exc:
+            app.logger.exception("[bi.importar-xls] falha parseando XLS")
+            return _json({"success": False, "error": f"falha ao ler XLS: {exc}"}, 400)
+
+        if not linhas:
+            return _json({"success": False, "error": "XLS sem linhas"}, 400)
+
+        ts_now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        novos = 0
+        atualizados = 0
+        meses_tocados: set[str] = set()
+        for r in linhas:
+            servico_norm = apply_alias(config, "servico", (r.get("categoria") or "").strip().upper())
+            row = {
+                **r,
+                "categoria_id": "",  # nao vem no XLS
+                "servico_norm": servico_norm,
+                "cliente":      clean_text(r.get("cliente", "")).upper(),
+                "fetched_at":   ts_now,
+            }
+            if _db_upsert_hist(unit, state_dir, row):
+                novos += 1
+            else:
+                atualizados += 1
+            d = r.get("data") or ""
+            if len(d) >= 7:
+                meses_tocados.add(d[:7])
+
+        return _json({
+            "success": True,
+            "unit": unit,
+            "arquivo": up.filename,
+            "linhas_xls": len(linhas),
+            "novos": novos,
+            "atualizados": atualizados,
+            "meses": sorted(meses_tocados),
+        })
+    except Exception as exc:
+        app.logger.exception("[bi.importar-xls] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/gerencial/api/bi/faturamento", methods=["GET"])
 @master_required
 def master_api_bi_faturamento():
@@ -1070,6 +1245,73 @@ def master_api_bi_faturamento():
             key=lambda x: x["data"],
         )
 
+        # Metricas vindas do XLS (situacao, forma_recebimento, valor_recebido, taxas).
+        # Se a unidade nao importou o XLS ainda, esses campos vem vazios/zerados e os
+        # totais derivados ficam zerados tambem (nao quebra nada).
+        forma_buckets: dict[str, dict] = {}
+        recebido_total = 0.0
+        a_faturar_total = 0.0
+        taxas_cartao_total = 0.0
+        recebido_count = 0
+        a_faturar_count = 0
+        tem_xls = False  # flag: alguem desse mes tem dados de XLS?
+        for r in servicos:
+            forma_raw = (r.get("forma_recebimento") or "").strip()
+            sit       = (r.get("situacao") or "").strip().lower()
+            valor     = float(r.get("valor", 0) or 0)
+            v_receb   = float(r.get("valor_recebido", 0) or 0)
+            taxas     = float(r.get("taxas", 0) or 0)
+
+            if forma_raw or sit:
+                tem_xls = True
+
+            # Categoria de forma de recebimento canonica (para agregacao)
+            f = forma_raw.lower()
+            if not forma_raw:
+                forma_cat = "(nao informado)"
+            elif "faturar" in f:
+                forma_cat = "A faturar"
+            elif "dinheiro" in f:
+                forma_cat = "Dinheiro"
+            elif "pix" in f:
+                forma_cat = "Pix"
+            elif "debito" in f or "débito" in f:
+                forma_cat = "Cartão de débito"
+            elif "credito" in f or "crédito" in f:
+                forma_cat = "Cartão de crédito"
+            elif "deposito" in f or "depósito" in f or "transfer" in f:
+                forma_cat = "Depósito"
+            elif "cortesia" in f:
+                forma_cat = "Cortesia"
+            else:
+                forma_cat = forma_raw
+
+            b = forma_buckets.setdefault(forma_cat, {
+                "forma": forma_cat, "count": 0, "total": 0.0, "recebido": 0.0, "taxas": 0.0,
+            })
+            b["count"] += 1
+            b["total"] += valor
+            b["recebido"] += v_receb
+            b["taxas"] += taxas
+
+            # Recebido vs A faturar
+            if "faturar" in f:
+                a_faturar_total += valor
+                a_faturar_count += 1
+            elif sit == "paga" or v_receb > 0:
+                recebido_total += v_receb if v_receb > 0 else valor
+                recebido_count += 1
+
+            if "cartao" in f or "cartão" in f or "credito" in f or "crédito" in f or "debito" in f or "débito" in f:
+                taxas_cartao_total += taxas
+
+        por_forma = sorted(
+            [{**v, "total": round(v["total"], 2),
+              "recebido": round(v["recebido"], 2),
+              "taxas": round(v["taxas"], 2)} for v in forma_buckets.values()],
+            key=lambda x: x["total"], reverse=True,
+        )
+
         return _json({
             "success": True,
             "mes": mes,
@@ -1080,6 +1322,13 @@ def master_api_bi_faturamento():
             "ranking_clientes": ranking_clientes,
             "por_dia": faturamento_por_dia,
             "por_dia_categoria": faturamento_por_dia_cat,
+            "por_forma": por_forma,
+            "recebido_total": round(recebido_total, 2),
+            "recebido_count": recebido_count,
+            "a_faturar_total": round(a_faturar_total, 2),
+            "a_faturar_count": a_faturar_count,
+            "taxas_cartao_total": round(taxas_cartao_total, 2),
+            "tem_xls": tem_xls,
         })
     except Exception as exc:
         app.logger.exception("[bi.faturamento] falha")
