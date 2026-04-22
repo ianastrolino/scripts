@@ -1029,6 +1029,47 @@ def master_api_bi_faturamento():
             key=lambda x: x["total"], reverse=True,
         )
 
+        # Agrega por dia (pra grafico "Faturamento por dia" do mes)
+        # e por dia×categoria (pra tabela dia-a-dia quebrada por servico)
+        por_dia: dict[str, dict] = {}
+        por_dia_cat: dict[str, dict] = {}
+        for r in servicos:
+            data = (r.get("data") or "").strip()
+            if not data:
+                continue
+            cat = (r.get("servico_norm") or r.get("categoria") or "").strip().upper() or "(sem categoria)"
+            valor = float(r.get("valor", 0) or 0)
+
+            d = por_dia.setdefault(data, {"data": data, "count": 0, "total": 0.0})
+            d["count"] += 1
+            d["total"] += valor
+
+            dc = por_dia_cat.setdefault(data, {})
+            c = dc.setdefault(cat, {"count": 0, "total": 0.0})
+            c["count"] += 1
+            c["total"] += valor
+
+        faturamento_por_dia = sorted(
+            [{**v, "total": round(v["total"], 2)} for v in por_dia.values()],
+            key=lambda x: x["data"],
+        )
+        faturamento_por_dia_cat = sorted(
+            [
+                {
+                    "data": data,
+                    "total": round(sum(c["total"] for c in cats.values()), 2),
+                    "count": sum(c["count"] for c in cats.values()),
+                    "categorias": sorted(
+                        [{"categoria": cat, "count": c["count"], "total": round(c["total"], 2)}
+                         for cat, c in cats.items()],
+                        key=lambda x: x["total"], reverse=True,
+                    ),
+                }
+                for data, cats in por_dia_cat.items()
+            ],
+            key=lambda x: x["data"],
+        )
+
         return _json({
             "success": True,
             "mes": mes,
@@ -1037,6 +1078,8 @@ def master_api_bi_faturamento():
             "por_unit": por_unit,
             "ranking_servicos": ranking_servicos,
             "ranking_clientes": ranking_clientes,
+            "por_dia": faturamento_por_dia,
+            "por_dia_categoria": faturamento_por_dia_cat,
         })
     except Exception as exc:
         app.logger.exception("[bi.faturamento] falha")

@@ -150,6 +150,20 @@
     @media (max-width: 900px) { .two-cols { grid-template-columns: 1fr; } }
 
     .unit-row { font-size: var(--ds-text-sm); color: var(--t2); margin-top: 4px; }
+
+    /* Pills de categoria (tabela "por dia x categoria") */
+    .cat-pills {
+      display: flex; flex-wrap: wrap; gap: 6px;
+    }
+    .cat-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 999px;
+      background: var(--card2); border: 1px solid var(--border);
+      font-size: var(--ds-text-xs); color: var(--t2);
+      white-space: nowrap;
+    }
+    .cat-pill b { color: var(--t1); font-weight: var(--ds-weight-bold); }
+    .cat-pill-val { color: var(--t1); font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -197,6 +211,22 @@
               <th class="num">Total</th>
             </tr></thead>
             <tbody id="unitBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Faturamento por dia x categoria -->
+      <div class="g-section">
+        <div class="g-section-title">Faturamento por dia · quebrado por categoria</div>
+        <div class="table-wrap">
+          <table class="rank">
+            <thead><tr>
+              <th style="width:110px">Data</th>
+              <th>Categorias</th>
+              <th class="num" style="width:80px">Qtd</th>
+              <th class="num" style="width:140px">Total</th>
+            </tr></thead>
+            <tbody id="diaCatBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -287,7 +317,7 @@
     const unit = document.getElementById("selUnit").value;
     if (!mes) return;
 
-    ["cardsStrip","unitBody","svcBody","cliBody"].forEach(id => {
+    ["cardsStrip","unitBody","diaCatBody","svcBody","cliBody"].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.innerHTML = id === "cardsStrip"
@@ -304,10 +334,11 @@
 
       renderCards(j);
       renderUnidades(j.por_unit);
+      renderPorDiaCategoria(j.por_dia_categoria);
       renderRanking("svcBody", j.ranking_servicos, "servico");
       renderRanking("cliBody", j.ranking_clientes, "cliente");
     } catch (e) {
-      ["cardsStrip","unitBody","svcBody","cliBody"].forEach(id => {
+      ["cardsStrip","unitBody","diaCatBody","svcBody","cliBody"].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         el.innerHTML = id === "cardsStrip"
@@ -341,6 +372,33 @@
         <td class="num">${brl(r.total)}</td>
       </tr>
     `).join("");
+  }
+
+  function fmtDataBR(iso) {
+    if (!iso) return "—";
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return iso;
+    const d = new Date(`${iso}T00:00:00`);
+    const dow = ["dom","seg","ter","qua","qui","sex","sáb"][d.getDay()] || "";
+    return `${m[3]}/${m[2]} <span style="color:var(--t2);font-weight:500">${dow}</span>`;
+  }
+
+  function renderPorDiaCategoria(lista) {
+    const tbody = document.getElementById("diaCatBody");
+    if (!lista || !lista.length) { tbody.innerHTML = '<tr><td colspan="4" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = lista.map(r => {
+      const cats = (r.categorias || []).map(c =>
+        `<span class="cat-pill">${escHtml(c.categoria)} <b>${c.count}×</b> <span class="cat-pill-val">${brl(c.total)}</span></span>`
+      ).join("");
+      return `
+        <tr>
+          <td style="white-space:nowrap"><b>${fmtDataBR(r.data)}</b></td>
+          <td><div class="cat-pills">${cats}</div></td>
+          <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
+          <td class="num"><b>${brl(r.total)}</b></td>
+        </tr>
+      `;
+    }).join("");
   }
 
   function renderRanking(tbodyId, lista, key) {
