@@ -374,6 +374,7 @@
       }
       toast(decisao === "aprovar" ? "Aprovado e executado." : "Rejeitado.");
       load();
+      if (window.AstroShell && AstroShell.refreshBadges) AstroShell.refreshBadges();
     } catch (e) {
       toast("Erro: " + e.message, true);
     }

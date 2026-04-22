@@ -3831,24 +3831,68 @@ def master_auditoria_page():
     return _nocache(send_from_directory(UI_DIR, "auditoria.html"))
 
 
+def _auditoria_filtered() -> list[dict]:
+    """Aplica filtros (email, action, from, to) e permissao de visibilidade.
+    Usado pelo JSON e pelo export CSV."""
+    user = _current_user() or {}
+    me_email = session.get("email", "").lower()
+    entries = _read_audit_log(limit=5000)
+    if not user.get("master"):
+        entries = [e for e in entries if (e.get("user_email") or "").lower() == me_email]
+    filtro_email = (request.args.get("email") or "").strip().lower()
+    filtro_acao  = (request.args.get("action") or "").strip()
+    filtro_from  = (request.args.get("from") or "").strip()  # YYYY-MM-DD
+    filtro_to    = (request.args.get("to")   or "").strip()
+    if filtro_email:
+        entries = [e for e in entries if (e.get("user_email") or "").lower() == filtro_email]
+    if filtro_acao:
+        entries = [e for e in entries if (e.get("action") or "").startswith(filtro_acao)]
+    if filtro_from:
+        entries = [e for e in entries if (e.get("ts") or "") >= filtro_from]
+    if filtro_to:
+        # inclui o dia inteiro do 'to'
+        entries = [e for e in entries if (e.get("ts") or "") <= filtro_to + "T23:59:59"]
+    return entries
+
+
 @app.route("/master/api/auditoria")
 @master_view_required
 def master_api_auditoria():
     """Retorna as ultimas N entradas do audit log, mais recentes primeiro.
     Matriz ve apenas as proprias acoes; master ve tudo."""
-    user = _current_user() or {}
-    me_email = session.get("email", "").lower()
-    entries = _read_audit_log(limit=1000)
-    if not user.get("master"):
-        entries = [e for e in entries if (e.get("user_email") or "").lower() == me_email]
-    # Filtros opcionais
-    filtro_email = (request.args.get("email") or "").strip().lower()
-    filtro_acao  = (request.args.get("action") or "").strip()
-    if filtro_email:
-        entries = [e for e in entries if (e.get("user_email") or "").lower() == filtro_email]
-    if filtro_acao:
-        entries = [e for e in entries if (e.get("action") or "").startswith(filtro_acao)]
+    entries = _auditoria_filtered()
     return _json({"entries": entries[:500], "total": len(entries)})
+
+
+@app.route("/master/api/auditoria.csv")
+@master_view_required
+def master_api_auditoria_csv():
+    """Export CSV com as mesmas regras de filtro/permissao da rota JSON."""
+    import csv, io
+    entries = _auditoria_filtered()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["quando", "email", "nome", "perfil", "acao", "alvo", "resultado", "approval_id", "ip", "payload_json"])
+    for e in entries:
+        payload = e.get("payload") or {}
+        payload_str = json.dumps(payload, ensure_ascii=False) if payload else ""
+        w.writerow([
+            e.get("ts", ""),
+            e.get("user_email", ""),
+            e.get("user_name", ""),
+            e.get("user_role", ""),
+            e.get("action", ""),
+            e.get("target", ""),
+            e.get("result", ""),
+            e.get("approval_id", ""),
+            e.get("ip", ""),
+            payload_str,
+        ])
+    csv_text = "﻿" + buf.getvalue()  # BOM para Excel abrir UTF-8 direito
+    hoje = dt.date.today().isoformat()
+    resp = Response(csv_text, mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="auditoria_astro_{hoje}.csv"'
+    return resp
 
 
 @app.route("/master/aprovacoes")

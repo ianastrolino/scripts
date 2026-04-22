@@ -667,6 +667,11 @@
 
     // Tema — aplica ícone inicial e wire do toggle
     applyTheme(readTheme());
+
+    // Auto-refresh do badge de aprovacoes (so master ve e decide)
+    if (ctx.isMaster) {
+      setInterval(refreshBadges, 30_000);
+    }
     const themeBtn = document.getElementById("abThemeToggle");
     if (themeBtn) {
       themeBtn.addEventListener("click", () => {
@@ -676,11 +681,39 @@
     }
   }
 
+  async function refreshBadges() {
+    try {
+      const r = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+      if (!r.ok) return;
+      const me = await r.json();
+      updateBadge("/master/aprovacoes", me.pending_approvals || 0);
+    } catch (_) {}
+  }
+
+  function updateBadge(href, count) {
+    const item = document.querySelector(`.sb-item[href="${href}"]`);
+    if (!item) return;
+    let badge = item.querySelector(".sb-item-badge");
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "sb-item-badge sb-item-badge-alert";
+        item.appendChild(badge);
+      } else if (!badge.classList.contains("sb-item-badge-alert")) {
+        badge.classList.add("sb-item-badge-alert");
+      }
+      badge.textContent = String(count);
+    } else if (badge && badge.classList.contains("sb-item-badge-alert")) {
+      badge.remove();
+    }
+  }
+
   global.AstroShell = {
     init,
     icon: (key) => ICONS[key] || "",
     fpIcon,
     fpLabel,
     fpChip,
+    refreshBadges,
   };
 })(window);

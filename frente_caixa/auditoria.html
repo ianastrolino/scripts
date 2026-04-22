@@ -38,6 +38,19 @@
       font-size: var(--ds-text-sm); color: var(--t1);
       outline: none; min-width: 140px;
     }
+    .filter input[type="date"] { min-width: 130px; }
+
+    .btn-export, .btn-clear {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 7px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--border); cursor: pointer;
+      background: var(--card); color: var(--t1);
+    }
+    .btn-export {
+      background: var(--ds-accent-600); color: #fff; border-color: var(--ds-accent-600);
+    }
+    .btn-export:hover { background: var(--ds-accent-700); }
+    .btn-clear:hover { background: var(--card2); }
 
     .table-wrap {
       background: var(--card); border: 1px solid var(--border);
@@ -117,6 +130,14 @@
 
       <div class="filters">
         <div class="filter">
+          <label>De</label>
+          <input type="date" id="filterFrom" autocomplete="off">
+        </div>
+        <div class="filter">
+          <label>Até</label>
+          <input type="date" id="filterTo" autocomplete="off">
+        </div>
+        <div class="filter">
           <label>Usuário</label>
           <input type="text" id="filterEmail" placeholder="email (opcional)" autocomplete="off">
         </div>
@@ -128,12 +149,15 @@
             <option value="user.create">Criar usuário</option>
             <option value="user.update">Editar usuário</option>
             <option value="user.delete">Excluir usuário</option>
+            <option value="user.invite">Convite</option>
             <option value="approval.">Aprovações</option>
             <option value="approval.request">Pedidos de aprovação</option>
             <option value="approval.approved">Aprovados</option>
             <option value="approval.rejected">Rejeitados</option>
           </select>
         </div>
+        <button type="button" class="btn-export" id="btnExport" title="Baixar CSV com os filtros aplicados">Exportar CSV</button>
+        <button type="button" class="btn-clear" id="btnClear" title="Limpar todos os filtros">Limpar</button>
       </div>
 
       <div class="table-wrap">
@@ -202,12 +226,21 @@
     return escHtml(r || "—");
   }
 
-  async function load() {
+  function buildFilterQs() {
     const email  = document.getElementById("filterEmail").value.trim();
     const action = document.getElementById("filterAction").value;
+    const from   = document.getElementById("filterFrom").value;
+    const to     = document.getElementById("filterTo").value;
     const qs = new URLSearchParams();
     if (email)  qs.set("email",  email);
     if (action) qs.set("action", action);
+    if (from)   qs.set("from",   from);
+    if (to)     qs.set("to",     to);
+    return qs;
+  }
+
+  async function load() {
+    const qs = buildFilterQs();
     try {
       const r = await fetch("/master/api/auditoria?" + qs.toString(), { cache: "no-store" });
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -244,6 +277,21 @@
   let deb;
   document.getElementById("filterEmail").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(load, 300); });
   document.getElementById("filterAction").addEventListener("change", load);
+  document.getElementById("filterFrom").addEventListener("change", load);
+  document.getElementById("filterTo").addEventListener("change", load);
+
+  document.getElementById("btnExport").addEventListener("click", () => {
+    const qs = buildFilterQs();
+    window.location.href = "/master/api/auditoria.csv?" + qs.toString();
+  });
+
+  document.getElementById("btnClear").addEventListener("click", () => {
+    document.getElementById("filterEmail").value = "";
+    document.getElementById("filterAction").value = "";
+    document.getElementById("filterFrom").value = "";
+    document.getElementById("filterTo").value = "";
+    load();
+  });
 
   load();
   setInterval(load, 60_000);
