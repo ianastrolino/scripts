@@ -785,11 +785,17 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
         "client_id", "client_secret", "refresh_token", "redirect_uri",
         "forma_recebimento_ids", "cliente_ids", "categoria_id", "categoria_ids",
         "vencimento_dias", "vencimento_tipo", "numero_documento_prefix",
-        "auto_create_contacts", "require_payment_mapping",
+        "require_payment_mapping",
         "include_forma_recebimento", "default_tipo_pessoa",
     ):
         if (v := ud.get(field)) is not None:
             tiny[field] = v
+
+    # auto_create_contacts e forcado true pra toda a rede — ignora qualquer
+    # 'false' legado no UNITS_CONFIG. Particulares (AV) nao tem botao 'Mapear
+    # cliente' na UI, entao o unico jeito deles passarem eh serem criados
+    # automaticamente.
+    tiny["auto_create_contacts"] = True
 
     # Merge dos aliases: globais (base) + da unidade (sobrescrevem em cima)
     unit_aliases = ud.get("aliases", {}) or {}
