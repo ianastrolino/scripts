@@ -279,7 +279,8 @@
       <aside class="app-sidebar">
         <div class="sb-brand">
           <a class="sb-brand-logo" href="/home" aria-label="Astro Vistorias — Início">
-            <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+            <img class="sb-brand-logo-full" src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
+            <img class="sb-brand-logo-mini" src="/assets/img/astro-a.png" alt="Astro Vistorias">
           </a>
         </div>
         <nav class="sb-nav">
@@ -331,6 +332,9 @@
     return `
       <header class="app-appbar">
         <button class="ab-toggle" type="button" id="abToggle" aria-label="Alternar menu">☰</button>
+        <a class="ab-brand" href="/home" aria-label="Astro Vistorias — Início">
+          <img src="/assets/img/astro-a.png" alt="">
+        </a>
         <div class="ab-breadcrumbs">${crumbsHtml}</div>
         <div class="ab-right">
           <button class="ab-cmdk" type="button" id="abCmdK" title="Busca rápida">

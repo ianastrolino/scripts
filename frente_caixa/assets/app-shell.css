@@ -57,10 +57,12 @@
   display: block;
   transition: height var(--ds-duration-2) var(--ds-ease);
 }
+.sb-brand-logo-mini { display: none !important; }
 .sb-brand-text { display: none; }
 .app-shell.is-collapsed .sb-brand { min-height: 64px; padding: var(--ds-space-2); }
-.app-shell.is-collapsed .sb-brand-logo { padding: 4px 6px; width: auto; }
-.app-shell.is-collapsed .sb-brand-logo img { height: 28px; }
+.app-shell.is-collapsed .sb-brand-logo { padding: 6px; width: auto; }
+.app-shell.is-collapsed .sb-brand-logo-full { display: none !important; }
+.app-shell.is-collapsed .sb-brand-logo-mini { display: block !important; height: 34px; width: 34px; }
 
 /* Navegacao (scrollavel) */
 .sb-nav {
@@ -236,6 +238,24 @@
 }
 .ab-toggle:hover { background: var(--ds-surface-alt); color: var(--ds-ink); }
 
+.ab-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px; height: 34px;
+  background: #fff;
+  border-radius: var(--ds-radius-md);
+  box-shadow: 0 1px 2px rgba(15,23,42,.08), 0 0 0 1px var(--ds-line);
+  flex-shrink: 0;
+  transition: transform var(--ds-duration-2) var(--ds-ease),
+              box-shadow var(--ds-duration-2) var(--ds-ease);
+}
+.ab-brand:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15,23,42,.12), 0 0 0 1px var(--ds-line-strong);
+}
+.ab-brand img { width: 22px; height: 22px; display: block; }
+
 .ab-breadcrumbs {
   display: flex;
   align-items: center;
@@ -317,6 +337,21 @@
 }
 
 .app-page-header { margin-bottom: var(--ds-space-6); }
+.app-page-header--with-logo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ds-space-4);
+}
+.app-page-header--with-logo .app-page-logo {
+  flex-shrink: 0;
+  width: 56px; height: 56px;
+  background: #fff;
+  border-radius: var(--ds-radius-lg);
+  box-shadow: 0 4px 12px rgba(15,23,42,.08), 0 0 0 1px var(--ds-line);
+  display: flex; align-items: center; justify-content: center;
+}
+.app-page-header--with-logo .app-page-logo img { width: 38px; height: 38px; display: block; }
+.app-page-header--with-logo .app-page-header-text { flex: 1; min-width: 0; }
 .app-page-eyebrow {
   font-size: var(--ds-text-xs);
   font-weight: var(--ds-weight-bold);
