@@ -1514,6 +1514,17 @@
 
     <!-- Coluna esquerda: formulário / conferência -->
     <div>
+      <div id="fechamentoTarja" style="display:none;margin-bottom:12px;padding:12px 14px;background:var(--ds-danger-soft);border:1px solid var(--ds-danger);border-radius:var(--ds-radius-md);color:var(--ds-danger);font-size:13px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span style="font-size:18px;line-height:1">🔒</span>
+          <div style="flex:1">
+            <div style="font-weight:700;margin-bottom:2px" id="fechamentoTarjaTitle">Caixa fechado</div>
+            <div id="fechamentoTarjaSub" style="font-size:12px;opacity:.85">—</div>
+          </div>
+          <button type="button" id="btnReabrirCaixa" style="font:inherit;font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--ds-radius-sm);border:1px solid var(--ds-danger);background:transparent;color:var(--ds-danger);cursor:pointer">Reabrir com PIN</button>
+        </div>
+      </div>
+
       <div class="card" id="formCard">
         <div class="card-header">
           <div class="card-icon">➕</div>
@@ -1937,8 +1948,8 @@
     })();
   </script>
 
-  <script src="caixa.js?v=18"></script>
-  <script src="caixa2-init.js?v=18"></script>
-  <script src="caixa2.js?v=18"></script>
+  <script src="caixa.js?v=19"></script>
+  <script src="caixa2-init.js?v=19"></script>
+  <script src="caixa2.js?v=19"></script>
 </body>
 </html>

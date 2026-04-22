@@ -13,6 +13,8 @@ const state = {
   pinCallback: null,          // funcao chamada ao confirmar PIN simples
   servicos: [],
   pinConfigurado: false,
+  fechado: false,             // dia atual fechado apos envio Tiny — bloqueia novos lancamentos
+  fechamento: null,           // {fechado_em, fechado_por, motivo}
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,10 +113,49 @@ async function carregarEstado() {
     if (res.success) {
       state.lancamentos = res.lancamentos || [];
       state.totais = res.totais || {};
-      setTimeout(() => { renderTabela(); renderTotais(); }, 0);
+      state.fechado = !!res.fechado;
+      state.fechamento = res.fechamento || null;
+      setTimeout(() => { renderTabela(); renderTotais(); renderFechamentoTarja(); }, 0);
     }
   } catch (e) {
     if (e.message !== "session_expired") console.error("Erro ao carregar estado:", e);
+  }
+}
+
+function renderFechamentoTarja() {
+  const tarja = document.getElementById("fechamentoTarja");
+  if (!tarja) return;
+  if (!state.fechado) {
+    tarja.style.display = "none";
+    return;
+  }
+  tarja.style.display = "";
+  const fech = state.fechamento || {};
+  const hora = fech.fechado_em ? new Date(fech.fechado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
+  const por = fech.fechado_por ? ` por ${fech.fechado_por}` : "";
+  const titleEl = document.getElementById("fechamentoTarjaTitle");
+  const subEl = document.getElementById("fechamentoTarjaSub");
+  if (titleEl) titleEl.textContent = "Caixa fechado — enviado ao Tiny às " + hora;
+  if (subEl) subEl.textContent = `Novos lançamentos, edições e exclusões exigem PIN master${por}. O caixa abre vazio amanhã.`;
+}
+
+async function reabrirCaixaComPin() {
+  const pin = prompt("PIN master para reabrir o caixa do dia:");
+  if (!pin) return;
+  try {
+    const res = await apiFetch(`${apiBase}/api/caixa/reabrir`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+    if (!res.success) {
+      alert("Erro: " + (res.error || "Falha ao reabrir."));
+      return;
+    }
+    alert("Caixa reaberto. Lançamentos liberados.");
+    await carregarEstado();
+  } catch (e) {
+    if (e.message !== "session_expired") alert("Erro: " + e.message);
   }
 }
 
@@ -460,11 +501,26 @@ async function lancar() {
   payload.client_uuid = state.pendingAttempt.uuid;
 
   try {
-    const res = await apiFetch(`${apiBase}/api/caixa/lancar`, {
+    let res = await apiFetch(`${apiBase}/api/caixa/lancar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+
+    // Caixa fechado — pede PIN e reenvia com o PIN junto
+    if (!res.success && res.reason === "caixa_fechado") {
+      const pin = prompt("Caixa do dia fechado (enviado ao Tiny).\nInforme o PIN master para lançar mesmo assim:");
+      if (!pin) {
+        msg.textContent = "Lançamento cancelado — caixa fechado.";
+        btn.disabled = false;
+        return;
+      }
+      res = await apiFetch(`${apiBase}/api/caixa/lancar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, pin }),
+      });
+    }
 
     if (!res.success) {
       msg.textContent = res.error || "Erro ao lancar.";
@@ -669,6 +725,9 @@ async function confirmarPin() {
 
 document.addEventListener("DOMContentLoaded", () => {
   init();
+
+  const btnReabrir = document.getElementById("btnReabrirCaixa");
+  if (btnReabrir) btnReabrir.addEventListener("click", reabrirCaixaComPin);
 
   // Campos de texto: validar ao digitar
   ["fPlaca", "fCliente", "fServico", "fValor", "fCpf"].forEach(id => {

@@ -2313,9 +2313,21 @@ def api_send(unit: str):
         except Exception as email_exc:
             app.logger.warning("[envio_tiny:email] falha ao enviar email: %s", email_exc)
 
+        # Trava automatica do caixa do dia quando o lote nao teve falha. Permite
+        # reenviar partes (com o botao Limpar historico) enquanto tem pendencia,
+        # e so fecha quando tudo rodou limpo. Pulados contam como sucesso (ja
+        # tinham sido enviados antes).
+        fechamento_auto = None
+        if not results["falhas"]:
+            user = _current_user() or {}
+            user_email = session.get("email", "") or user.get("email", "")
+            hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+            fechamento_auto = _fechar_dia(unit, hoje_iso, user_email, motivo="envio_tiny")
+
         return _json({
             "success": True, "summary": results,
             "message": f"Processamento concluido. Enviados: {len(results['enviados'])}",
+            "fechamento": fechamento_auto,
         })
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -2786,6 +2798,74 @@ def _caixa_totals(lancamentos: list[dict]) -> dict[str, Any]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Fechamento de caixa (trava apos envio Tiny)
+# ══════════════════════════════════════════════════════════════════════════════
+# Estrutura em /data/<unit>/caixa_fechamento.json:
+#   {"2026-04-22": {"fechado_em": "2026-04-22T17:30:00", "fechado_por": "x@y", "motivo": "envio_tiny"}}
+# Um dia "fechado" exige PIN master pra lançar, editar, excluir ou reabrir.
+# Amanha eh outro dia — _load_caixa_dia carrega nova data automaticamente, sem trava.
+
+def _fechamento_path(unit: str) -> Path:
+    return _unit_state_dir(unit) / "caixa_fechamento.json"
+
+
+def _load_fechamentos(unit: str) -> dict[str, dict]:
+    p = _fechamento_path(unit)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_fechamentos(unit: str, data: dict) -> None:
+    p = _fechamento_path(unit)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+def _dia_fechado(unit: str, data_iso: str) -> dict | None:
+    """Retorna o dict de fechamento se o dia esta fechado, ou None."""
+    return _load_fechamentos(unit).get(data_iso)
+
+
+def _fechar_dia(unit: str, data_iso: str, user_email: str, motivo: str = "envio_tiny") -> dict:
+    """Marca o dia como fechado. Idempotente — nao sobrescreve se ja fechado."""
+    fechs = _load_fechamentos(unit)
+    if data_iso in fechs:
+        return fechs[data_iso]
+    entry = {
+        "fechado_em":  dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+        "fechado_por": user_email,
+        "motivo":      motivo,
+    }
+    fechs[data_iso] = entry
+    _save_fechamentos(unit, fechs)
+    return entry
+
+
+def _reabrir_dia(unit: str, data_iso: str, user_email: str) -> bool:
+    """Remove a marcacao de fechado. Retorna True se reabriu, False se nao estava fechado."""
+    fechs = _load_fechamentos(unit)
+    if data_iso not in fechs:
+        return False
+    entry = fechs.pop(data_iso)
+    # Guarda historico de reaberturas como chave especial (nao afeta lookup do dia)
+    hist = fechs.setdefault("_reaberturas", [])
+    hist.append({
+        **entry,
+        "reaberto_em":  dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+        "reaberto_por": user_email,
+        "data_original": data_iso,
+    })
+    _save_fechamentos(unit, fechs)
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Rotas: caixa do dia (PDV)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2912,16 +2992,42 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/caixa/reabrir", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_caixa_reabrir(unit: str):
+    """Reabre o caixa do dia. Exige PIN master."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        ip = request.remote_addr or "unknown"
+        if not _pin_rate_check(unit, ip):
+            return _json({"success": False, "error": "Muitas tentativas. Aguarde 1 minuto."}, 429)
+        if not _verify_unit_pin(unit, data.get("pin", "")):
+            return _json({"success": False, "error": "PIN incorreto."}, 403)
+        hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        user = _current_user() or {}
+        reaberto = _reabrir_dia(unit, hoje_iso, session.get("email", "") or user.get("email", ""))
+        if not reaberto:
+            return _json({"success": False, "error": "Caixa nao estava fechado."}, 400)
+        return _json({"success": True, "message": "Caixa reaberto."})
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/caixa/estado")
 @unit_access_required
 def api_caixa_estado(unit: str):
     try:
         state = _load_caixa_dia(unit)
+        fech = _dia_fechado(unit, state["data"])
         return _json({
             "success": True,
             "data": state["data"],
             "lancamentos": state["lancamentos"],
             "totais": _caixa_totals(state["lancamentos"]),
+            "fechado": bool(fech),
+            "fechamento": fech,
         })
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -2949,6 +3055,21 @@ def api_caixa_lancar(unit: str):
                                    "valor": valor, "fp": fp})
         if err:
             return _json({"success": False, "error": err}, 400)
+
+        # Se o dia esta fechado (envio Tiny ja aconteceu), exige PIN pra lançar
+        hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        fech_info = _dia_fechado(unit, hoje_iso)
+        if fech_info:
+            ip = request.remote_addr or "unknown"
+            if not _pin_rate_check(unit, ip):
+                return _json({"success": False, "error": "Muitas tentativas. Aguarde 1 minuto."}, 429)
+            if not _verify_unit_pin(unit, data.get("pin", "")):
+                return _json({
+                    "success": False,
+                    "error": "Caixa fechado — PIN master necessário para novo lançamento.",
+                    "reason": "caixa_fechado",
+                    "fechamento": fech_info,
+                }, 403)
 
         state = _load_caixa_dia(unit)
 
