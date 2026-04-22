@@ -285,16 +285,23 @@
         <label class="field-label">Perfil</label>
         <div class="checkbox-row">
           <label class="checkbox-item">
-            <input type="checkbox" id="fMaster"> Master (acesso total à rede)
+            <input type="radio" name="fProfile" value="operador" id="fProfileOperador" checked>
+            Operador de PDV (só lança no caixa)
           </label>
           <label class="checkbox-item">
-            <input type="checkbox" id="fMatriz"> Matriz (operacional em todas as unidades)
+            <input type="radio" name="fProfile" value="gerencial" id="fProfileGerencial">
+            Gerencial da unidade (lança, fecha e confere)
           </label>
           <label class="checkbox-item">
-            <input type="checkbox" id="fGerencial"> Gerencial da unidade
+            <input type="radio" name="fProfile" value="matriz" id="fProfileMatriz">
+            Matriz (operacional em todas as unidades)
+          </label>
+          <label class="checkbox-item">
+            <input type="radio" name="fProfile" value="master" id="fProfileMaster">
+            Master (acesso total à rede)
           </label>
         </div>
-        <div class="field-hint">Master gerencia usuários e a rede. Matriz auxilia operacionalmente em todas as unidades (lança, fecha, confere), mas não mexe em usuários. Gerencial acessa o painel da própria unidade.</div>
+        <div class="field-hint">Operador só lança vendas no PDV. Gerencial lança, fecha e confere a unidade. Matriz faz operacional em toda a rede. Master gerencia usuários e administração.</div>
       </div>
 
       <div class="field" id="fUnitWrap">
@@ -541,9 +548,15 @@
     document.getElementById("fEmail").value = user ? user.email : "";
     document.getElementById("fEmail").disabled = !!user;
     document.getElementById("fName").value = user ? user.name : "";
-    document.getElementById("fMaster").checked = user ? user.master : false;
-    document.getElementById("fMatriz").checked = user ? !!user.matriz : false;
-    document.getElementById("fGerencial").checked = user ? user.gerencial : false;
+    // Deriva perfil unico a partir das flags do usuario existente (ou default operador)
+    let perfil = "operador";
+    if (user) {
+      if (user.master)        perfil = "master";
+      else if (user.matriz)   perfil = "matriz";
+      else if (user.gerencial) perfil = "gerencial";
+      else                    perfil = "operador";
+    }
+    document.getElementById("fProfile" + perfil.charAt(0).toUpperCase() + perfil.slice(1)).checked = true;
     document.getElementById("fUnit").value = user ? (user.unit || "") : "";
     document.getElementById("fPassword").value = "";
     document.getElementById("fPasswordHint").textContent = user
@@ -577,24 +590,15 @@
     state.editingEmail = null;
   }
 
+  function getPerfilSelecionado() {
+    const r = document.querySelector('input[name="fProfile"]:checked');
+    return r ? r.value : "operador";
+  }
+
   function syncMasterToggle() {
-    const isMaster = document.getElementById("fMaster").checked;
-    const isMatriz = document.getElementById("fMatriz").checked;
-    const globalProfile = isMaster || isMatriz;
-    document.getElementById("fUnitWrap").style.display = globalProfile ? "none" : "";
-    if (isMaster) {
-      document.getElementById("fMatriz").checked = false;
-      document.getElementById("fMatriz").disabled = true;
-      document.getElementById("fGerencial").checked = true;
-      document.getElementById("fGerencial").disabled = true;
-    } else if (isMatriz) {
-      document.getElementById("fMatriz").disabled = false;
-      document.getElementById("fGerencial").checked = true;
-      document.getElementById("fGerencial").disabled = true;
-    } else {
-      document.getElementById("fMatriz").disabled = false;
-      document.getElementById("fGerencial").disabled = false;
-    }
+    const perfil = getPerfilSelecionado();
+    const isGlobal = perfil === "master" || perfil === "matriz";
+    document.getElementById("fUnitWrap").style.display = isGlobal ? "none" : "";
   }
 
   function showAlert(id, msg, kind) {
@@ -611,12 +615,13 @@
     const editing = !!state.editingEmail;
     const usaConvite = !editing && document.getElementById("fMetodoConvite").checked;
 
+    const perfil = getPerfilSelecionado();
     const payload = {
       email:     document.getElementById("fEmail").value.trim().toLowerCase(),
       name:      document.getElementById("fName").value.trim(),
-      master:    document.getElementById("fMaster").checked,
-      matriz:    document.getElementById("fMatriz").checked,
-      gerencial: document.getElementById("fGerencial").checked,
+      master:    perfil === "master",
+      matriz:    perfil === "matriz",
+      gerencial: perfil === "gerencial",
       unit:      document.getElementById("fUnit").value,
     };
     if (payload.master || payload.matriz) payload.unit = "";
@@ -717,8 +722,9 @@
   document.getElementById("btnSave").addEventListener("click", save);
   document.getElementById("btnDelCancel").addEventListener("click", closeDel);
   document.getElementById("btnDelConfirm").addEventListener("click", confirmDel);
-  document.getElementById("fMaster").addEventListener("change", syncMasterToggle);
-  document.getElementById("fMatriz").addEventListener("change", syncMasterToggle);
+  document.querySelectorAll('input[name="fProfile"]').forEach(el =>
+    el.addEventListener("change", syncMasterToggle)
+  );
   document.getElementById("fMetodoConvite").addEventListener("change", syncMetodo);
   document.getElementById("fMetodoSenha").addEventListener("change", syncMetodo);
   document.getElementById("mdForm").addEventListener("click", (e) => {
