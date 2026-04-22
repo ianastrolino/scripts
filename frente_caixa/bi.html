@@ -54,25 +54,6 @@
     .btn-primary:hover { background: var(--ds-accent-700); }
     .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
 
-    .btn-ghost {
-      background: var(--ds-surface); color: var(--t1);
-      border: 1px solid var(--border); border-radius: var(--ds-radius-md);
-      padding: 7px var(--ds-space-4);
-      font-size: var(--ds-text-sm); font-family: inherit;
-      font-weight: var(--ds-weight-semi);
-      cursor: pointer;
-    }
-    .btn-ghost:hover { background: var(--card2); border-color: var(--ds-line-strong); }
-    .btn-ghost:disabled { opacity: .6; cursor: not-allowed; }
-
-    .sync-status {
-      margin-left: auto;
-      font-size: var(--ds-text-sm);
-      color: var(--t2);
-    }
-    .sync-status.ok   { color: var(--ds-success); }
-    .sync-status.err  { color: var(--ds-danger); }
-
     /* Cards */
     .cards {
       display: grid;
@@ -190,8 +171,6 @@
         </select>
 
         <button class="btn-primary" id="btnAplicar">Aplicar</button>
-        <button class="btn-ghost" id="btnSync" title="Sincroniza o mês via API do Tiny (complementar — o BI principal já usa os envios do próprio sistema).">Sincronizar do Tiny</button>
-        <span class="sync-status" id="syncStatus"></span>
       </div>
 
       <!-- Cards totais -->
@@ -301,18 +280,6 @@
   const ymNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const inpMes = document.getElementById("inpMes");
   inpMes.value = ymNow;
-
-  // CSRF
-  let _csrfToken = "";
-  async function getCsrf(force = false) {
-    if (!force && _csrfToken) return _csrfToken;
-    try {
-      const r = await fetch("/api/csrf-token");
-      const j = await r.json();
-      _csrfToken = j.token || "";
-    } catch { _csrfToken = ""; }
-    return _csrfToken;
-  }
 
   async function loadUnidades() {
     try {
@@ -447,53 +414,7 @@
     `).join("");
   }
 
-  // Sync
-  async function sincronizar() {
-    const mes  = inpMes.value;
-    const unit = document.getElementById("selUnit").value;
-    if (!mes) { alert("Selecione o mês."); return; }
-    if (!unit || unit === "all") {
-      alert("Escolha uma unidade específica para sincronizar. (Sincronizar todas de uma vez não é suportado aqui — faça uma por vez.)");
-      return;
-    }
-    if (!confirm(`Sincronizar o mês ${mes} da unidade ${unit} a partir do Tiny? Isso pode levar 1–5 minutos.`)) return;
-
-    const btn = document.getElementById("btnSync");
-    const status = document.getElementById("syncStatus");
-    btn.disabled = true;
-    status.className = "sync-status";
-    status.textContent = "Sincronizando… não feche a página.";
-
-    try {
-      let token = await getCsrf();
-      let r = await fetch("/gerencial/api/bi/sync-historico", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-        body: JSON.stringify({ unit, mes }),
-      });
-      if (r.status === 403) {
-        token = await getCsrf(true);
-        r = await fetch("/gerencial/api/bi/sync-historico", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-          body: JSON.stringify({ unit, mes }),
-        });
-      }
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || "Erro.");
-      status.className = "sync-status ok";
-      status.textContent = `OK · API: ${j.total_api} · detalhes: ${j.detalhes_ok} · novos: ${j.novos} · atualizados: ${j.atualizados} (tabela: ${j.total_tabela})`;
-      carregar();
-    } catch (e) {
-      status.className = "sync-status err";
-      status.textContent = "Erro: " + e.message;
-    } finally {
-      btn.disabled = false;
-    }
-  }
-
   document.getElementById("btnAplicar").addEventListener("click", carregar);
-  document.getElementById("btnSync").addEventListener("click", sincronizar);
   inpMes.addEventListener("change", carregar);
   document.getElementById("selUnit").addEventListener("change", carregar);
 
