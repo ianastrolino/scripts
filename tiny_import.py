@@ -54,7 +54,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "token_url": "https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token",
         "oauth_scope": "openid",
         "timeout_seconds": 30,
-        "auto_create_contacts": False,
+        "auto_create_contacts": True,
         "require_payment_mapping": False,
         "include_forma_recebimento": True,
         "default_tipo_pessoa": "J",
