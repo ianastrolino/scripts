@@ -618,6 +618,8 @@ def master_only_required(f):
                 return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         if not user.get("master"):
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Acesso restrito ao master."}, 403)
             return Response("Acesso restrito ao master.", status=403)
         return f(*args, **kwargs)
     return wrapper
@@ -3942,6 +3944,22 @@ def _execute_approved_action(entry: dict[str, Any]) -> None:
         _write_audit_log(origem, "user.update", target,
                          {k: v for k, v in sanit.items() if k != "password_hash"},
                          approval_id=entry.get("id", ""))
+    elif action == "user.invite":
+        sanit = payload.get("sanit", {})
+        with _USERS_LOCK:
+            if target in USERS and USERS[target].get("password_hash"):
+                raise RuntimeError(f"Usuario {target} ja esta ativo.")
+            stub = {**sanit, "password_hash": "", "convidado": True}
+            USERS[target] = stub
+            _save_users(USERS)
+        token, invite = _gerar_convite(target, sanit, origem.get("email", ""))
+        try:
+            _send_invite_email(target, sanit.get("name", ""), token, origem.get("name", ""))
+        except Exception as exc:
+            app.logger.error("[convite] falha ao enviar email aprovado %s: %s", target, exc)
+        _write_audit_log(origem, "user.invite", target,
+                         {k: v for k, v in sanit.items() if k != "password_hash"},
+                         approval_id=entry.get("id", ""))
     else:
         raise RuntimeError(f"Acao desconhecida: {action}")
 
@@ -3974,45 +3992,69 @@ def _gerar_convite(email: str, sanit: dict, criador_email: str) -> tuple[str, di
 
 
 @app.route("/master/api/usuarios/convite", methods=["POST"])
-@master_only_required
+@matriz_or_master
 @csrf_required
 def master_api_usuarios_convite():
     """Cria convite: valida payload (como usuário), gera token, envia email.
     Usuário fica com status 'convidado' (sem password_hash) até ativar.
-    """
+
+    Matriz pode convidar perfil gerencial/unidade direto; convite pra master ou
+    matriz precisa aprovacao."""
     data = request.get_json(silent=True) or {}
-    # Validação com editing=True pra pular a exigência de senha
     data["email"] = (data.get("email") or "").strip().lower()
     data["_skip_pwd"] = True
     result = _validate_user_payload_convite(data)
     if result[0] is None:
         return _json({"success": False, "error": result[1]}, 400)
     email, sanit = result
+
+    me = _current_user() or {}
+    me_email = session.get("email", "").lower()
+    me["email"] = me_email
+    criador_nome  = session.get("name", "")
+
+    # Matriz convidando pra alvo privilegiado — passa por aprovacao
+    if not me.get("master") and _is_privileged_target(sanit):
+        approval_id = _create_pending_approval(
+            {**me, "name": criador_nome},
+            "user.invite", email,
+            {"sanit": sanit},
+            description=f"Convidar {email} com perfil privilegiado (master/matriz)",
+        )
+        return _json({
+            "success":       True,
+            "approval_id":   approval_id,
+            "pending":       True,
+            "message":       "Convite precisa de aprovacao do master.",
+        })
+
     with _USERS_LOCK:
         if email in USERS and USERS[email].get("password_hash"):
             return _json({"success": False, "error": "Já existe usuário ativo com este e-mail."}, 409)
-        # Cria stub de usuário (sem password_hash) — será completado no ativar
         stub = {**sanit, "password_hash": "", "convidado": True}
         USERS[email] = stub
         _save_users(USERS)
-    criador_email = session.get("email", "")
-    criador_nome  = session.get("name", "")
-    token, invite = _gerar_convite(email, sanit, criador_email)
+    token, invite = _gerar_convite(email, sanit, me_email)
+    email_enviado = True
+    erro_email = ""
+    link = ""
     try:
         _send_invite_email(email, sanit["name"], token, criador_nome)
     except Exception as exc:
-        # Convite foi criado — retorna o link pro master copiar manualmente
+        email_enviado = False
+        erro_email = str(exc)
         link = f"{_public_base_url()}/ativar/{token}"
         app.logger.error("[convite] falha ao enviar email %s: %s", email, exc)
-        return _json({
-            "success": True,
-            "email_enviado": False,
-            "erro_email": str(exc),
-            "link": link,
-            "expira_em": invite["expira_em"],
-        })
-    app.logger.info(f"[convite] enviado: {email} (por {criador_email})")
-    return _json({"success": True, "email_enviado": True, "expira_em": invite["expira_em"]})
+
+    _write_audit_log(me, "user.invite", email,
+                     {k: v for k, v in sanit.items() if k != "password_hash"},
+                     result="ok" if email_enviado else "error")
+    app.logger.info(f"[convite] enviado: {email} (por {me_email})")
+    payload = {"success": True, "email_enviado": email_enviado, "expira_em": invite["expira_em"]}
+    if not email_enviado:
+        payload["erro_email"] = erro_email
+        payload["link"]       = link
+    return _json(payload)
 
 
 def _validate_user_payload_convite(data: dict) -> tuple[str, dict] | tuple[None, str]:
