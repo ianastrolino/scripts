@@ -640,15 +640,26 @@
         headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
         body: JSON.stringify(payload),
       });
-      const j = await r.json();
+      let j = {};
+      try { j = await r.json(); } catch (_) {
+        showAlert("mdAlert", `Resposta invalida do servidor (HTTP ${r.status}). Tente novamente em instantes.`);
+        return;
+      }
       if (!r.ok || !j.success) {
-        showAlert("mdAlert", j.error || "Erro ao salvar.");
+        const msg = j.error || `Erro ao salvar (HTTP ${r.status}).`;
+        showAlert("mdAlert", msg);
+        return;
+      }
+      // Matriz disparou acao que precisa de aprovacao do master
+      if (j.pending) {
+        showAlert("mdAlert", (j.message || "Pedido enviado para aprovacao do master.") + " Voce pode acompanhar em Aprovacoes.", "info");
+        setTimeout(() => { closeForm(); load(); }, 2800);
         return;
       }
       if (usaConvite && j.email_enviado === false) {
         // Provider não configurado — mostra link para master copiar
         prompt(
-          "Email não pôde ser enviado (configure RESEND_API_KEY no Railway).\nCopie o link abaixo e envie manualmente pro usuário:",
+          "Email nao pode ser enviado agora (" + (j.erro_email || "provedor indisponivel") + ").\nCopie o link abaixo e envie manualmente pro usuario:",
           j.link
         );
       }
@@ -682,9 +693,13 @@
         method: "DELETE",
         headers: { "X-CSRF-Token": token },
       });
-      const j = await r.json();
+      let j = {};
+      try { j = await r.json(); } catch (_) {
+        showAlert("delAlert", `Resposta invalida do servidor (HTTP ${r.status}).`);
+        return;
+      }
       if (!r.ok || !j.success) {
-        showAlert("delAlert", j.error || "Erro ao excluir.");
+        showAlert("delAlert", j.error || `Erro ao excluir (HTTP ${r.status}).`);
         return;
       }
       closeDel();

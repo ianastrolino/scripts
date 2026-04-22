@@ -608,6 +608,16 @@ def login_required(f):
     return wrapper
 
 
+def _perfil_legivel(user: dict) -> str:
+    """String amigavel do perfil atual pra mensagens de erro."""
+    if not user: return "sem perfil"
+    if user.get("master"):    return "master"
+    if user.get("matriz"):    return "matriz"
+    if user.get("gerencial"): return "gerencial"
+    if user.get("unit"):      return f"operador da unidade {user.get('unit')}"
+    return "operador"
+
+
 def master_only_required(f):
     """Exige login + master: true (acesso global a todas as unidades)."""
     @wraps(f)
@@ -615,12 +625,13 @@ def master_only_required(f):
         user = _current_user()
         if not user:
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+                return _json({"success": False, "error": "Sessao expirada. Faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         if not user.get("master"):
+            msg = f"Esta acao e exclusiva do master. Seu perfil atual e {_perfil_legivel(user)}."
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Acesso restrito ao master."}, 403)
-            return Response("Acesso restrito ao master.", status=403)
+                return _json({"success": False, "error": msg, "reason": "not_master", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -632,14 +643,20 @@ def gerencial_required(f):
         user = _current_user()
         if not user:
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+                return _json({"success": False, "error": "Sessao expirada. Faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         unit = kwargs.get("unit")
         is_global = user.get("master") or user.get("matriz")
         if not is_global and user.get("unit") != unit:
-            return Response("Acesso negado a esta unidade.", status=403)
+            msg = f"Voce nao tem acesso a unidade {unit}. Seu perfil atual e {_perfil_legivel(user)}."
+            if "/api/" in request.path:
+                return _json({"success": False, "error": msg, "reason": "wrong_unit", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         if not is_global and not user.get("gerencial"):
-            return Response("Acesso restrito ao gerente da unidade.", status=403)
+            msg = f"Esta tela e restrita ao gerente da unidade. Seu perfil atual e {_perfil_legivel(user)}."
+            if "/api/" in request.path:
+                return _json({"success": False, "error": msg, "reason": "not_gerencial", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -658,9 +675,10 @@ def unit_access_required(f):
         unit = kwargs.get("unit")
         is_global = user.get("master") or user.get("matriz")
         if not is_global and user.get("unit") != unit:
+            msg = f"Voce nao tem acesso a unidade {unit}. Seu perfil atual e {_perfil_legivel(user)}."
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Acesso negado a esta unidade."}, 403)
-            return Response("Acesso negado", status=403)
+                return _json({"success": False, "error": msg, "reason": "wrong_unit", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -672,12 +690,13 @@ def master_view_required(f):
         user = _current_user()
         if not user:
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+                return _json({"success": False, "error": "Sessao expirada. Faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         if not (user.get("master") or user.get("matriz")):
+            msg = f"Esta tela e restrita a master e matriz. Seu perfil atual e {_perfil_legivel(user)}."
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Acesso negado."}, 403)
-            return Response("Acesso negado", status=403)
+                return _json({"success": False, "error": msg, "reason": "not_rede", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -692,12 +711,13 @@ def matriz_or_master(f):
         user = _current_user()
         if not user:
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+                return _json({"success": False, "error": "Sessao expirada. Faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         if not (user.get("master") or user.get("matriz")):
+            msg = f"Esta acao e restrita a master e matriz. Seu perfil atual e {_perfil_legivel(user)}."
             if "/api/" in request.path:
-                return _json({"success": False, "error": "Acesso negado."}, 403)
-            return Response("Acesso negado", status=403)
+                return _json({"success": False, "error": msg, "reason": "not_rede", "perfil": _perfil_legivel(user)}, 403)
+            return Response(msg, status=403)
         return f(*args, **kwargs)
     return wrapper
 
@@ -3719,7 +3739,7 @@ def master_api_usuarios_create():
             "success":     True,
             "pending":     True,
             "approval_id": approval_id,
-            "message":     "Criação enviada para aprovação do master.",
+            "message":     "Seu perfil matriz nao pode criar usuario master/matriz diretamente. O pedido foi enviado para aprovacao do master.",
         })
 
     with _USERS_LOCK:
@@ -3762,7 +3782,7 @@ def master_api_usuarios_update(email: str):
             "success":     True,
             "pending":     True,
             "approval_id": approval_id,
-            "message":     "Edição enviada para aprovação do master.",
+            "message":     "Seu perfil matriz nao pode editar um usuario master/matriz diretamente. O pedido foi enviado para aprovacao do master.",
         })
 
     with _USERS_LOCK:
@@ -4025,7 +4045,7 @@ def master_api_usuarios_convite():
             "success":       True,
             "approval_id":   approval_id,
             "pending":       True,
-            "message":       "Convite precisa de aprovacao do master.",
+            "message":       "Seu perfil matriz nao pode convidar usuario master/matriz diretamente. O pedido foi enviado para aprovacao do master.",
         })
 
     with _USERS_LOCK:
