@@ -28,6 +28,24 @@
       --accent: var(--ds-accent-600);
     }
 
+    /* ── Refresh bar (auto-refresh em 'Hoje') ───────────── */
+    .refresh-bar {
+      display: flex; align-items: center; gap: 8px;
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      margin-top: calc(-1 * var(--ds-space-3));
+      margin-bottom: var(--ds-space-4);
+    }
+    .refresh-bar .rb-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ds-success);
+      animation: rbPulse 2s ease-in-out infinite;
+    }
+    .refresh-bar.loading .rb-dot { background: var(--ds-warning); animation: rbSpin 0.8s linear infinite; }
+    .refresh-bar.paused .rb-dot  { background: var(--ds-ink-subtle); animation: none; }
+    @keyframes rbPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+    @keyframes rbSpin  { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+
     /* ── Filter bar ──────────────────────────────────────── */
     .filter-bar {
       display: flex; align-items: center; gap: var(--ds-space-3); flex-wrap: wrap;
@@ -392,6 +410,11 @@
         </button>
       </div>
 
+      <div class="refresh-bar" id="refreshBar" style="display:none">
+        <span class="rb-dot"></span>
+        <span id="refreshText">Atualizando a cada 30s · última às <span id="refreshLast">—</span></span>
+      </div>
+
       <!-- Resumo consolidado -->
       <div class="g-section">
         <div class="g-section-title">Resumo consolidado</div>
@@ -517,6 +540,9 @@
     // Auto-fire exceto no Intervalo (que requer escolher datas antes)
     if (mode !== "range") carregar();
     else updatePeriodLabel();
+    // Auto-refresh soh em "Hoje"
+    if (mode === "today") startAutoRefresh();
+    else stopAutoRefresh();
   }
 
   document.getElementById("modeToday").addEventListener("click", () => setMode("today"));
@@ -569,20 +595,32 @@
   }
 
   // ── Carregar dados ──────────────────────────────────────
-  async function carregar() {
+  let _abort = null;
+  let _autoRefreshTimer = null;
+
+  async function carregar({ silent = false } = {}) {
     updatePeriodLabel();
     const { from, to } = getRange();
     const unit = document.getElementById("selUnit").value;
 
-    ["resumoStrip","unidadeGrid","barChart","svcBody","historicoList"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = id === "svcBody"
-        ? '<tr><td colspan="5" class="g-loading">Carregando…</td></tr>'
-        : '<div class="g-loading">Carregando…</div>';
-    });
+    // Cancela request anterior (ex.: user trocou filtro no meio do refresh)
+    if (_abort) _abort.abort();
+    _abort = new AbortController();
+
+    if (!silent) {
+      ["resumoStrip","unidadeGrid","barChart","svcBody","historicoList"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = id === "svcBody"
+          ? '<tr><td colspan="5" class="g-loading">Carregando…</td></tr>'
+          : '<div class="g-loading">Carregando…</div>';
+      });
+    }
+
+    const bar = document.getElementById("refreshBar");
+    if (silent) bar.classList.add("loading");
 
     try {
-      const res  = await fetch(`/gerencial/api/historico?from=${from}&to=${to}&unit=${unit}`);
+      const res  = await fetch(`/gerencial/api/historico?from=${from}&to=${to}&unit=${unit}`, { signal: _abort.signal });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Erro.");
 
@@ -593,17 +631,50 @@
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
       renderHistorico(data.por_dia, data.unit_filter !== "all");
-      // Recarrega divergências junto (função é hoisted)
       if (typeof carregarDivergencias === "function") carregarDivergencias();
+
+      const last = document.getElementById("refreshLast");
+      if (last) last.textContent = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     } catch (e) {
+      if (e.name === "AbortError") return; // cancelado por troca de filtro, ignora
+      if (silent) return;                   // refresh silencioso nao sobrescreve o dado bom com erro
       const msg = `<div class="g-error">${e.message}</div>`;
       ["resumoStrip","unidadeGrid","barChart","historicoList"].forEach(id => {
         const el = document.getElementById(id); if (el) el.innerHTML = msg;
       });
       document.getElementById("svcBody").innerHTML =
         `<tr><td colspan="5" class="g-error">${e.message}</td></tr>`;
+    } finally {
+      bar.classList.remove("loading");
     }
   }
+
+  function autoRefreshTick() {
+    if (filterMode !== "today") return;
+    if (document.hidden) return; // pausa quando aba nao esta visivel
+    carregar({ silent: true });
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    const bar = document.getElementById("refreshBar");
+    bar.style.display = "";
+    bar.classList.remove("paused");
+    _autoRefreshTimer = setInterval(autoRefreshTick, 30_000);
+  }
+
+  function stopAutoRefresh() {
+    if (_autoRefreshTimer) { clearInterval(_autoRefreshTimer); _autoRefreshTimer = null; }
+    const bar = document.getElementById("refreshBar");
+    if (bar) bar.style.display = "none";
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    const bar = document.getElementById("refreshBar");
+    if (!bar) return;
+    if (document.hidden) bar.classList.add("paused");
+    else                  bar.classList.remove("paused");
+  });
 
   document.getElementById("btnAplicar").addEventListener("click", carregar);
   document.getElementById("selUnit").addEventListener("change", carregar);
@@ -784,6 +855,8 @@
   }
 
   carregar();
+  // Modo padrão ao abrir a tela e 'today' — inicia o auto-refresh.
+  if (filterMode === "today") startAutoRefresh();
 
   async function carregarDivergencias() {
     const { from, to } = getRange();
