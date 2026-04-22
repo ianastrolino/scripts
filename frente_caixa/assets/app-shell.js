@@ -137,6 +137,7 @@
         { id: "master",           label: "Painel Master",    icon: "master",     href: "/master" },
         { id: "gerencial-rede",   label: "Gerencial Rede",   icon: "gerencial",  href: "/gerencial" },
         { id: "bi-rede",             label: "BI",                   icon: "relatorios", href: "/gerencial/bi" },
+        { id: "historico-emitido",   label: "Histórico emitido",    icon: "historico",  href: "/gerencial/historico-emitido" },
         { id: "historico-caixa",     label: "Histórico PDV",        icon: "historico",  href: "/gerencial/historico-caixa" },
         { id: "usuarios-conectados", label: "Usuários Conectados",  icon: "usuarios",   href: "/master/usuarios-conectados" },
         { id: "usuarios",            label: "Usuários",             icon: "usuariosCog", href: "/master/usuarios" },

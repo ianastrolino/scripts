@@ -1137,6 +1137,146 @@ def master_api_bi_faturamento():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+def _classificar_categoria_receita(servico_norm: str) -> str:
+    """Agrupa servico_norm em 3 baldes pedidos por Ian.
+
+    - 'transferencia' : contem TRANSFER
+    - 'cautelar_pintura' : cautelar + analise/verificacao/pintura
+    - 'cautelar' : cautelar puro
+    - ''         : outros (nao se encaixa nos 3)
+    """
+    up = (servico_norm or "").strip().upper()
+    if not up:
+        return ""
+    if "TRANSFER" in up:
+        return "transferencia"
+    if "CAUTELAR" in up and ("ANALISE" in up or "VERIFICACAO" in up or "PINTURA" in up or "COM " in up):
+        return "cautelar_pintura"
+    if "CAUTELAR" in up:
+        return "cautelar"
+    return ""
+
+
+@app.route("/gerencial/api/bi/historico-emitido", methods=["GET"])
+@master_required
+def master_api_bi_historico_emitido():
+    """Agrega historico_tiny (contas a receber emitidas no Tiny) do mes.
+
+    Params: mes=AAAA-MM (obrigatorio), unit=<slug> (opcional).
+    Fonte: historico_tiny — snapshot do que foi emitido e gravado via sync do Tiny.
+    Complementa o BI principal (que usa envios_tiny), preservando o historico
+    anterior a 22/04/2026 (quando envios_tiny comecou a acumular por conta propria).
+    """
+    try:
+        mes  = (request.args.get("mes") or "").strip()
+        unit = (request.args.get("unit") or "").strip() or None
+        if not mes or len(mes) != 7 or mes[4] != "-":
+            return _json({"success": False, "error": "mes invalido (use AAAA-MM)"}, 400)
+
+        units_iter = [unit] if unit and unit in UNITS else list(UNITS.keys())
+        registros: list[dict] = []
+        por_unit: dict[str, dict] = {}
+        for uid in units_iter:
+            state_dir = _unit_state_dir(uid)
+            try:
+                rows = _db_load_hist_mes(uid, state_dir, mes)
+            except Exception as exc:
+                app.logger.warning("[bi.historico-emitido] falha unit=%s: %s", uid, exc)
+                rows = []
+            lista = []
+            for r in rows:
+                servico = (r.get("servico_norm") or r.get("categoria") or "").strip().upper() or "(sem categoria)"
+                if not _e_categoria_de_servico(servico):
+                    continue
+                lista.append({
+                    "unit":    uid,
+                    "data":    r.get("data", ""),
+                    "cliente": (r.get("cliente") or "").strip().upper() or "(sem cliente)",
+                    "servico": servico,
+                    "valor":   float(r.get("valor", 0) or 0),
+                })
+            registros.extend(lista)
+            por_unit[uid] = {
+                "nome":  UNITS.get(uid, {}).get("nome", uid),
+                "total": round(sum(r["valor"] for r in lista), 2),
+                "count": len(lista),
+            }
+
+        total_bruto = round(sum(r["valor"] for r in registros), 2)
+        count_laudos = len(registros)
+
+        # Top categorias (por receita)
+        por_cat: dict[str, dict] = {}
+        for r in registros:
+            b = por_cat.setdefault(r["servico"], {"categoria": r["servico"], "count": 0, "total": 0.0})
+            b["count"] += 1
+            b["total"] += r["valor"]
+        ranking_categorias = sorted(
+            [{**v, "total": round(v["total"], 2)} for v in por_cat.values()],
+            key=lambda x: x["total"], reverse=True,
+        )
+        top3_categorias = ranking_categorias[:3]
+
+        # Baldes fixos: transferencia / cautelar / cautelar com pintura
+        baldes = {
+            "transferencia":    {"label": "Laudo de transferência",    "count": 0, "total": 0.0},
+            "cautelar":         {"label": "Vistoria cautelar",         "count": 0, "total": 0.0},
+            "cautelar_pintura": {"label": "Cautelar com pintura",      "count": 0, "total": 0.0},
+        }
+        for r in registros:
+            b = _classificar_categoria_receita(r["servico"])
+            if b and b in baldes:
+                baldes[b]["count"] += 1
+                baldes[b]["total"] += r["valor"]
+        categorias_fixas = [
+            {"key": k, **v, "total": round(v["total"], 2)}
+            for k, v in baldes.items()
+        ]
+
+        # Top 10 clientes com breakdown por categoria
+        por_cliente: dict[str, dict] = {}
+        for r in registros:
+            c = por_cliente.setdefault(r["cliente"], {
+                "cliente": r["cliente"], "count": 0, "total": 0.0, "por_categoria": {},
+            })
+            c["count"] += 1
+            c["total"] += r["valor"]
+            cat = c["por_categoria"].setdefault(r["servico"], {"count": 0, "total": 0.0})
+            cat["count"] += 1
+            cat["total"] += r["valor"]
+        top10_clientes = sorted(
+            por_cliente.values(), key=lambda x: x["total"], reverse=True,
+        )[:10]
+        top10_clientes = [
+            {
+                "cliente": c["cliente"],
+                "count":   c["count"],
+                "total":   round(c["total"], 2),
+                "categorias": sorted(
+                    [{"categoria": cat, "count": v["count"], "total": round(v["total"], 2)}
+                     for cat, v in c["por_categoria"].items()],
+                    key=lambda x: x["total"], reverse=True,
+                ),
+            }
+            for c in top10_clientes
+        ]
+
+        return _json({
+            "success": True,
+            "mes": mes,
+            "total_bruto":   total_bruto,
+            "count_laudos":  count_laudos,
+            "por_unit":      por_unit,
+            "top3_categorias":   top3_categorias,
+            "categorias_fixas":  categorias_fixas,
+            "top10_clientes":    top10_clientes,
+            "ranking_categorias": ranking_categorias,
+        })
+    except Exception as exc:
+        app.logger.exception("[bi.historico-emitido] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/gerencial/api/backup/download")
 @master_required
 def master_api_backup_download():
@@ -2932,6 +3072,12 @@ def master_historico_caixa_page():
 @master_only_required
 def master_bi_page():
     return _nocache(send_from_directory(UI_DIR, "bi.html"))
+
+
+@app.route("/gerencial/historico-emitido")
+@master_only_required
+def master_historico_emitido_page():
+    return _nocache(send_from_directory(UI_DIR, "historico-emitido.html"))
 
 
 @app.route("/master/usuarios-conectados")
