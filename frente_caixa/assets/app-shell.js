@@ -623,6 +623,13 @@
       mainEl.insertAdjacentHTML("afterbegin", appbarHtml);
     }
 
+    // Badge da unidade no título da página (opt-in: tela declara <span id="pageUnit">)
+    const pageUnitEl = document.getElementById("pageUnit");
+    if (pageUnitEl) {
+      if (ctx.unitNome) pageUnitEl.textContent = ctx.unitNome;
+      else pageUnitEl.remove();
+    }
+
     // Command palette (Ctrl/Cmd + K)
     document.body.insertAdjacentHTML("beforeend", renderCommandPalette());
 

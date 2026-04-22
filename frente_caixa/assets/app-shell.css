@@ -337,6 +337,35 @@
   color: var(--ds-ink-muted);
   margin-top: var(--ds-space-2);
 }
+.app-page-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+  margin-left: var(--ds-space-3);
+  padding: 4px 12px;
+  font-size: var(--ds-text-sm);
+  font-weight: var(--ds-weight-bold);
+  letter-spacing: var(--ds-tracking-wide);
+  text-transform: uppercase;
+  color: #0e7490;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  border-radius: 999px;
+  line-height: 1;
+}
+.app-page-unit::before {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #0e7490;
+}
+.app-shell.theme-dark .app-page-unit {
+  color: #67e8f9;
+  background: rgba(14,116,144,.18);
+  border-color: rgba(14,116,144,.55);
+}
+.app-shell.theme-dark .app-page-unit::before { background: #67e8f9; }
 
 /* ── Sidebar — variantes dark/light ─────────────────────────── */
 .app-shell.theme-light .app-sidebar {
