@@ -3698,7 +3698,12 @@ def master_usuarios_page():
 def master_api_usuarios_list():
     unidades = [{"id": uid, "nome": UNITS[uid].get("nome", uid)} for uid in sorted(UNITS.keys())]
     with _USERS_LOCK:
-        users = [_user_public(e, u) for e, u in sorted(USERS.items())]
+        # Usuarios com convite pendente (sem senha ativada) nao aparecem aqui.
+        # Eles ficam so na lista de Convites pendentes ate concluirem a ativacao.
+        users = [
+            _user_public(e, u) for e, u in sorted(USERS.items())
+            if not u.get("convidado") and u.get("password_hash")
+        ]
     return _json({"usuarios": users, "unidades": unidades})
 
 
