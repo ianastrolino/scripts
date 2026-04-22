@@ -850,7 +850,7 @@ def master_api_envios_tiny_migrate():
     return _json({"success": True, "resultado": resultado})
 
 
-_BI_CATEGORIAS_BLACKLIST = {"APORTE", "RENDIMENTO", "JUROS", "MULTA", "DEPOSITO"}
+_BI_CATEGORIAS_BLACKLIST = {"APORTE", "RENDIMENTO", "JUROS", "MULTA", "DEPOSITO", "EMPRESTIMO", "EMPRÉSTIMO"}
 
 
 def _e_categoria_de_servico(nome: str) -> bool:
