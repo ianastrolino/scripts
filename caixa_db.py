@@ -132,36 +132,52 @@ _MIGRATE_HIST_EXTRA = [
 ]
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {r[1] for r in rows}  # r[1] = column name
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    """Adiciona coluna via ALTER se nao existir. Se existir, no-op.
+    Se ALTER falhar, re-raise (nao silencia — o dono do banco precisa ver)."""
+    import logging
+    if column in _table_columns(conn, table):
+        return
+    try:
+        conn.execute(ddl)
+        conn.commit()
+    except sqlite3.OperationalError as exc:
+        # Segunda chance: pode ser race entre workers. Releu schema.
+        if column in _table_columns(conn, table):
+            return
+        logging.getLogger(__name__).error("[caixa_db] falha ao adicionar coluna %s.%s: %s", table, column, exc)
+        raise
+
+
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_DDL)
-    try:
-        conn.execute(_MIGRATE_CPF)
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # column already exists
-    try:
-        conn.execute(_MIGRATE_CLIENT_UUID)
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # column already exists
-    try:
-        conn.execute(_MIGRATE_USUARIO)
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    _ensure_column(conn, "lancamentos", "cpf",         _MIGRATE_CPF)
+    _ensure_column(conn, "lancamentos", "client_uuid", _MIGRATE_CLIENT_UUID)
+    _ensure_column(conn, "lancamentos", "usuario",     _MIGRATE_USUARIO)
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
     conn.executescript(_DDL_ENVIOS)
     conn.executescript(_DDL_HISTORICO_TINY)
+    existing_hist = _table_columns(conn, "historico_tiny")
     for sql in _MIGRATE_HIST_EXTRA:
+        # extrai nome da coluna do DDL: "ALTER TABLE historico_tiny ADD COLUMN <col> ..."
+        parts = sql.split()
+        col = parts[parts.index("COLUMN") + 1] if "COLUMN" in parts else ""
+        if col and col in existing_hist:
+            continue
         try:
             conn.execute(sql)
         except sqlite3.OperationalError:
-            pass  # coluna ja existe
+            pass  # race entre workers
     conn.commit()
     return conn
 
