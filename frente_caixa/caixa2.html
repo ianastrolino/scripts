@@ -159,7 +159,7 @@
       font-size: 18px;
       height: 46px;
       font-variant-numeric: tabular-nums;
-      background: #fff;
+      background: var(--ds-surface);
       border-color: var(--border);
     }
     .field input.placa:focus {
@@ -187,7 +187,7 @@
       height: 46px;
       letter-spacing: -.03em;
       font-variant-numeric: tabular-nums;
-      background: #fff;
+      background: var(--ds-surface);
       border: 1px solid var(--border);
       border-radius: var(--r);
       width: 100%;
@@ -237,8 +237,8 @@
       outline: none;
     }
     .fp-card:hover {
-      border-color: #b8c6d6;
-      background: #fff;
+      border-color: var(--ds-line-strong);
+      background: var(--ds-surface);
       box-shadow: var(--s1);
       transform: translateY(-1px);
     }
@@ -599,7 +599,7 @@
       padding: 6px 10px;
       border: 1px solid var(--border2);
       border-radius: 8px;
-      background: #fff;
+      background: var(--ds-surface);
       color: var(--t1);
       outline: none;
       width: 260px;
@@ -832,7 +832,7 @@
     .modal-input:focus {
       border-color: var(--focus);
       box-shadow: 0 0 0 3px var(--focus-r);
-      background: #fff;
+      background: var(--ds-surface);
     }
     .modal-err {
       color: var(--red);
@@ -847,7 +847,7 @@
       flex: 1; height: 42px;
       border: 1.5px solid var(--border);
       border-radius: var(--r);
-      background: #fff;
+      background: var(--ds-surface);
       color: var(--t3);
       font-size: 13px;
       font-weight: 600;
@@ -856,7 +856,7 @@
       font-family: inherit;
       letter-spacing: -.015em;
     }
-    .btn-cancel:hover { border-color: #b8c6d6; background: var(--sf2); }
+    .btn-cancel:hover { border-color: var(--ds-line-strong); background: var(--sf2); }
     .btn-confirm {
       flex: 1; height: 42px;
       border: none;
@@ -935,7 +935,7 @@
       justify-content: center;
       gap: 6px;
     }
-    .fp-mini:hover { border-color: #b8c6d6; background: #fff; color: var(--t3); }
+    .fp-mini:hover { border-color: var(--ds-line-strong); background: var(--ds-surface); color: var(--t3); }
     .fp-mini[data-fp="dinheiro"].sel { background: var(--din-bg); border-color: var(--din); color: var(--din); box-shadow: 0 0 0 1px var(--din); font-weight: 700; }
     .fp-mini[data-fp="debito"].sel   { background: var(--deb-bg); border-color: var(--deb); color: var(--deb); box-shadow: 0 0 0 1px var(--deb); font-weight: 700; }
     .fp-mini[data-fp="credito"].sel  { background: var(--crd-bg); border-color: var(--crd); color: var(--crd); box-shadow: 0 0 0 1px var(--crd); font-weight: 700; }
@@ -1141,7 +1141,7 @@
     }
     .chat-input-row input:focus {
       border-color: var(--focus);
-      background: #fff;
+      background: var(--ds-surface);
       box-shadow: 0 0 0 3px var(--focus-r);
     }
     .chat-send-btn {
@@ -1222,12 +1222,12 @@
     .btn-confirm-cancel {
       flex: 1; height: 42px;
       border: 1.5px solid var(--border);
-      border-radius: var(--r); background: #fff;
+      border-radius: var(--r); background: var(--ds-surface);
       color: var(--t3); font-size: 13px; font-weight: 600;
       cursor: pointer; font-family: inherit; letter-spacing: -.015em;
       transition: border-color .12s, background .12s;
     }
-    .btn-confirm-cancel:hover { border-color: #b8c6d6; background: var(--sf2); }
+    .btn-confirm-cancel:hover { border-color: var(--ds-line-strong); background: var(--sf2); }
     .btn-confirm-ok {
       flex: 2; height: 42px; border: none;
       border-radius: var(--r); background: var(--red); color: #fff;
@@ -1336,7 +1336,7 @@
     .conf-input:focus {
       border-color: var(--focus);
       box-shadow: 0 0 0 3px var(--focus-r);
-      background: #fff;
+      background: var(--ds-surface);
     }
     .conf-diff {
       font-size: 11.5px;
