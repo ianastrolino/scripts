@@ -765,6 +765,17 @@ def _save_extra_cliente_ids(unit: str, ids: dict[str, int]) -> None:
         raise
 
 
+_GLOBAL_ALIASES: dict[str, dict[str, str]] = {
+    # Aliases aplicados em TODAS as unidades. Alias por unidade (UNITS_CONFIG) vence no merge.
+    # Sao nomes que representam o mesmo servico — unifica o ranking e o envio ao Tiny.
+    "servico": {
+        "LAUDO CAUTELAR": "VISTORIA CAUTELAR",
+    },
+    "fp": {},
+    "cliente": {},
+}
+
+
 def _build_unit_config(unit: str) -> dict[str, Any]:
     """Monta config completo para a unidade a partir de UNITS_CONFIG."""
     ud = UNITS.get(unit, {})
@@ -780,8 +791,13 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
         if (v := ud.get(field)) is not None:
             tiny[field] = v
 
-    if "aliases" in ud:
-        tiny["aliases"] = ud["aliases"]
+    # Merge dos aliases: globais (base) + da unidade (sobrescrevem em cima)
+    unit_aliases = ud.get("aliases", {}) or {}
+    merged_aliases: dict[str, dict[str, str]] = {}
+    for field in ("servico", "fp", "cliente"):
+        merged_aliases[field] = dict(_GLOBAL_ALIASES.get(field, {}))
+        merged_aliases[field].update(unit_aliases.get(field, {}) or {})
+    tiny["aliases"] = merged_aliases
 
     # Sobrescreve com IDs salvos via modal de mapeamento
     extra = _load_extra_cliente_ids(unit)
