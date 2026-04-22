@@ -86,6 +86,19 @@
       animation: livePulse 1.4s ease-in-out infinite;
     }
     @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.85)} }
+    .hero-chip-online {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(59,130,246,.15);
+      border: 1px solid rgba(59,130,246,.3);
+      color: #93c5fd;
+      cursor: help;
+    }
+    .hero-chip-online::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: #3b82f6;
+      box-shadow: 0 0 8px #3b82f6;
+      animation: livePulse 1.8s ease-in-out infinite;
+    }
 
     /* Logo flutuando suave */
     .hero-astro-a {
@@ -732,6 +745,9 @@
       chips.push(`<span class="hero-chip strong">${esc(info.unidade)}</span>`);
     }
     chips.push(`<span class="hero-chip hero-chip-live">Tempo real</span>`);
+    if (info.master || info.matriz) {
+      chips.push(`<span class="hero-chip hero-chip-online" id="heroOnline" title="Usuários ativos nos últimos 3 minutos">—</span>`);
+    }
     document.getElementById("heroChips").innerHTML = chips.join("");
 
     // Relógio ao vivo
@@ -739,6 +755,12 @@
       const el = document.getElementById("heroClockTxt");
       if (el) el.textContent = horaNow();
     }, 30 * 1000);
+
+    // Online agora (só master/matriz)
+    if (info.master || info.matriz) {
+      refreshOnline();
+      setInterval(refreshOnline, 30 * 1000);
+    }
 
     if (info.master || info.matriz) {
       await renderMaster(info);
@@ -749,6 +771,18 @@
     } else {
       renderFallback();
     }
+  }
+
+  async function refreshOnline() {
+    const el = document.getElementById("heroOnline");
+    if (!el) return;
+    try {
+      const r = await fetch("/master/api/usuarios-conectados", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      const n = Number(j.total || 0);
+      el.textContent = `${n} online`;
+    } catch (_) {}
   }
 
   /* ════════════════ MASTER ════════════════ */
