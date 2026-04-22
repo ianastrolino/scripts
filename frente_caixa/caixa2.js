@@ -324,12 +324,14 @@ function abrirConferencia() {
 
   document.getElementById("formCard").style.display = "none";
   document.getElementById("confCard").style.display = "";
+  document.body.classList.add("conf-mode");
   document.getElementById("cFisDin").focus();
 }
 
 function voltarLancamentos() {
   document.getElementById("confCard").style.display = "none";
   document.getElementById("formCard").style.display = "";
+  document.body.classList.remove("conf-mode");
 }
 
 function calcularConferencia() {
