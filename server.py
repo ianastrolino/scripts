@@ -3011,6 +3011,49 @@ def _agg_lancamentos(lancamentos: list[dict], fp_keys: tuple) -> dict:
             "count": count, "ticket_medio": round(total / count, 2) if count else 0.0}
 
 
+def _norm_fp_tiny(fp: str) -> str:
+    """Normaliza fp vindo de envios_tiny: 'fa'->'faturado', 'av'->'avista'."""
+    f = (fp or "").strip().lower()
+    if f == "fa": return "faturado"
+    if f == "av": return "avista"
+    return f
+
+
+def _load_unit_range_dual(uid: str, unit_dir, date_from: str, date_to: str, today: str) -> tuple[list[dict], str, bool]:
+    """Carrega lançamentos de uma unidade cruzando envios_tiny (dias passados) + PDV (hoje).
+
+    Espelha a regra do gerencial por unidade: dias < hoje vêm de envios_tiny (verdade
+    consolidada pós-envio); hoje vem do PDV (ao vivo, ainda não enviado).
+    Retorna (registros, envios_ate, incluir_hoje).
+    """
+    incluir_hoje = (date_to >= today >= date_from)
+    envios_ate   = min(date_to, (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()) if incluir_hoje else date_to
+
+    registros: list[dict] = []
+    if envios_ate >= date_from:
+        try:
+            for e in _db_load_envios_range(uid, unit_dir, date_from, envios_ate):
+                registros.append({
+                    "data":      e.get("data_lancamento") or "",
+                    "placa":     e.get("placa", ""),
+                    "cliente":   e.get("cliente", ""),
+                    "servico":   e.get("servico", ""),
+                    "valor":     float(e.get("valor", 0) or 0),
+                    "fp":        _norm_fp_tiny(e.get("fp", "")),
+                    "timestamp": e.get("timestamp", ""),
+                    "fonte":     "tiny",
+                })
+        except Exception:
+            app.logger.warning("[gerencial-master] falha lendo envios_tiny unit=%s", uid)
+    if incluir_hoje:
+        try:
+            for lc in _db_load_range(uid, unit_dir, today, today):
+                registros.append({**lc, "fonte": "pdv"})
+        except Exception:
+            app.logger.warning("[gerencial-master] falha lendo PDV unit=%s", uid)
+    return registros, envios_ate, incluir_hoje
+
+
 @app.route("/gerencial/api/historico")
 @master_only_required
 def api_master_historico():
@@ -3022,19 +3065,24 @@ def api_master_historico():
         dt.date.fromisoformat(date_from)
         dt.date.fromisoformat(date_to)
 
-        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran")
+        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran", "avista")
+        today   = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+
         units_to_query = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
 
         all_lcs: list[dict] = []
-        por_unidade = []
+        por_unidade: list[dict] = []
+        envios_ate_global = date_to
+        incluir_hoje_global = False
         for uid in units_to_query:
             ud = UNITS[uid]
-            try:
-                lcs = _db_load_range(uid, _unit_state_dir(uid), date_from, date_to)
-            except Exception:
-                lcs = []
+            lcs, envios_ate, incluir_hoje = _load_unit_range_dual(
+                uid, _unit_state_dir(uid), date_from, date_to, today,
+            )
+            envios_ate_global = envios_ate
+            incluir_hoje_global = incluir_hoje_global or incluir_hoje
             for lc in lcs:
                 lc["unit_slug"] = uid
                 lc["unit_nome"] = ud.get("nome", uid)
@@ -3049,7 +3097,7 @@ def api_master_historico():
         # Por dia
         by_day: dict[str, list] = {}
         for lc in all_lcs:
-            by_day.setdefault(lc["data"], []).append(lc)
+            by_day.setdefault(lc.get("data", ""), []).append(lc)
 
         por_dia = []
         for data in sorted(by_day.keys()):
@@ -3060,15 +3108,18 @@ def api_master_historico():
                 fp = lc.get("fp", "")
                 if fp in dt_fp:
                     dt_fp[fp] += float(lc.get("valor", 0))
+            fontes = {lc.get("fonte", "") for lc in dlcs}
             por_dia.append({"data": data, **dagg,
                             **{fp: round(dt_fp[fp], 2) for fp in fp_keys},
+                            "fonte":   "pdv" if fontes == {"pdv"} else ("tiny" if fontes == {"tiny"} else "misto"),
+                            "parcial": data == today and "pdv" in fontes,
                             "lancamentos": dlcs})
 
         # Ranking serviços
         svc_count: dict[str, int]   = {}
         svc_total: dict[str, float] = {}
         for lc in all_lcs:
-            s = lc.get("servico", "").strip()
+            s = (lc.get("servico", "") or "").strip()
             if s:
                 svc_count[s] = svc_count.get(s, 0) + 1
                 svc_total[s] = svc_total.get(s, 0.0) + float(lc.get("valor", 0))
@@ -3083,6 +3134,7 @@ def api_master_historico():
             "unidades":     {uid: UNITS[uid].get("nome", uid) for uid in UNITS},
             "unit_filter":  unit_filter,
             "periodo":      {"from": date_from, "to": date_to},
+            "fonte":        {"tiny_ate": envios_ate_global, "pdv_hoje": incluir_hoje_global, "hoje": today},
             "resumo":       resumo,
             "por_unidade":  por_unidade,
             "por_dia":      por_dia,
@@ -3116,29 +3168,29 @@ def api_master_exportar():
         dt.date.fromisoformat(date_from)
         dt.date.fromisoformat(date_to)
 
-        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran")
+        today = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
         units_to_query = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
         all_lcs: list[dict] = []
         for uid in units_to_query:
-            try:
-                lcs = _db_load_range(uid, _unit_state_dir(uid), date_from, date_to)
-                for lc in lcs:
-                    lc["unit_nome"] = UNITS[uid].get("nome", uid)
-                all_lcs.extend(lcs)
-            except Exception:
-                pass
+            lcs, _envios_ate, _incluir_hoje = _load_unit_range_dual(
+                uid, _unit_state_dir(uid), date_from, date_to, today,
+            )
+            for lc in lcs:
+                lc["unit_nome"] = UNITS[uid].get("nome", uid)
+            all_lcs.extend(lcs)
         all_lcs.sort(key=lambda x: (x.get("data", ""), x.get("timestamp", "")))
 
         out = io.StringIO()
         w   = csv.writer(out)
-        w.writerow(["Unidade", "Data", "Hora", "Placa", "Cliente", "CPF/CNPJ", "Servico", "Valor", "FP"])
+        w.writerow(["Unidade", "Data", "Hora", "Placa", "Cliente", "CPF/CNPJ", "Servico", "Valor", "FP", "Fonte"])
         for lc in all_lcs:
             w.writerow([
                 lc.get("unit_nome", ""), lc.get("data", ""), lc.get("hora", ""),
                 lc.get("placa", ""), lc.get("cliente", ""), lc.get("cpf", ""),
                 lc.get("servico", ""), lc.get("valor", ""), lc.get("fp", ""),
+                lc.get("fonte", ""),
             ])
 
         label = unit_filter if unit_filter != "all" else "rede"
