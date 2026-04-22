@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     valor       REAL NOT NULL,
     fp          TEXT NOT NULL,
     cpf         TEXT NOT NULL DEFAULT "",
-    client_uuid TEXT NOT NULL DEFAULT ""
+    client_uuid TEXT NOT NULL DEFAULT "",
+    usuario     TEXT NOT NULL DEFAULT ""
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_client_uuid ON lancamentos(unit, data, client_uuid);
@@ -36,6 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_lancamentos_client_uuid ON lancamentos(unit, data
 
 _MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\""
 _MIGRATE_CLIENT_UUID = "ALTER TABLE lancamentos ADD COLUMN client_uuid TEXT NOT NULL DEFAULT \"\""
+_MIGRATE_USUARIO = "ALTER TABLE lancamentos ADD COLUMN usuario TEXT NOT NULL DEFAULT \"\""
 
 _DDL_DIV = """
 CREATE TABLE IF NOT EXISTS divergencias (
@@ -143,6 +145,11 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
         pass  # column already exists
     try:
         conn.execute(_MIGRATE_CLIENT_UUID)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        conn.execute(_MIGRATE_USUARIO)
         conn.commit()
     except sqlite3.OperationalError:
         pass  # column already exists

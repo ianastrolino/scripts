@@ -134,6 +134,7 @@
       text-transform: uppercase; letter-spacing: .04em;
     }
     .tag-master { background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .tag-matriz { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
     .tag-ger    { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
     .tag-op     { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
 
@@ -268,10 +269,13 @@
             <input type="checkbox" id="fMaster"> Master (acesso total à rede)
           </label>
           <label class="checkbox-item">
+            <input type="checkbox" id="fMatriz"> Matriz (operacional em todas as unidades)
+          </label>
+          <label class="checkbox-item">
             <input type="checkbox" id="fGerencial"> Gerencial da unidade
           </label>
         </div>
-        <div class="field-hint">Master vê todas as unidades. Gerencial acessa o painel da própria unidade.</div>
+        <div class="field-hint">Master gerencia usuários e a rede. Matriz auxilia operacionalmente em todas as unidades (lança, fecha, confere), mas não mexe em usuários. Gerencial acessa o painel da própria unidade.</div>
       </div>
 
       <div class="field" id="fUnitWrap">
@@ -345,6 +349,7 @@
 
   function perfilTag(u) {
     if (u.master)    return '<span class="tag tag-master">Master</span>';
+    if (u.matriz)    return '<span class="tag tag-matriz">Matriz</span>';
     if (u.gerencial) return '<span class="tag tag-ger">Gerencial</span>';
     return '<span class="tag tag-op">Operador</span>';
   }
@@ -410,6 +415,7 @@
     document.getElementById("fEmail").disabled = !!user;
     document.getElementById("fName").value = user ? user.name : "";
     document.getElementById("fMaster").checked = user ? user.master : false;
+    document.getElementById("fMatriz").checked = user ? !!user.matriz : false;
     document.getElementById("fGerencial").checked = user ? user.gerencial : false;
     document.getElementById("fUnit").value = user ? (user.unit || "") : "";
     document.getElementById("fPassword").value = "";
@@ -429,11 +435,20 @@
 
   function syncMasterToggle() {
     const isMaster = document.getElementById("fMaster").checked;
-    document.getElementById("fUnitWrap").style.display = isMaster ? "none" : "";
+    const isMatriz = document.getElementById("fMatriz").checked;
+    const globalProfile = isMaster || isMatriz;
+    document.getElementById("fUnitWrap").style.display = globalProfile ? "none" : "";
     if (isMaster) {
+      document.getElementById("fMatriz").checked = false;
+      document.getElementById("fMatriz").disabled = true;
+      document.getElementById("fGerencial").checked = true;
+      document.getElementById("fGerencial").disabled = true;
+    } else if (isMatriz) {
+      document.getElementById("fMatriz").disabled = false;
       document.getElementById("fGerencial").checked = true;
       document.getElementById("fGerencial").disabled = true;
     } else {
+      document.getElementById("fMatriz").disabled = false;
       document.getElementById("fGerencial").disabled = false;
     }
   }
@@ -453,11 +468,12 @@
       email:     document.getElementById("fEmail").value.trim().toLowerCase(),
       name:      document.getElementById("fName").value.trim(),
       master:    document.getElementById("fMaster").checked,
+      matriz:    document.getElementById("fMatriz").checked,
       gerencial: document.getElementById("fGerencial").checked,
       unit:      document.getElementById("fUnit").value,
       password:  document.getElementById("fPassword").value,
     };
-    if (payload.master) payload.unit = "";
+    if (payload.master || payload.matriz) payload.unit = "";
 
     const editing = !!state.editingEmail;
     const url = editing
@@ -530,6 +546,7 @@
   document.getElementById("btnDelCancel").addEventListener("click", closeDel);
   document.getElementById("btnDelConfirm").addEventListener("click", confirmDel);
   document.getElementById("fMaster").addEventListener("change", syncMasterToggle);
+  document.getElementById("fMatriz").addEventListener("change", syncMasterToggle);
   document.getElementById("mdForm").addEventListener("click", (e) => {
     if (e.target.id === "mdForm") closeForm();
   });

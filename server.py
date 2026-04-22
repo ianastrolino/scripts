@@ -381,7 +381,7 @@ def master_only_required(f):
 
 
 def gerencial_required(f):
-    """Exige login + acesso à unidade + flag gerencial (ou master global)."""
+    """Exige login + acesso à unidade + flag gerencial (ou master/matriz global)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         user = _current_user()
@@ -390,16 +390,17 @@ def gerencial_required(f):
                 return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         unit = kwargs.get("unit")
-        if not user.get("master") and user.get("unit") != unit:
+        is_global = user.get("master") or user.get("matriz")
+        if not is_global and user.get("unit") != unit:
             return Response("Acesso negado a esta unidade.", status=403)
-        if not user.get("master") and not user.get("gerencial"):
+        if not is_global and not user.get("gerencial"):
             return Response("Acesso restrito ao gerente da unidade.", status=403)
         return f(*args, **kwargs)
     return wrapper
 
 
 def unit_access_required(f):
-    """Verifica login + acesso a unidade (master ve tudo).
+    """Verifica login + acesso a unidade (master e matriz veem todas).
     Rotas /api/ recebem JSON 401 em vez de redirect HTML quando a sessao expira.
     """
     @wraps(f)
@@ -410,9 +411,27 @@ def unit_access_required(f):
                 return _json({"success": False, "error": "Sessao expirada. Recarregue a pagina e faca login novamente.", "session_expired": True}, 401)
             return redirect(url_for("login_page"))
         unit = kwargs.get("unit")
-        if not user.get("master") and user.get("unit") != unit:
+        is_global = user.get("master") or user.get("matriz")
+        if not is_global and user.get("unit") != unit:
             if "/api/" in request.path:
                 return _json({"success": False, "error": "Acesso negado a esta unidade."}, 403)
+            return Response("Acesso negado", status=403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def master_view_required(f):
+    """Read-only: libera master E matriz (ambos veem todas as unidades)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = _current_user()
+        if not user:
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+            return redirect(url_for("login_page"))
+        if not (user.get("master") or user.get("matriz")):
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Acesso negado."}, 403)
             return Response("Acesso negado", status=403)
         return f(*args, **kwargs)
     return wrapper
@@ -536,7 +555,8 @@ def api_me():
         "usuario": session.get("name", ""),
         "email":   session.get("email", ""),
         "master":  bool(user and user.get("master")),
-        "gerencial": bool(user and (user.get("gerencial") or user.get("master"))),
+        "matriz":  bool(user and user.get("matriz")),
+        "gerencial": bool(user and (user.get("gerencial") or user.get("master") or user.get("matriz"))),
         "unit":    user.get("unit", "") if user else "",
     })
 
@@ -603,7 +623,7 @@ def root_static(filename: str):
 @login_required
 def index():
     user = _current_user()
-    if user.get("master"):
+    if user.get("master") or user.get("matriz"):
         return redirect("/home")
     unit = user.get("unit")
     if unit:
@@ -631,14 +651,14 @@ def home_unit(unit: str):
 @login_required
 def master_page():
     user = _current_user()
-    if not user.get("master"):
+    if not (user.get("master") or user.get("matriz")):
         unit = user.get("unit")
         return redirect(f"/u/{unit}/") if unit else redirect(url_for("login_page"))
     return send_from_directory(UI_DIR, "master.html")
 
 
 @app.route("/master/api/units")
-@master_required
+@master_view_required
 def master_api_units():
     units_info = [
         {"id": uid, "nome": ud.get("nome", uid)}
@@ -648,7 +668,7 @@ def master_api_units():
 
 
 @app.route("/master/api/units/status")
-@master_required
+@master_view_required
 def master_api_units_status():
     """Resumo operacional do caixa do dia para todas as unidades.
 
@@ -677,7 +697,7 @@ def master_api_units_status():
 
 
 @app.route("/master/api/tiny-health")
-@master_required
+@master_view_required
 def master_api_tiny_health():
     """Status do token Tiny para cada unidade — alimenta o painel master.
 
@@ -792,7 +812,7 @@ def master_api_debug_storage():
 
 
 @app.route("/gerencial/api/envios-tiny", methods=["GET"])
-@master_required
+@master_view_required
 def master_api_envios_tiny_list():
     """Lista envios para o Tiny no intervalo. Modo espelho — pode faltar historico antigo
     que ainda esta so no imported.json. Use POST /gerencial/api/envios-tiny/migrate uma vez
@@ -1061,7 +1081,7 @@ def _norm_fp_bi(fp: str) -> str:
 
 
 @app.route("/gerencial/api/bi/faturamento", methods=["GET"])
-@master_required
+@master_view_required
 def master_api_bi_faturamento():
     """Agrega envios_tiny do mes (o que o SISTEMA emitiu em fechamento de caixa).
 
@@ -1230,7 +1250,7 @@ def _classificar_categoria_receita(servico_norm: str) -> str:
 
 
 @app.route("/gerencial/api/bi/historico-emitido", methods=["GET"])
-@master_required
+@master_view_required
 def master_api_bi_historico_emitido():
     """Agrega historico_tiny (contas a receber emitidas no Tiny) do mes.
 
@@ -1685,7 +1705,8 @@ def api_info(unit: str):
         "usuario": session.get("name", ""),
         "email": session.get("email", ""),
         "master": bool(user and user.get("master")),
-        "gerencial": bool(user and (user.get("gerencial") or user.get("master"))),
+        "matriz": bool(user and user.get("matriz")),
+        "gerencial": bool(user and (user.get("gerencial") or user.get("master") or user.get("matriz"))),
         "servicos": servicos,
         "pin_configurado": bool(ud.get("master_pin")),
     })
@@ -2330,12 +2351,33 @@ def _load_caixa_dia(unit: str) -> dict[str, Any]:
                 pass
         return {"data": today, "lancamentos": []}
 
-    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp", "client_uuid"}
+    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp", "client_uuid", "usuario"}
     lancamentos = [
         {k: v for k, v in lc.items() if k in _KEEP}
         for lc in _db_load(unit, unit_dir, today)
     ]
     return {"data": today, "lancamentos": lancamentos}
+
+
+def _append_audit_log(unit: str, acao: str, detalhes: dict[str, Any]) -> None:
+    """Registra ação sensível (excluir/editar caixa) em /data/{unit}/audit.log (JSONL)."""
+    try:
+        unit_dir = _unit_state_dir(unit)
+        unit_dir.mkdir(parents=True, exist_ok=True)
+        user = _current_user() or {}
+        entry = {
+            "ts": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "unit": unit,
+            "acao": acao,
+            "usuario": session.get("email") or user.get("email") or session.get("name") or "",
+            "nome": session.get("name") or user.get("name") or "",
+            "ip": request.remote_addr or "",
+            "detalhes": detalhes,
+        }
+        with (unit_dir / "audit.log").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        app.logger.error("[audit] falha ao registrar %s unit=%s: %s", acao, unit, exc)
 
 
 def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
@@ -2347,9 +2389,9 @@ def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
         if lcs:
             conn.executemany(
                 "INSERT INTO lancamentos "
-                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp,client_uuid) "
-                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp,:client_uuid)",
-                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", ""), "client_uuid": lc.get("client_uuid", "")} for lc in lcs],
+                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp,client_uuid,usuario) "
+                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp,:client_uuid,:usuario)",
+                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", ""), "client_uuid": lc.get("client_uuid", ""), "usuario": lc.get("usuario", "")} for lc in lcs],
             )
 
 
@@ -2600,6 +2642,8 @@ def api_caixa_lancar(unit: str):
                     })
 
         now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
+        user = _current_user() or {}
+        usuario_tag = (session.get("email") or user.get("email") or session.get("name") or "")[:120]
         lancamento = {
             "id": secrets.token_hex(8),
             "hora": now.strftime("%H:%M"),
@@ -2610,6 +2654,7 @@ def api_caixa_lancar(unit: str):
             "servico": servico,
             "valor": round(valor, 2),
             "fp": fp,
+            "usuario": usuario_tag,
         }
         if client_uuid:
             lancamento["client_uuid"] = client_uuid
@@ -2655,9 +2700,18 @@ def api_caixa_editar(unit: str, lancamento_id: str):
         state = _load_caixa_dia(unit)
         for lc in state["lancamentos"]:
             if lc["id"] == lancamento_id:
+                antes = {"placa": lc.get("placa", ""), "cliente": lc.get("cliente", ""),
+                         "servico": lc.get("servico", ""), "valor": lc.get("valor", 0), "fp": lc.get("fp", "")}
                 lc.update({"placa": placa, "cliente": cliente, "cpf": cpf,
                             "servico": servico, "valor": round(valor, 2), "fp": fp})
                 _save_caixa_dia(unit, state)
+                _append_audit_log(unit, "editar_lancamento", {
+                    "lancamento_id": lancamento_id,
+                    "antes": antes,
+                    "depois": {"placa": placa, "cliente": cliente, "servico": servico,
+                               "valor": round(valor, 2), "fp": fp},
+                    "lancado_por": lc.get("usuario", ""),
+                })
                 return _json({"success": True, "totais": _caixa_totals(state["lancamentos"])})
 
         return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
@@ -2683,11 +2737,20 @@ def api_caixa_excluir(unit: str, lancamento_id: str):
 
         state = _load_caixa_dia(unit)
         antes = len(state["lancamentos"])
+        removido = next((lc for lc in state["lancamentos"] if lc["id"] == lancamento_id), None)
         state["lancamentos"] = [lc for lc in state["lancamentos"] if lc["id"] != lancamento_id]
         if len(state["lancamentos"]) == antes:
             return _json({"success": False, "error": "Lancamento nao encontrado."}, 404)
 
         _save_caixa_dia(unit, state)
+        _append_audit_log(unit, "excluir_lancamento", {
+            "lancamento_id": lancamento_id,
+            "placa": (removido or {}).get("placa", ""),
+            "valor": (removido or {}).get("valor", 0),
+            "servico": (removido or {}).get("servico", ""),
+            "fp": (removido or {}).get("fp", ""),
+            "lancado_por": (removido or {}).get("usuario", ""),
+        })
         return _json({
             "success": True,
             "totais": _caixa_totals(state["lancamentos"]),
@@ -3129,25 +3192,25 @@ def api_gerencial_divergencias(unit: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/gerencial")
-@master_only_required
+@master_view_required
 def master_gerencial_page():
     return _nocache(send_from_directory(UI_DIR, "master_gerencial.html"))
 
 
 @app.route("/gerencial/historico-caixa")
-@master_only_required
+@master_view_required
 def master_historico_caixa_page():
     return _nocache(send_from_directory(UI_DIR, "historico-caixa.html"))
 
 
 @app.route("/gerencial/bi")
-@master_only_required
+@master_view_required
 def master_bi_page():
     return _nocache(send_from_directory(UI_DIR, "bi.html"))
 
 
 @app.route("/gerencial/historico-emitido")
-@master_only_required
+@master_view_required
 def master_historico_emitido_page():
     return _nocache(send_from_directory(UI_DIR, "historico-emitido.html"))
 
@@ -3191,6 +3254,7 @@ def _user_public(email: str, u: dict[str, Any]) -> dict[str, Any]:
         "name":      u.get("name", email),
         "unit":      u.get("unit", ""),
         "master":    bool(u.get("master")),
+        "matriz":    bool(u.get("matriz")),
         "gerencial": bool(u.get("gerencial")),
     }
 
@@ -3201,6 +3265,7 @@ def _validate_user_payload(data: dict[str, Any], editing: bool) -> tuple[str, di
     name  = (data.get("name")  or "").strip()
     unit  = (data.get("unit")  or "").strip()
     master    = bool(data.get("master"))
+    matriz    = bool(data.get("matriz"))
     gerencial = bool(data.get("gerencial"))
     password  = (data.get("password") or "")
 
@@ -3208,7 +3273,7 @@ def _validate_user_payload(data: dict[str, Any], editing: bool) -> tuple[str, di
         return None, "E-mail inválido."
     if not name:
         return None, "Nome é obrigatório."
-    if not master and not unit:
+    if not master and not matriz and not unit:
         return None, "Usuário não-master precisa de unidade."
     if unit and unit not in UNITS:
         return None, f"Unidade '{unit}' não existe."
@@ -3219,9 +3284,10 @@ def _validate_user_payload(data: dict[str, Any], editing: bool) -> tuple[str, di
 
     sanit = {
         "name":      name,
-        "unit":      "" if master else unit,
+        "unit":      "" if (master or matriz) else unit,
         "master":    master,
-        "gerencial": gerencial or master,
+        "matriz":    matriz and not master,
+        "gerencial": gerencial or master or matriz,
     }
     if password:
         sanit["password_hash"] = _hash_password(password)
@@ -3367,7 +3433,7 @@ def _load_unit_range_dual(uid: str, unit_dir, date_from: str, date_to: str, toda
 
 
 @app.route("/gerencial/api/historico")
-@master_only_required
+@master_view_required
 def api_master_historico():
     try:
         date_from   = request.args.get("from", "")
@@ -3470,7 +3536,7 @@ def api_master_historico():
 
 
 @app.route("/gerencial/api/exportar")
-@master_only_required
+@master_view_required
 def api_master_exportar():
     try:
         import csv, io
@@ -3521,7 +3587,7 @@ def api_master_exportar():
 
 
 @app.route("/gerencial/api/divergencias")
-@master_only_required
+@master_view_required
 def api_master_divergencias():
     try:
         date_from   = request.args.get("from", "")
