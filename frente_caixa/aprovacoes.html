@@ -341,22 +341,31 @@
   }
 
   async function decidir(id, decisao, reason) {
-    if (!CSRF_TOKEN) await loadCsrf();
     const confirmMsg = decisao === "aprovar"
       ? "Aprovar este pedido? A ação será executada imediatamente."
       : "Rejeitar este pedido? A ação não será executada.";
     if (!confirm(confirmMsg)) return;
 
+    const send = () => fetch(`/master/api/aprovacoes/${encodeURIComponent(id)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type":  "application/json",
+        "X-CSRF-Token":  CSRF_TOKEN,
+      },
+      body: JSON.stringify({ decisao, reason: reason || "" }),
+    });
+
     try {
-      const r = await fetch(`/master/api/aprovacoes/${encodeURIComponent(id)}`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type":  "application/json",
-          "X-CSRF-Token":  CSRF_TOKEN,
-        },
-        body: JSON.stringify({ decisao, reason: reason || "" }),
-      });
+      await loadCsrf();
+      let r = await send();
+      if (r.status === 403) {
+        const peek = await r.clone().json().catch(() => ({}));
+        if (/csrf/i.test(peek.error || "")) {
+          await loadCsrf();
+          r = await send();
+        }
+      }
       const data = await r.json().catch(() => ({}));
       if (!r.ok || data.success === false) {
         const err = data.error || data.exec_error || `HTTP ${r.status}`;
