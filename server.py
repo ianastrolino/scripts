@@ -358,18 +358,66 @@ _ACTIVE_USERS: dict[str, dict[str, Any]] = {}
 _ACTIVE_USERS_LOCK = threading.Lock()
 _ACTIVE_TTL_SECONDS = 180   # 3 min sem atividade = desconectado
 
+# Log persistente de sessoes (append-only JSONL). Cada linha e uma sessao fechada.
+# Nova sessao abre quando o usuario ativa e nao estava em _ACTIVE_USERS (primeiro acesso
+# ou retorno apos gap > TTL). Fecha quando expira por inatividade ou logout explicito.
+_SESSION_LOG_PATH = DATA_DIR / "session_log.jsonl"
+_SESSION_LOG_LOCK = threading.Lock()
+
+
+def _write_session_log(info: dict[str, Any], reason: str) -> None:
+    """Escreve uma linha de sessao encerrada no JSONL."""
+    try:
+        started_ts = info.get("session_start") or info.get("last_seen")
+        ended_ts   = info.get("last_seen")
+        if not started_ts or not ended_ts:
+            return
+        duration = max(0, int(ended_ts - started_ts))
+        tz = ZoneInfo("America/Sao_Paulo")
+        entry = {
+            "email":      info.get("email", ""),
+            "nome":       info.get("nome", ""),
+            "unit":       info.get("unit", ""),
+            "master":     bool(info.get("master")),
+            "gerencial":  bool(info.get("gerencial")),
+            "started_at": dt.datetime.fromtimestamp(started_ts, tz).isoformat(timespec="seconds"),
+            "ended_at":   dt.datetime.fromtimestamp(ended_ts,   tz).isoformat(timespec="seconds"),
+            "duration_s": duration,
+            "reason":     reason,       # "timeout" | "logout" | "app_restart"
+            "last_path":  info.get("last_path", ""),
+            "last_ip":    info.get("last_ip", ""),
+        }
+        _SESSION_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _SESSION_LOG_LOCK:
+            with _SESSION_LOG_PATH.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        app.logger.error("[session_log] falha ao gravar sessao: %s", exc)
+
+
 def _mark_user_active(email: str, user: dict[str, Any]) -> None:
     if not email:
         return
     now_ts = time.time()
     with _ACTIVE_USERS_LOCK:
+        existing = _ACTIVE_USERS.get(email)
+        # Nova sessao se: nao estava online OU estava mas com gap > TTL (deveria ter
+        # expirado mas _get_active_users ainda nao tinha rodado o cleanup)
+        if existing and (now_ts - existing["last_seen"]) <= _ACTIVE_TTL_SECONDS:
+            session_start = existing["session_start"]
+        else:
+            session_start = now_ts
+            if existing:
+                # Gap longo — fecha a sessao antiga antes de abrir nova
+                _write_session_log(existing, "timeout")
         _ACTIVE_USERS[email] = {
             "email":    email,
             "nome":     user.get("name", email),
             "unit":     user.get("unit", ""),
             "master":   bool(user.get("master")),
             "gerencial": bool(user.get("gerencial") or user.get("master")),
-            "last_seen": now_ts,
+            "last_seen":     now_ts,
+            "session_start": session_start,
             "last_path": (request.path or "")[:120],
             "last_ip":   request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip(),
         }
@@ -377,10 +425,21 @@ def _mark_user_active(email: str, user: dict[str, Any]) -> None:
 def _get_active_users() -> list[dict[str, Any]]:
     cutoff = time.time() - _ACTIVE_TTL_SECONDS
     with _ACTIVE_USERS_LOCK:
-        expirados = [e for e, info in _ACTIVE_USERS.items() if info["last_seen"] < cutoff]
-        for e in expirados:
+        expirados = [(e, info) for e, info in _ACTIVE_USERS.items() if info["last_seen"] < cutoff]
+        for e, info in expirados:
+            _write_session_log(info, "timeout")
             _ACTIVE_USERS.pop(e, None)
         return sorted(_ACTIVE_USERS.values(), key=lambda x: -x["last_seen"])
+
+
+def _end_session_on_logout(email: str) -> None:
+    """Fecha a sessao do usuario no JSONL ao fazer logout explicito."""
+    if not email:
+        return
+    with _ACTIVE_USERS_LOCK:
+        info = _ACTIVE_USERS.pop(email, None)
+    if info:
+        _write_session_log(info, "logout")
 
 
 # ── CSRF ───────────────────────────────────────────────────────────────────────
@@ -656,6 +715,8 @@ def login_page():
 
 @app.route("/logout")
 def logout():
+    email = (session.get("email") or "").lower()
+    _end_session_on_logout(email)
     session.clear()
     return redirect(url_for("login_page"))
 
