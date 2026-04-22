@@ -238,6 +238,25 @@
           </tbody>
         </table>
       </div>
+
+      <div class="table-wrap" id="invitesWrap" style="margin-top:24px;display:none">
+        <div class="table-head">
+          <div class="table-title">Convites pendentes</div>
+          <div class="table-meta" id="invitesMeta">—</div>
+        </div>
+        <table class="u-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Perfil</th>
+              <th>Expira em</th>
+              <th style="text-align:right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="invBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </main>
@@ -285,7 +304,22 @@
         </select>
       </div>
 
-      <div class="field">
+      <div class="field" id="fMetodoWrap">
+        <label class="field-label">Como definir a senha</label>
+        <div class="checkbox-row">
+          <label class="checkbox-item">
+            <input type="radio" name="fMetodo" value="convite" id="fMetodoConvite" checked>
+            Enviar convite por email (recomendado)
+          </label>
+          <label class="checkbox-item">
+            <input type="radio" name="fMetodo" value="senha" id="fMetodoSenha">
+            Definir senha agora
+          </label>
+        </div>
+        <div class="field-hint">O usuário recebe um link (válido por 72h) para criar a própria senha.</div>
+      </div>
+
+      <div class="field" id="fPasswordWrap" style="display:none">
         <label class="field-label" for="fPassword">Senha</label>
         <input type="password" class="field-input" id="fPassword" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
         <div class="field-hint" id="fPasswordHint">Mínimo 8 caracteres.</div>
@@ -293,7 +327,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" id="btnCancel">Cancelar</button>
-      <button class="btn-primary" id="btnSave">Salvar</button>
+      <button class="btn-primary" id="btnSave">Enviar convite</button>
     </div>
   </div>
 </div>
@@ -376,33 +410,126 @@
       const body = document.getElementById("uBody");
       if (!state.usuarios.length) {
         body.innerHTML = `<tr><td colspan="5" class="empty">Nenhum usuário cadastrado.</td></tr>`;
-        return;
+      } else {
+        body.innerHTML = state.usuarios.map(u => `
+          <tr data-email="${escHtml(u.email)}">
+            <td><strong>${escHtml(u.name)}</strong></td>
+            <td style="color:var(--t2)">${escHtml(u.email)}</td>
+            <td>${perfilTag(u)}</td>
+            <td>${escHtml(unitNome(u.unit))}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn-row" data-act="edit" data-email="${escHtml(u.email)}">
+                <span class="bi">${AstroShell.icon("edit")}</span>Editar
+              </button>
+              <button class="btn-row danger" data-act="del" data-email="${escHtml(u.email)}">
+                <span class="bi">${AstroShell.icon("trash")}</span>Excluir
+              </button>
+            </td>
+          </tr>
+        `).join("");
       }
-      body.innerHTML = state.usuarios.map(u => `
-        <tr data-email="${escHtml(u.email)}">
-          <td><strong>${escHtml(u.name)}</strong></td>
-          <td style="color:var(--t2)">${escHtml(u.email)}</td>
-          <td>${perfilTag(u)}</td>
-          <td>${escHtml(unitNome(u.unit))}</td>
-          <td style="text-align:right;white-space:nowrap">
-            <button class="btn-row" data-act="edit" data-email="${escHtml(u.email)}">
-              <span class="bi">${AstroShell.icon("edit")}</span>Editar
-            </button>
-            <button class="btn-row danger" data-act="del" data-email="${escHtml(u.email)}">
-              <span class="bi">${AstroShell.icon("trash")}</span>Excluir
-            </button>
-          </td>
-        </tr>
-      `).join("");
 
       // Popula select de unidades
       const sel = document.getElementById("fUnit");
       sel.innerHTML = '<option value="">— Selecione —</option>' +
         state.unidades.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.nome)}</option>`).join("");
+
+      await loadInvites();
     } catch (e) {
       document.getElementById("uBody").innerHTML =
         `<tr><td colspan="5" class="empty">Erro ao carregar: ${escHtml(e.message)}</td></tr>`;
     }
+  }
+
+  function formatExpira(iso) {
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diffH = Math.round((d - now) / 36e5);
+      const dataFmt = d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      if (diffH < 0)   return `<span style="color:#b91c1c">expirado (${dataFmt})</span>`;
+      if (diffH < 24)  return `<span style="color:#b45309">${dataFmt} (em ${diffH}h)</span>`;
+      return dataFmt;
+    } catch { return iso; }
+  }
+
+  function perfilConviteTag(p) {
+    p = p || {};
+    if (p.master) return '<span class="tag tag-master">Master</span>';
+    if (p.matriz) return '<span class="tag tag-matriz">Matriz</span>';
+    if (p.gerencial) return '<span class="tag tag-ger">Gerencial</span>';
+    return '<span class="tag tag-op">Operador</span>';
+  }
+
+  async function loadInvites() {
+    try {
+      const r = await fetch("/master/api/convites", { cache: "no-store" });
+      if (!r.ok) return;
+      const data = await r.json();
+      const todos = data.convites || [];
+      const pendentes = todos.filter(c => c.status === "pendente");
+      const wrap = document.getElementById("invitesWrap");
+      if (!pendentes.length) {
+        wrap.style.display = "none";
+        return;
+      }
+      wrap.style.display = "";
+      document.getElementById("invitesMeta").textContent =
+        pendentes.length === 1 ? "1 convite" : `${pendentes.length} convites`;
+      document.getElementById("invBody").innerHTML = pendentes.map(c => {
+        const unidade = c.perfil?.unit ? unitNome(c.perfil.unit) : "—";
+        return `
+          <tr data-token="${escHtml(c.token)}">
+            <td><strong>${escHtml(c.name)}</strong></td>
+            <td style="color:var(--t2)">${escHtml(c.email)}</td>
+            <td>${perfilConviteTag(c.perfil)} <span style="color:var(--t3);font-size:11px;margin-left:6px">${escHtml(unidade)}</span></td>
+            <td style="color:var(--t2);font-size:12px">${formatExpira(c.expira_em)}</td>
+            <td style="text-align:right;white-space:nowrap">
+              <button class="btn-row" data-act="reenviar" data-token="${escHtml(c.token)}">Reenviar</button>
+              <button class="btn-row danger" data-act="revogar" data-token="${escHtml(c.token)}">Revogar</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    } catch (e) { /* silencia erro — convites é complementar */ }
+  }
+
+  async function reenviarConvite(token) {
+    try {
+      const csrf = await getCsrf();
+      const r = await fetch(`/master/api/convites/${encodeURIComponent(token)}/reenviar`, {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        alert(j.error || "Erro ao reenviar.");
+        return;
+      }
+      if (j.email_enviado === false) {
+        prompt("Email não enviado (provider não configurado). Copie o link e envie manualmente:", j.link);
+      } else {
+        alert("Convite reenviado com sucesso.");
+      }
+      await load();
+    } catch (e) { alert("Erro: " + e.message); }
+  }
+
+  async function revogarConvite(token) {
+    if (!confirm("Revogar este convite? O link ficará inválido imediatamente.")) return;
+    try {
+      const csrf = await getCsrf();
+      const r = await fetch(`/master/api/convites/${encodeURIComponent(token)}`, {
+        method: "DELETE",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) {
+        alert(j.error || "Erro ao revogar.");
+        return;
+      }
+      await load();
+    } catch (e) { alert("Erro: " + e.message); }
   }
 
   function openForm(user) {
@@ -422,10 +549,27 @@
     document.getElementById("fPasswordHint").textContent = user
       ? "Deixe em branco para manter a senha atual. Mínimo 8 caracteres se for trocar."
       : "Mínimo 8 caracteres.";
+    // Método: convite só em "novo usuário", edição sempre usa senha direta
+    if (user) {
+      document.getElementById("fMetodoWrap").style.display = "none";
+      document.getElementById("fMetodoSenha").checked = true;
+    } else {
+      document.getElementById("fMetodoWrap").style.display = "";
+      document.getElementById("fMetodoConvite").checked = true;
+    }
     hideAlert("mdAlert");
     syncMasterToggle();
+    syncMetodo();
     document.getElementById("mdForm").classList.add("show");
     setTimeout(() => document.getElementById(user ? "fName" : "fEmail").focus(), 50);
+  }
+
+  function syncMetodo() {
+    const usaConvite = document.getElementById("fMetodoConvite").checked
+                    && !state.editingEmail;
+    document.getElementById("fPasswordWrap").style.display = usaConvite ? "none" : "";
+    const btn = document.getElementById("btnSave");
+    btn.textContent = usaConvite ? "Enviar convite" : "Salvar";
   }
 
   function closeForm() {
@@ -464,6 +608,9 @@
   }
 
   async function save() {
+    const editing = !!state.editingEmail;
+    const usaConvite = !editing && document.getElementById("fMetodoConvite").checked;
+
     const payload = {
       email:     document.getElementById("fEmail").value.trim().toLowerCase(),
       name:      document.getElementById("fName").value.trim(),
@@ -471,18 +618,21 @@
       matriz:    document.getElementById("fMatriz").checked,
       gerencial: document.getElementById("fGerencial").checked,
       unit:      document.getElementById("fUnit").value,
-      password:  document.getElementById("fPassword").value,
     };
     if (payload.master || payload.matriz) payload.unit = "";
+    if (!usaConvite) payload.password = document.getElementById("fPassword").value;
 
-    const editing = !!state.editingEmail;
-    const url = editing
-      ? `/master/api/usuarios/${encodeURIComponent(state.editingEmail)}`
-      : "/master/api/usuarios";
-    const method = editing ? "PUT" : "POST";
+    const url = usaConvite
+      ? "/master/api/usuarios/convite"
+      : editing
+        ? `/master/api/usuarios/${encodeURIComponent(state.editingEmail)}`
+        : "/master/api/usuarios";
+    const method = usaConvite ? "POST" : (editing ? "PUT" : "POST");
 
     const btn = document.getElementById("btnSave");
-    btn.disabled = true; btn.textContent = "Salvando…";
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = usaConvite ? "Enviando convite…" : "Salvando…";
     try {
       const token = await getCsrf();
       const r = await fetch(url, {
@@ -495,12 +645,19 @@
         showAlert("mdAlert", j.error || "Erro ao salvar.");
         return;
       }
+      if (usaConvite && j.email_enviado === false) {
+        // Provider não configurado — mostra link para master copiar
+        prompt(
+          "Email não pôde ser enviado (configure RESEND_API_KEY no Railway).\nCopie o link abaixo e envie manualmente pro usuário:",
+          j.link
+        );
+      }
       closeForm();
       await load();
     } catch (e) {
       showAlert("mdAlert", "Erro de rede: " + e.message);
     } finally {
-      btn.disabled = false; btn.textContent = "Salvar";
+      btn.disabled = false; btn.textContent = originalText;
     }
   }
 
@@ -547,6 +704,8 @@
   document.getElementById("btnDelConfirm").addEventListener("click", confirmDel);
   document.getElementById("fMaster").addEventListener("change", syncMasterToggle);
   document.getElementById("fMatriz").addEventListener("change", syncMasterToggle);
+  document.getElementById("fMetodoConvite").addEventListener("change", syncMetodo);
+  document.getElementById("fMetodoSenha").addEventListener("change", syncMetodo);
   document.getElementById("mdForm").addEventListener("click", (e) => {
     if (e.target.id === "mdForm") closeForm();
   });
@@ -561,6 +720,14 @@
     if (!user) return;
     if (btn.dataset.act === "edit") openForm(user);
     else if (btn.dataset.act === "del") openDel(user);
+  });
+  document.getElementById("invBody").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const token = btn.dataset.token;
+    if (!token) return;
+    if (btn.dataset.act === "reenviar") reenviarConvite(token);
+    else if (btn.dataset.act === "revogar") revogarConvite(token);
   });
 
   load();

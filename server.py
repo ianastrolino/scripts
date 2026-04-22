@@ -270,6 +270,53 @@ def _save_users(users: dict[str, Any]) -> None:
     tmp.replace(_USERS_FILE)
 
 
+# ── Convites por email ─────────────────────────────────────────────────────────
+_INVITES_FILE = DATA_DIR / "convites.json"
+_INVITES_LOCK = threading.Lock()
+_INVITE_TTL_HOURS = 72
+
+
+def _load_invites() -> dict[str, Any]:
+    if _INVITES_FILE.exists():
+        try:
+            return json.loads(_INVITES_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_invites(inv: dict[str, Any]) -> None:
+    _INVITES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _INVITES_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(inv, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_INVITES_FILE)
+
+
+def _invite_is_valid(invite: dict[str, Any]) -> bool:
+    if not invite:
+        return False
+    if invite.get("usado_em") or invite.get("revogado_em"):
+        return False
+    try:
+        expira = dt.datetime.fromisoformat(invite.get("expira_em", ""))
+    except (ValueError, TypeError):
+        return False
+    now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
+    if expira.tzinfo is None:
+        expira = expira.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    return now < expira
+
+
+def _invite_status(invite: dict[str, Any]) -> str:
+    if invite.get("usado_em"):
+        return "usado"
+    if invite.get("revogado_em"):
+        return "revogado"
+    if not _invite_is_valid(invite):
+        return "expirado"
+    return "pendente"
+
+
 def _load_units() -> dict[str, Any]:
     raw = os.environ.get("UNITS_CONFIG", "{}")
     try:
@@ -3376,6 +3423,251 @@ def master_api_usuarios_delete(email: str):
     return _json({"success": True})
 
 
+# ── Convites por email ─────────────────────────────────────────────────────────
+
+def _gerar_convite(email: str, sanit: dict, criador_email: str) -> tuple[str, dict]:
+    """Cria convite novo (revoga pendentes anteriores pro mesmo email). Retorna (token, invite_dict)."""
+    now = dt.datetime.now(ZoneInfo("America/Sao_Paulo"))
+    token = secrets.token_urlsafe(32)
+    invite = {
+        "email": email,
+        "name": sanit["name"],
+        "perfil": {k: sanit[k] for k in ("master", "matriz", "gerencial", "unit")},
+        "criado_por": criador_email,
+        "criado_em": now.isoformat(timespec="seconds"),
+        "expira_em": (now + dt.timedelta(hours=_INVITE_TTL_HOURS)).isoformat(timespec="seconds"),
+        "usado_em": None,
+        "revogado_em": None,
+    }
+    with _INVITES_LOCK:
+        invites = _load_invites()
+        # Revoga convites antigos pendentes do mesmo email
+        for t, inv in invites.items():
+            if inv.get("email") == email and not inv.get("usado_em") and not inv.get("revogado_em"):
+                inv["revogado_em"] = now.isoformat(timespec="seconds")
+        invites[token] = invite
+        _save_invites(invites)
+    return token, invite
+
+
+@app.route("/master/api/usuarios/convite", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_usuarios_convite():
+    """Cria convite: valida payload (como usuário), gera token, envia email.
+    Usuário fica com status 'convidado' (sem password_hash) até ativar.
+    """
+    data = request.get_json(silent=True) or {}
+    # Validação com editing=True pra pular a exigência de senha
+    data["email"] = (data.get("email") or "").strip().lower()
+    data["_skip_pwd"] = True
+    result = _validate_user_payload_convite(data)
+    if result[0] is None:
+        return _json({"success": False, "error": result[1]}, 400)
+    email, sanit = result
+    with _USERS_LOCK:
+        if email in USERS and USERS[email].get("password_hash"):
+            return _json({"success": False, "error": "Já existe usuário ativo com este e-mail."}, 409)
+        # Cria stub de usuário (sem password_hash) — será completado no ativar
+        stub = {**sanit, "password_hash": "", "convidado": True}
+        USERS[email] = stub
+        _save_users(USERS)
+    criador_email = session.get("email", "")
+    criador_nome  = session.get("name", "")
+    token, invite = _gerar_convite(email, sanit, criador_email)
+    try:
+        _send_invite_email(email, sanit["name"], token, criador_nome)
+    except Exception as exc:
+        # Convite foi criado — retorna o link pro master copiar manualmente
+        link = f"{_public_base_url()}/ativar/{token}"
+        app.logger.error("[convite] falha ao enviar email %s: %s", email, exc)
+        return _json({
+            "success": True,
+            "email_enviado": False,
+            "erro_email": str(exc),
+            "link": link,
+            "expira_em": invite["expira_em"],
+        })
+    app.logger.info(f"[convite] enviado: {email} (por {criador_email})")
+    return _json({"success": True, "email_enviado": True, "expira_em": invite["expira_em"]})
+
+
+def _validate_user_payload_convite(data: dict) -> tuple[str, dict] | tuple[None, str]:
+    """Validação especial pra convite: não exige senha."""
+    email = (data.get("email") or "").strip().lower()
+    name  = (data.get("name")  or "").strip()
+    unit  = (data.get("unit")  or "").strip()
+    master    = bool(data.get("master"))
+    matriz    = bool(data.get("matriz"))
+    gerencial = bool(data.get("gerencial"))
+    if not email or "@" not in email:
+        return None, "E-mail inválido."
+    if not name:
+        return None, "Nome é obrigatório."
+    if not master and not matriz and not unit:
+        return None, "Usuário não-master precisa de unidade."
+    if unit and unit not in UNITS:
+        return None, f"Unidade '{unit}' não existe."
+    sanit = {
+        "name":      name,
+        "unit":      "" if (master or matriz) else unit,
+        "master":    master,
+        "matriz":    matriz and not master,
+        "gerencial": gerencial or master or matriz,
+    }
+    return email, sanit
+
+
+@app.route("/master/api/convites", methods=["GET"])
+@master_only_required
+def master_api_convites_list():
+    """Lista convites (pendentes primeiro, depois histórico)."""
+    out = []
+    with _INVITES_LOCK:
+        invites = _load_invites()
+    for token, inv in invites.items():
+        out.append({
+            "token_short": token[:10],
+            "token": token,
+            "email": inv.get("email", ""),
+            "name": inv.get("name", ""),
+            "perfil": inv.get("perfil", {}),
+            "criado_por": inv.get("criado_por", ""),
+            "criado_em": inv.get("criado_em", ""),
+            "expira_em": inv.get("expira_em", ""),
+            "status": _invite_status(inv),
+        })
+    out.sort(key=lambda i: (i["status"] != "pendente", i["criado_em"]), reverse=False)
+    out.sort(key=lambda i: i["criado_em"], reverse=True)
+    return _json({"convites": out})
+
+
+@app.route("/master/api/convites/<token>", methods=["DELETE"])
+@master_only_required
+@csrf_required
+def master_api_convites_revoke(token: str):
+    now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    with _INVITES_LOCK:
+        invites = _load_invites()
+        inv = invites.get(token)
+        if not inv:
+            return _json({"success": False, "error": "Convite não encontrado."}, 404)
+        if inv.get("usado_em"):
+            return _json({"success": False, "error": "Convite já foi usado."}, 400)
+        inv["revogado_em"] = now
+        _save_invites(invites)
+        # Remove o stub de usuário se ainda não ativou
+        email = inv.get("email", "")
+        with _USERS_LOCK:
+            u = USERS.get(email)
+            if u and not u.get("password_hash"):
+                USERS.pop(email, None)
+                _save_users(USERS)
+    app.logger.info(f"[convite] revogado: {inv.get('email')}")
+    return _json({"success": True})
+
+
+@app.route("/master/api/convites/<token>/reenviar", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_convites_reenviar(token: str):
+    """Gera novo token pro mesmo email/perfil e envia novo email."""
+    with _INVITES_LOCK:
+        invites = _load_invites()
+        inv = invites.get(token)
+        if not inv:
+            return _json({"success": False, "error": "Convite não encontrado."}, 404)
+        if inv.get("usado_em"):
+            return _json({"success": False, "error": "Convite já foi usado."}, 400)
+    # Regenera
+    sanit_stub = {
+        "name": inv.get("name", ""),
+        **inv.get("perfil", {}),
+    }
+    criador_email = session.get("email", "")
+    criador_nome  = session.get("name", "")
+    new_token, new_invite = _gerar_convite(inv["email"], sanit_stub, criador_email)
+    try:
+        _send_invite_email(inv["email"], sanit_stub["name"], new_token, criador_nome)
+    except Exception as exc:
+        link = f"{_public_base_url()}/ativar/{new_token}"
+        return _json({
+            "success": True,
+            "email_enviado": False,
+            "erro_email": str(exc),
+            "link": link,
+            "expira_em": new_invite["expira_em"],
+        })
+    return _json({"success": True, "email_enviado": True, "expira_em": new_invite["expira_em"]})
+
+
+# ── Rotas públicas de ativação (não exigem login) ──────────────────────────────
+
+@app.route("/ativar/<token>")
+def ativar_page(token: str):
+    return _nocache(send_from_directory(UI_DIR, "ativar.html"))
+
+
+@app.route("/api/ativar/<token>", methods=["GET"])
+def api_ativar_info(token: str):
+    with _INVITES_LOCK:
+        invites = _load_invites()
+        inv = invites.get(token)
+    if not inv:
+        return _json({"success": False, "error": "Convite não encontrado.", "motivo": "invalido"}, 404)
+    if inv.get("usado_em"):
+        return _json({"success": False, "error": "Este convite já foi usado.", "motivo": "usado"}, 410)
+    if inv.get("revogado_em"):
+        return _json({"success": False, "error": "Este convite foi revogado.", "motivo": "revogado"}, 410)
+    if not _invite_is_valid(inv):
+        return _json({"success": False, "error": "Este convite expirou. Peça ao administrador para gerar um novo.", "motivo": "expirado"}, 410)
+    return _json({
+        "success": True,
+        "email": inv.get("email", ""),
+        "name": inv.get("name", ""),
+        "expira_em": inv.get("expira_em", ""),
+    })
+
+
+@app.route("/api/ativar/<token>", methods=["POST"])
+def api_ativar_confirm(token: str):
+    data = request.get_json(silent=True) or {}
+    senha = str(data.get("password") or "")
+    if len(senha) < 8:
+        return _json({"success": False, "error": "Senha deve ter pelo menos 8 caracteres."}, 400)
+    with _INVITES_LOCK:
+        invites = _load_invites()
+        inv = invites.get(token)
+        if not inv:
+            return _json({"success": False, "error": "Convite não encontrado."}, 404)
+        if inv.get("usado_em") or inv.get("revogado_em") or not _invite_is_valid(inv):
+            return _json({"success": False, "error": "Convite inválido ou expirado."}, 410)
+        email = inv["email"]
+        now_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        # Monta sanit final
+        perfil = inv.get("perfil", {})
+        sanit = {
+            "name":      inv.get("name", ""),
+            "unit":      perfil.get("unit", ""),
+            "master":    bool(perfil.get("master")),
+            "matriz":    bool(perfil.get("matriz")),
+            "gerencial": bool(perfil.get("gerencial")),
+            "password_hash": _hash_password(senha),
+        }
+        with _USERS_LOCK:
+            USERS[email] = sanit
+            _save_users(USERS)
+        inv["usado_em"] = now_iso
+        _save_invites(invites)
+    # Auto-login
+    session.clear()
+    session.permanent = True
+    session["email"] = email
+    session["name"]  = sanit["name"]
+    app.logger.info(f"[convite] ativado: {email}")
+    return _json({"success": True, "email": email})
+
+
 def _agg_lancamentos(lancamentos: list[dict], fp_keys: tuple) -> dict:
     totais: dict[str, float] = {fp: 0.0 for fp in fp_keys}
     for lc in lancamentos:
@@ -3695,6 +3987,66 @@ def _send_via_smtp(subject: str, html: str, recipients: list[str],
         smtp.login(user, passwd)
         smtp.sendmail(user, recipients, msg.as_string())
     app.logger.info("[email:smtp] ok subject=%s to=%s", subject, recipients)
+
+
+def _public_base_url() -> str:
+    """URL publica do sistema (usada em links de email).
+    Prefere PUBLIC_BASE_URL env; senao deriva de request.host_url (trailing slash removida).
+    """
+    env_url = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if env_url:
+        return env_url
+    try:
+        return (request.host_url or "").rstrip("/")
+    except RuntimeError:
+        return "https://astro-v2.up.railway.app"
+
+
+def _send_invite_email(email: str, nome: str, token: str, criador_nome: str) -> None:
+    """Envia convite com link /ativar/<token>. Levanta RuntimeError se provider ausente."""
+    base = _public_base_url()
+    link = f"{base}/ativar/{token}"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111827">
+      <h2 style="color:#0e7490;margin:0 0 8px">Bem-vindo à Astrovistorias</h2>
+      <p style="color:#374151;font-size:15px;line-height:1.55">
+        Olá <strong>{nome}</strong>,<br>
+        {criador_nome or 'O administrador'} criou um acesso para você no painel Astrovistorias.
+        Clique no botão abaixo para definir sua senha e ativar sua conta.
+      </p>
+      <p style="text-align:center;margin:28px 0">
+        <a href="{link}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700">
+          Ativar minha conta
+        </a>
+      </p>
+      <p style="color:#6b7280;font-size:12px;line-height:1.5">
+        Se o botão não funcionar, copie e cole este link no navegador:<br>
+        <span style="word-break:break-all;color:#0e7490">{link}</span>
+      </p>
+      <p style="color:#9ca3af;font-size:12px;margin-top:20px">
+        Este link expira em {_INVITE_TTL_HOURS} horas e só pode ser usado uma vez.
+        Se você não esperava este email, ignore-o.
+      </p>
+    </div>
+    """
+    _send_email_to([email], "Seu acesso Astrovistorias", html)
+
+
+def _send_email_to(recipients: list[str], subject: str, html: str) -> None:
+    """Envia email para destinatários específicos (diferente de _send_email que usa ALERT_EMAILS).
+
+    Usado para convites, notificações direcionadas. Levanta RuntimeError se provider
+    não configurado (chamador decide como reportar pro usuário).
+    """
+    if not recipients:
+        raise RuntimeError("Sem destinatario.")
+    provider = _email_provider()
+    if not provider:
+        raise RuntimeError("Nenhum provider de email configurado (RESEND_API_KEY ou SMTP_*).")
+    if provider == "resend":
+        _send_via_resend(subject, html, recipients)
+    else:
+        _send_via_smtp(subject, html, recipients)
 
 
 def _send_email(subject: str, html: str, attachment: bytes | None = None, attachment_name: str = "") -> None:
