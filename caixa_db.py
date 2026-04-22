@@ -17,22 +17,25 @@ from typing import Any
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS lancamentos (
-    id        TEXT PRIMARY KEY,
-    unit      TEXT NOT NULL,
-    data      TEXT NOT NULL,
-    hora      TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    placa     TEXT NOT NULL,
-    cliente   TEXT NOT NULL,
-    servico   TEXT NOT NULL,
-    valor     REAL NOT NULL,
-    fp        TEXT NOT NULL,
-    cpf       TEXT NOT NULL DEFAULT ""
+    id          TEXT PRIMARY KEY,
+    unit        TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    hora        TEXT NOT NULL,
+    timestamp   TEXT NOT NULL,
+    placa       TEXT NOT NULL,
+    cliente     TEXT NOT NULL,
+    servico     TEXT NOT NULL,
+    valor       REAL NOT NULL,
+    fp          TEXT NOT NULL,
+    cpf         TEXT NOT NULL DEFAULT "",
+    client_uuid TEXT NOT NULL DEFAULT ""
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_client_uuid ON lancamentos(unit, data, client_uuid);
 """
 
 _MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\""
+_MIGRATE_CLIENT_UUID = "ALTER TABLE lancamentos ADD COLUMN client_uuid TEXT NOT NULL DEFAULT \"\""
 
 _DDL_DIV = """
 CREATE TABLE IF NOT EXISTS divergencias (
@@ -135,6 +138,11 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.executescript(_DDL)
     try:
         conn.execute(_MIGRATE_CPF)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
+    try:
+        conn.execute(_MIGRATE_CLIENT_UUID)
         conn.commit()
     except sqlite3.OperationalError:
         pass  # column already exists

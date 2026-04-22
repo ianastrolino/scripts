@@ -2330,7 +2330,7 @@ def _load_caixa_dia(unit: str) -> dict[str, Any]:
                 pass
         return {"data": today, "lancamentos": []}
 
-    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp"}
+    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp", "client_uuid"}
     lancamentos = [
         {k: v for k, v in lc.items() if k in _KEEP}
         for lc in _db_load(unit, unit_dir, today)
@@ -2347,9 +2347,9 @@ def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
         if lcs:
             conn.executemany(
                 "INSERT INTO lancamentos "
-                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp) "
-                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp)",
-                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", "")} for lc in lcs],
+                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp,client_uuid) "
+                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp,:client_uuid)",
+                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", ""), "client_uuid": lc.get("client_uuid", "")} for lc in lcs],
             )
 
 
