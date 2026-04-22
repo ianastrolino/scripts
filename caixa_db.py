@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     usuario     TEXT NOT NULL DEFAULT ""
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
+"""
+
+# Indices que dependem de colunas adicionadas via ALTER. Criados APOS _ensure_column
+# em _connect — senao, em bancos antigos, CREATE INDEX falha com "no such column"
+# porque o ALTER ainda nao rodou.
+_DDL_INDICES_POS_MIGRATE = """
 CREATE INDEX IF NOT EXISTS idx_lancamentos_client_uuid ON lancamentos(unit, data, client_uuid);
 """
 
@@ -163,6 +169,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     _ensure_column(conn, "lancamentos", "cpf",         _MIGRATE_CPF)
     _ensure_column(conn, "lancamentos", "client_uuid", _MIGRATE_CLIENT_UUID)
     _ensure_column(conn, "lancamentos", "usuario",     _MIGRATE_USUARIO)
+    conn.executescript(_DDL_INDICES_POS_MIGRATE)
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
     conn.executescript(_DDL_ENVIOS)
