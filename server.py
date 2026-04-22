@@ -970,6 +970,78 @@ def master_api_bi_sync_historico():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/gerencial/api/bi/debug-tiny/<unit>")
+@master_required
+def master_api_bi_debug_tiny(unit: str):
+    """Diagnostico do token Tiny de uma unidade: JWT claims + teste GET contas-receber."""
+    import base64
+    try:
+        if unit not in UNITS:
+            return _json({"success": False, "error": "unit invalida"}, 400)
+
+        state_dir = _unit_state_dir(unit)
+        token_file = state_dir / "tiny_tokens.json"
+        out: dict[str, Any] = {"unit": unit, "token_file_exists": token_file.exists()}
+
+        if token_file.exists():
+            try:
+                stored = json.loads(token_file.read_text())
+                at = stored.get("access_token", "")
+                rt = stored.get("refresh_token", "")
+                out["has_access_token"] = bool(at)
+                out["has_refresh_token"] = bool(rt)
+                out["access_token_preview"] = (at[:12] + "..." + at[-6:]) if at else ""
+                out["refresh_token_tail"] = rt[-6:] if rt else ""
+                out["expires_at"] = stored.get("expires_at")
+                out["file_mtime"] = dt.datetime.fromtimestamp(token_file.stat().st_mtime).isoformat(timespec="seconds")
+
+                if at and at.count(".") == 2:
+                    try:
+                        payload_b64 = at.split(".")[1]
+                        pad = "=" * (-len(payload_b64) % 4)
+                        payload_raw = base64.urlsafe_b64decode(payload_b64 + pad).decode("utf-8", errors="replace")
+                        claims = json.loads(payload_raw)
+                        out["jwt_claims"] = {
+                            "scope": claims.get("scope"),
+                            "scopes": claims.get("scopes"),
+                            "realm_access": claims.get("realm_access"),
+                            "resource_access": claims.get("resource_access"),
+                            "aud": claims.get("aud"),
+                            "azp": claims.get("azp"),
+                            "iss": claims.get("iss"),
+                            "exp": claims.get("exp"),
+                            "iat": claims.get("iat"),
+                            "sub": claims.get("sub"),
+                            "preferred_username": claims.get("preferred_username"),
+                        }
+                    except Exception as exc_jwt:
+                        out["jwt_decode_error"] = str(exc_jwt)
+            except Exception as exc_read:
+                out["token_read_error"] = str(exc_read)
+
+        # Teste chamada contas-receber
+        try:
+            config   = _build_unit_config(unit)
+            importer = TinyImporter(config, state_dir)
+            import requests as _rq
+            url = f"{importer.client.base_url}/contas-receber"
+            headers = {"Authorization": f"Bearer {importer.client.access_token()}", "Accept": "application/json"}
+            resp = _rq.get(url, headers=headers, params={"limit": 1}, timeout=15)
+            out["test_call"] = {
+                "url": url,
+                "status": resp.status_code,
+                "body_preview": resp.text[:800],
+                "headers_www_authenticate": resp.headers.get("WWW-Authenticate", ""),
+            }
+        except Exception as exc_call:
+            out["test_call_error"] = str(exc_call)
+
+        return _json({"success": True, "debug": out})
+    except Exception as exc:
+        app.logger.exception("[bi.debug-tiny] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 _FP_LABELS = {
     "dinheiro": "Dinheiro",
     "debito":   "Cartão de débito",
