@@ -725,7 +725,9 @@
     const clockSvg = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
     chips.push(`<span class="hero-chip" id="heroClock">${clockSvg}<span id="heroClockTxt">${horaNow()}</span></span>`);
     if (info.master) {
-      chips.push(`<span class="hero-chip strong">Administrador</span>`);
+      chips.push(`<span class="hero-chip strong">Master</span>`);
+    } else if (info.matriz) {
+      chips.push(`<span class="hero-chip strong">Matriz</span>`);
     } else if (info.unidade) {
       chips.push(`<span class="hero-chip strong">${esc(info.unidade)}</span>`);
     }
@@ -738,7 +740,7 @@
       if (el) el.textContent = horaNow();
     }, 30 * 1000);
 
-    if (info.master) {
+    if (info.master || info.matriz) {
       await renderMaster(info);
       setInterval(() => renderMaster(info).catch(()=>{}), 60 * 1000);
     } else if (unitSlug) {
