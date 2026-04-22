@@ -81,6 +81,7 @@
     plus:        _svg('<path d="M12 5v14M5 12h14"/>'),
     cloud:       _svg('<path d="M17.5 19a4.5 4.5 0 1 0-.88-8.91 5.5 5.5 0 0 0-10.6 1.75A4 4 0 0 0 6.5 19z"/>'),
     cloudDown:   _svg('<path d="M20 16.2A4.5 4.5 0 0 0 17.5 8h-1.79A7 7 0 1 0 4 14.9"/><path d="m8 17 4 4 4-4"/><path d="M12 12v9"/>'),
+    chat:        _svg('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 
@@ -154,6 +155,7 @@
     {
       group: "Astro na web",
       items: [
+        { id: "discord", label: "Fale com a Equipe",     icon: "chat",   href: "https://discord.gg/PErykPaB", external: true },
         { id: "site",    label: "astrovistorias.com.br", icon: "globe",  href: "https://www.astrovistorias.com.br", external: true },
         { id: "webmail", label: "Webmail corporativo",   icon: "mail",   href: "https://mailpro.uol.com.br/astrovistorias.com.br", external: true },
         { id: "oxxy",    label: "Oxxy · Sispevi",        icon: "key",    href: "https://v6.sispevi.com.br/Login.aspx", external: true },
@@ -398,6 +400,7 @@
     }
 
     // Links externos
+    idx.push({ title: "Fale com a Equipe",      subtitle: "Discord da Astro",                 icon: "chat",   href: "https://discord.gg/PErykPaB", group: "Web", external: true });
     idx.push({ title: "astrovistorias.com.br",  subtitle: "Site oficial",                     icon: "globe",  href: "https://www.astrovistorias.com.br", group: "Web", external: true });
     idx.push({ title: "Webmail corporativo",    subtitle: "mailpro.uol.com.br",               icon: "mail",   href: "https://mailpro.uol.com.br/astrovistorias.com.br", group: "Web", external: true });
     idx.push({ title: "Oxxy · Sispevi",         subtitle: "Acesso ao sistema Oxxy",           icon: "key",    href: "https://v6.sispevi.com.br/Login.aspx", group: "Web", external: true });
