@@ -959,7 +959,7 @@
       const h = u.hoje || {};
       const ativo = (h.lancamentos || 0) > 0;
       const tiny = tinyMap[u.id] || { status: "unknown" };
-      const tinyLabels = { ok: "Autorizado", renovar: "Renovar", ausente: "Ausente", erro: "Erro", unknown: "—" };
+      const tinyLabels = { ok: "Online", renovar: "Renovar", ausente: "Ausente", erro: "Erro", unknown: "—" };
       return `
         <a class="pulse-row" href="/u/${esc(u.id)}/caixa2">
           <div class="pulse-unit">
