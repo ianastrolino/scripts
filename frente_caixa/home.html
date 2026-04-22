@@ -109,6 +109,24 @@
       50%     { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(211,47,47,.45), inset 0 0 0 1px rgba(255,255,255,.2); }
     }
 
+    /* ═════════ Refresh bar ═════════ */
+    .refresh-bar {
+      display: flex; align-items: center; gap: 8px;
+      font-size: var(--ds-text-xs);
+      color: var(--ds-ink-muted);
+      margin-bottom: var(--ds-space-4);
+      margin-top: calc(-1 * var(--ds-space-4));
+    }
+    .refresh-bar .rb-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ds-success);
+      animation: rbPulse 2s ease-in-out infinite;
+    }
+    .refresh-bar.loading .rb-dot { background: var(--ds-warning); animation: rbSpin 0.8s linear infinite; }
+    .refresh-bar.paused  .rb-dot { background: var(--ds-ink-subtle); animation: none; }
+    @keyframes rbPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.7)} }
+    @keyframes rbSpin  { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+
     /* ═════════ KPI ROW ═════════ */
     .kpi-row {
       display: grid; grid-template-columns: repeat(4, 1fr);
@@ -540,6 +558,11 @@
         </div>
       </section>
 
+      <div class="refresh-bar" id="refreshBar" style="display:none">
+        <span class="rb-dot"></span>
+        <span id="refreshText">Atualizando a cada 30s · última às <span id="refreshLast">—</span></span>
+      </div>
+
       <!-- KPI ROW -->
       <div class="kpi-row" id="kpiRow">
         <div class="skeleton-kpi"></div>
@@ -762,15 +785,39 @@
       setInterval(refreshOnline, 30 * 1000);
     }
 
+    const hasAutoRefresh = info.master || info.matriz || !!unitSlug;
+    if (hasAutoRefresh) {
+      const bar = document.getElementById("refreshBar");
+      const txt = document.getElementById("refreshText");
+      if (bar) bar.style.display = "";
+      if (txt) {
+        const interval = (info.master || info.matriz) ? "30s" : "60s";
+        txt.innerHTML = `Atualizando a cada ${interval} · última às <span id="refreshLast">—</span>`;
+      }
+    }
+
     if (info.master || info.matriz) {
       await renderMaster(info);
-      setInterval(() => renderMaster(info).catch(()=>{}), 60 * 1000);
+      markRefreshed();
+      setInterval(() => renderMaster(info).then(markRefreshed).catch(()=>{}), 60 * 1000);
     } else if (unitSlug) {
       await renderUnit(unitSlug, apiBase, info);
-      setInterval(() => renderUnit(unitSlug, apiBase, info).catch(()=>{}), 60 * 1000);
+      markRefreshed();
+      setInterval(() => renderUnit(unitSlug, apiBase, info).then(markRefreshed).catch(()=>{}), 60 * 1000);
     } else {
       renderFallback();
     }
+
+    document.addEventListener("visibilitychange", () => {
+      const bar = document.getElementById("refreshBar");
+      if (!bar) return;
+      bar.classList.toggle("paused", document.hidden);
+    });
+  }
+
+  function markRefreshed() {
+    const last = document.getElementById("refreshLast");
+    if (last) last.textContent = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   }
 
   async function refreshOnline() {
