@@ -3354,6 +3354,107 @@ def master_api_usuarios_conectados():
     })
 
 
+@app.route("/master/api/usuarios-sessoes")
+@master_only_required
+def master_api_usuarios_sessoes():
+    """Agregacoes por usuario das sessoes ja encerradas (JSONL) + sessoes em
+    andamento (_ACTIVE_USERS). Suporta filtro de periodo: hoje | 7d | 30d | tudo."""
+    periodo = (request.args.get("periodo") or "7d").lower()
+    tz = ZoneInfo("America/Sao_Paulo")
+    now_dt = dt.datetime.now(tz)
+    if periodo == "hoje":
+        cutoff = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif periodo == "30d":
+        cutoff = now_dt - dt.timedelta(days=30)
+    elif periodo in ("tudo", "all"):
+        cutoff = None
+    else:
+        periodo = "7d"
+        cutoff = now_dt - dt.timedelta(days=7)
+
+    agg: dict[str, dict[str, Any]] = {}
+
+    def _bucket(email: str, template: dict[str, Any]) -> dict[str, Any]:
+        return agg.setdefault(email, {
+            "email":     email,
+            "nome":      template.get("nome") or email,
+            "unit":      template.get("unit") or "",
+            "master":    bool(template.get("master")),
+            "gerencial": bool(template.get("gerencial")),
+            "logins":    0,
+            "total_s":   0,
+            "last":      "",
+        })
+
+    # 1) Le o JSONL (sessoes encerradas)
+    if _SESSION_LOG_PATH.exists():
+        try:
+            with _SESSION_LOG_LOCK:
+                with _SESSION_LOG_PATH.open("r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                if cutoff is not None:
+                    try:
+                        started = dt.datetime.fromisoformat(entry.get("started_at", ""))
+                        if started < cutoff:
+                            continue
+                    except Exception:
+                        continue
+                email = (entry.get("email") or "").lower()
+                if not email:
+                    continue
+                a = _bucket(email, entry)
+                a["logins"]  += 1
+                a["total_s"] += int(entry.get("duration_s") or 0)
+                ended = entry.get("ended_at") or ""
+                if ended > a["last"]:
+                    a["last"] = ended
+                # Mantem identidade mais recente se disponivel
+                if entry.get("nome"):
+                    a["nome"] = entry["nome"]
+                if entry.get("unit"):
+                    a["unit"] = entry["unit"]
+        except Exception as exc:
+            app.logger.error("[api sessoes] falha ao ler JSONL: %s", exc)
+
+    # 2) Soma sessoes em andamento
+    with _ACTIVE_USERS_LOCK:
+        now_ts = time.time()
+        for email, info in _ACTIVE_USERS.items():
+            started_ts = info.get("session_start") or info.get("last_seen")
+            if cutoff is not None and started_ts:
+                started_dt = dt.datetime.fromtimestamp(started_ts, tz)
+                if started_dt < cutoff:
+                    continue
+            duration = max(0, int(now_ts - (started_ts or now_ts)))
+            a = _bucket(email, info)
+            a["logins"]  += 1
+            a["total_s"] += duration
+            ended = dt.datetime.fromtimestamp(now_ts, tz).isoformat(timespec="seconds")
+            if ended > a["last"]:
+                a["last"] = ended
+
+    # 3) Ordena e calcula media
+    out = []
+    for a in agg.values():
+        avg = int(a["total_s"] / a["logins"]) if a["logins"] else 0
+        out.append({**a, "avg_s": avg})
+    out.sort(key=lambda x: (-x["logins"], -x["total_s"], x["email"]))
+
+    return _json({
+        "usuarios": out,
+        "periodo":  periodo,
+        "total":    len(out),
+    })
+
+
 # ── CRUD de usuarios ───────────────────────────────────────────────────────────
 def _user_public(email: str, u: dict[str, Any]) -> dict[str, Any]:
     """Serializa usuario sem hash de senha."""

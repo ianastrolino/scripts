@@ -90,6 +90,30 @@
       0%, 100% { opacity: 1; }
       50%      { opacity: .35; }
     }
+
+    /* Histórico de sessões */
+    .section-spacer { height: var(--ds-space-6); }
+    .period-tabs {
+      display: inline-flex; gap: 4px; padding: 4px;
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md);
+    }
+    .period-tab {
+      padding: 6px 12px; border-radius: var(--ds-radius-sm);
+      font-size: var(--ds-text-sm); font-weight: 600;
+      color: var(--t2); background: transparent; border: none;
+      cursor: pointer; transition: all .15s ease;
+    }
+    .period-tab:hover { color: var(--t1); }
+    .period-tab.is-active {
+      background: var(--ds-surface); color: var(--t1);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .num-cell {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+    }
+    .num-cell.muted { color: var(--t3); font-weight: 500; }
   </style>
 </head>
 <body>
@@ -132,6 +156,40 @@
           </thead>
           <tbody id="ucBody">
             <tr><td colspan="7" class="empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section-spacer"></div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <div>
+            <div class="table-title">Histórico de sessões</div>
+            <div class="table-meta" id="histMeta" style="margin-top:4px">—</div>
+          </div>
+          <div class="period-tabs" role="tablist" aria-label="Período">
+            <button class="period-tab" data-periodo="hoje" type="button">Hoje</button>
+            <button class="period-tab is-active" data-periodo="7d" type="button">7 dias</button>
+            <button class="period-tab" data-periodo="30d" type="button">30 dias</button>
+            <button class="period-tab" data-periodo="tudo" type="button">Tudo</button>
+          </div>
+        </div>
+        <table class="uc-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Email</th>
+              <th>Perfil</th>
+              <th>Unidade</th>
+              <th style="text-align:right">Logins</th>
+              <th style="text-align:right">Tempo total</th>
+              <th style="text-align:right">Média / sessão</th>
+              <th>Último acesso</th>
+            </tr>
+          </thead>
+          <tbody id="histBody">
+            <tr><td colspan="8" class="empty">Carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -202,6 +260,83 @@
 
   load();
   setInterval(load, 30_000);
+
+  // ── Histórico de sessões ──────────────────────────────────
+  let periodoAtual = "7d";
+
+  function fmtDuration(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}min`;
+    if (m > 0) return `${m}min ${String(s).padStart(2, "0")}s`;
+    return `${s}s`;
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      const hoje = new Date();
+      const ontem = new Date(Date.now() - 86400000);
+      const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      if (sameDay(d, hoje))  return `Hoje, ${hora}`;
+      if (sameDay(d, ontem)) return `Ontem, ${hora}`;
+      return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + ", " + hora;
+    } catch (_) { return iso; }
+  }
+
+  async function loadHistorico() {
+    const body = document.getElementById("histBody");
+    const meta = document.getElementById("histMeta");
+    try {
+      const r = await fetch(`/master/api/usuarios-sessoes?periodo=${encodeURIComponent(periodoAtual)}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      const usuarios = data.usuarios || [];
+      const totalLogins = usuarios.reduce((s, u) => s + (u.logins || 0), 0);
+      const totalTempo  = usuarios.reduce((s, u) => s + (u.total_s || 0), 0);
+      meta.textContent = usuarios.length === 0
+        ? "Nenhuma sessão no período"
+        : `${usuarios.length} usuário${usuarios.length === 1 ? "" : "s"} · ${totalLogins} login${totalLogins === 1 ? "" : "s"} · ${fmtDuration(totalTempo)} acumulados`;
+
+      if (!usuarios.length) {
+        body.innerHTML = `<tr><td colspan="8" class="empty">Nenhum acesso registrado no período selecionado.</td></tr>`;
+        return;
+      }
+      body.innerHTML = usuarios.map(u => {
+        const unit = u.master ? "—" : (u.unit || "—");
+        return `<tr>
+          <td><strong>${escHtml(u.nome)}</strong></td>
+          <td style="color:var(--t2)">${escHtml(u.email)}</td>
+          <td>${perfilTag(u)}</td>
+          <td>${escHtml(unit)}</td>
+          <td class="num-cell" style="text-align:right">${u.logins}</td>
+          <td class="num-cell" style="text-align:right">${fmtDuration(u.total_s)}</td>
+          <td class="num-cell muted" style="text-align:right">${fmtDuration(u.avg_s)}</td>
+          <td style="color:var(--t3)">${escHtml(fmtWhen(u.last))}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="8" class="empty">Erro ao carregar histórico: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  document.querySelectorAll(".period-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".period-tab").forEach(b => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      periodoAtual = btn.dataset.periodo;
+      loadHistorico();
+    });
+  });
+
+  loadHistorico();
+  // atualiza menos frequente que os ativos — dados historicos mudam devagar
+  setInterval(loadHistorico, 60_000);
 </script>
 
 </body>
