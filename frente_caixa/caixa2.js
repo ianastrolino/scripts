@@ -358,7 +358,7 @@ function calcularConferencia() {
     }
     const diff = fis - pdv;
     const abs  = Math.abs(diff);
-    el.textContent = (diff >= 0 ? "+" : "−") + fmtConf(abs);
+    el.textContent = (diff >= 0 ? "+" : "−") + Number(abs).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     el.className   = "conf-diff " + (abs < 0.01 ? "ok" : abs <= 5 ? "warn" : "err");
     if (row) row.classList.toggle("matched", abs < 0.01);
   };
