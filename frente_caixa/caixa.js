@@ -68,6 +68,11 @@ function fpLabel(fp) {
   return { dinheiro: "Dinheiro", debito: "Debito", credito: "Credito", pix: "PIX", faturado: "Faturado" }[fp] || fp;
 }
 
+// Icones lucide (mesmo estilo do sidebar/app-shell)
+const _ICON_SVG = (paths) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+const ICON_EDIT  = _ICON_SVG('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>');
+const ICON_TRASH = _ICON_SVG('<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/>');
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -171,8 +176,8 @@ function renderTabela() {
         <td><span class="fp-badge ${lc.fp}">${fpLabel(lc.fp)}</span></td>
         <td>
           <div class="td-actions">
-            <button class="btn-icon" title="Editar" onclick="abrirEditar('${lc.id}')">✏️</button>
-            <button class="btn-icon" title="Excluir" onclick="confirmarExcluir('${lc.id}')">🗑️</button>
+            <button class="btn-icon action-btn" title="Editar" onclick="abrirEditar('${lc.id}')">${ICON_EDIT}</button>
+            <button class="btn-icon action-btn danger" title="Excluir" onclick="confirmarExcluir('${lc.id}')">${ICON_TRASH}</button>
           </div>
         </td>
       </tr>
