@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Auditoria</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+    }
+    .filters {
+      display: flex; gap: var(--ds-space-3); flex-wrap: wrap;
+      margin-bottom: var(--ds-space-4);
+    }
+    .filter {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); padding: 6px 10px;
+    }
+    .filter label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .filter input, .filter select {
+      border: none; background: transparent; font: inherit;
+      font-size: var(--ds-text-sm); color: var(--t1);
+      outline: none; min-width: 140px;
+    }
+
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .table-meta  { font-size: var(--ds-text-sm); color: var(--t3); }
+
+    .audit-table { width: 100%; border-collapse: collapse; font-size: var(--ds-text-sm); }
+    .audit-table th {
+      text-align: left; padding: 10px var(--ds-space-5);
+      font-size: var(--ds-text-xs); font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--t3); background: var(--card2);
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .audit-table td {
+      padding: 10px var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top; color: var(--t1);
+    }
+    .audit-table tr:last-child td { border-bottom: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--t2); }
+    .nowrap { white-space: nowrap; }
+
+    .role-tag {
+      display: inline-block; font-size: 10.5px; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .role-master { background: #f5f3ff; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .role-matriz { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .role-ger    { background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; }
+
+    .result-ok      { color: #16a34a; font-weight: 700; }
+    .result-error   { color: #dc2626; font-weight: 700; }
+    .result-pending { color: #d97706; font-weight: 700; }
+
+    details.payload-details { font-size: 12px; }
+    details.payload-details summary {
+      cursor: pointer; color: var(--t3); font-weight: 600;
+      list-style: none; user-select: none;
+    }
+    details.payload-details[open] summary { color: var(--t2); }
+    details.payload-details pre {
+      margin: 6px 0 0; padding: 8px 10px;
+      background: var(--card2); border-radius: var(--ds-radius-sm);
+      border: 1px solid var(--border);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px; color: var(--t2);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .empty {
+      padding: 40px 20px; text-align: center; color: var(--t3);
+      font-size: var(--ds-text-base);
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Auditoria</h1>
+        <p class="app-page-sub">Histórico de ações administrativas feitas por usuários com perfil matriz ou master</p>
+      </div>
+
+      <div class="filters">
+        <div class="filter">
+          <label>Usuário</label>
+          <input type="text" id="filterEmail" placeholder="email (opcional)" autocomplete="off">
+        </div>
+        <div class="filter">
+          <label>Ação</label>
+          <select id="filterAction">
+            <option value="">Todas</option>
+            <option value="user.">Usuários</option>
+            <option value="user.create">Criar usuário</option>
+            <option value="user.update">Editar usuário</option>
+            <option value="user.delete">Excluir usuário</option>
+            <option value="approval.">Aprovações</option>
+            <option value="approval.request">Pedidos de aprovação</option>
+            <option value="approval.approved">Aprovados</option>
+            <option value="approval.rejected">Rejeitados</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">Registro de atividade</div>
+          <div class="table-meta" id="tableMeta">—</div>
+        </div>
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>Quando</th>
+              <th>Usuário</th>
+              <th>Perfil</th>
+              <th>Ação</th>
+              <th>Alvo</th>
+              <th>Resultado</th>
+              <th>Detalhes</th>
+            </tr>
+          </thead>
+          <tbody id="auditBody">
+            <tr><td colspan="7" class="empty">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "auditoria",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Auditoria", current: true }
+    ]
+  });
+
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function roleTag(role) {
+    if (role === "master") return '<span class="role-tag role-master">Master</span>';
+    if (role === "matriz") return '<span class="role-tag role-matriz">Matriz</span>';
+    return '<span class="role-tag role-ger">Gerencial</span>';
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      const hoje = new Date();
+      const ontem = new Date(Date.now() - 86400000);
+      const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      if (sameDay(d, hoje))  return `Hoje, ${hora}`;
+      if (sameDay(d, ontem)) return `Ontem, ${hora}`;
+      return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) + ", " + hora;
+    } catch (_) { return iso; }
+  }
+
+  function resultBadge(r) {
+    if (r === "ok")      return '<span class="result-ok">✓ OK</span>';
+    if (r === "error")   return '<span class="result-error">✗ Erro</span>';
+    if (r === "pending") return '<span class="result-pending">⏳ Pendente</span>';
+    return escHtml(r || "—");
+  }
+
+  async function load() {
+    const email  = document.getElementById("filterEmail").value.trim();
+    const action = document.getElementById("filterAction").value;
+    const qs = new URLSearchParams();
+    if (email)  qs.set("email",  email);
+    if (action) qs.set("action", action);
+    try {
+      const r = await fetch("/master/api/auditoria?" + qs.toString(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+      document.getElementById("tableMeta").textContent =
+        data.entries.length === 0 ? "Nenhum registro" :
+        `${data.entries.length} de ${data.total} registros`;
+
+      const body = document.getElementById("auditBody");
+      if (!data.entries.length) {
+        body.innerHTML = `<tr><td colspan="7" class="empty">Nenhuma atividade registrada.</td></tr>`;
+        return;
+      }
+      body.innerHTML = data.entries.map(e => {
+        const payload = e.payload && Object.keys(e.payload).length
+          ? `<details class="payload-details"><summary>ver payload</summary><pre>${escHtml(JSON.stringify(e.payload, null, 2))}</pre></details>`
+          : '<span class="mono">—</span>';
+        return `<tr>
+          <td class="nowrap"><span class="mono">${escHtml(fmtWhen(e.ts))}</span></td>
+          <td><strong>${escHtml(e.user_name || "—")}</strong><br><span class="mono">${escHtml(e.user_email)}</span></td>
+          <td>${roleTag(e.user_role)}</td>
+          <td><span class="mono">${escHtml(e.action)}</span></td>
+          <td><span class="mono">${escHtml(e.target || "—")}</span></td>
+          <td class="nowrap">${resultBadge(e.result)}</td>
+          <td>${payload}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      document.getElementById("auditBody").innerHTML =
+        `<tr><td colspan="7" class="empty">Erro ao carregar: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  let deb;
+  document.getElementById("filterEmail").addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(load, 300); });
+  document.getElementById("filterAction").addEventListener("change", load);
+
+  load();
+  setInterval(load, 60_000);
+</script>
+
+</body>
+</html>

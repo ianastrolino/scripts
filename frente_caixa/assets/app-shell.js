@@ -82,6 +82,8 @@
     cloud:       _svg('<path d="M17.5 19a4.5 4.5 0 1 0-.88-8.91 5.5 5.5 0 0 0-10.6 1.75A4 4 0 0 0 6.5 19z"/>'),
     cloudDown:   _svg('<path d="M20 16.2A4.5 4.5 0 0 0 17.5 8h-1.79A7 7 0 1 0 4 14.9"/><path d="m8 17 4 4 4-4"/><path d="M12 12v9"/>'),
     chat:        _svg('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),
+    auditoria:   _svg('<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/>'),
+    aprovacoes:  _svg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 
@@ -133,7 +135,7 @@
     },
     {
       group: "Rede",
-      requires: "master",
+      requires: "rede",
       items: [
         { id: "master",           label: "Painel Master",    icon: "master",     href: "/master" },
         { id: "gerencial-rede",   label: "Gerencial Rede",   icon: "gerencial",  href: "/gerencial" },
@@ -142,6 +144,8 @@
         { id: "historico-caixa",     label: "Histórico PDV",        icon: "historico",  href: "/gerencial/historico-caixa" },
         { id: "usuarios-conectados", label: "Usuários Conectados",  icon: "usuarios",   href: "/master/usuarios-conectados" },
         { id: "usuarios",            label: "Usuários",             icon: "usuariosCog", href: "/master/usuarios" },
+        { id: "auditoria",           label: "Auditoria",            icon: "auditoria",  href: "/master/auditoria" },
+        { id: "aprovacoes",          label: "Aprovações",           icon: "aprovacoes", href: "/master/aprovacoes", requires: "master", dynamicBadge: "pendingApprovals" },
         { id: "unidades",            label: "Unidades",             icon: "unidades",   disabled: true, badge: "Em breve" },
       ],
     },
@@ -219,7 +223,8 @@
     for (const group of NAV_CATALOG) {
       // Filtro do grupo
       if (group.requires === "master" && !ctx.isMaster) continue;
-      if (group.requires === "unit" && !slug) continue;
+      if (group.requires === "rede"   && !(ctx.isMaster || ctx.isMatriz)) continue;
+      if (group.requires === "unit"   && !slug) continue;
 
       const items = [];
       for (const it of group.items) {
@@ -232,7 +237,13 @@
         if (it.hrefUnit && slug) href = apiBase + it.hrefUnit;
         else if (it.hrefUnit && !it.href) continue; // sem unidade e sem fallback
 
-        items.push({ ...it, href });
+        const item = { ...it, href };
+        // Badge dinamico a partir do ctx (ex.: pending_approvals)
+        if (it.dynamicBadge && ctx[it.dynamicBadge] > 0) {
+          item.badge     = String(ctx[it.dynamicBadge]);
+          item.badgeKind = "alert";
+        }
+        items.push(item);
       }
       if (items.length) out.push({ label: group.group, items });
     }
@@ -253,7 +264,8 @@
         const tag = it.disabled || !it.href ? "span" : "a";
         const hrefAttr = it.href && !it.disabled ? ` href="${esc(it.href)}"` : "";
         const targetAttr = it.external ? ` target="_blank" rel="noopener"` : "";
-        const badgeHtml = it.badge ? `<span class="sb-item-badge">${esc(it.badge)}</span>`
+        const badgeCls = it.badgeKind === "alert" ? "sb-item-badge sb-item-badge-alert" : "sb-item-badge";
+        const badgeHtml = it.badge ? `<span class="${badgeCls}">${esc(it.badge)}</span>`
                          : it.external ? `<span class="sb-item-external">↗</span>` : "";
         return `
           <${tag} class="${classes.join(" ")}"${hrefAttr}${targetAttr}>
@@ -272,6 +284,7 @@
     // Rodape: usuario + logout
     const userName = ctx.userName || "Usuário";
     const userRole = ctx.isMaster ? "Administrador"
+                    : ctx.isMatriz ? "Matriz"
                     : ctx.unitSlug ? `Unidade ${ctx.unitNome || ctx.unitSlug}`
                     : "Operador";
 
@@ -374,14 +387,21 @@
     const idx = [];
 
     // Telas gerais
+    if (ctx.isMaster || ctx.isMatriz) {
+      idx.push({ title: "Painel Master",   subtitle: "Visão geral da rede",         icon: "master",     href: "/master",                   group: "Telas" });
+      idx.push({ title: "Gerencial Rede",  subtitle: "Relatórios consolidados",     icon: "gerencial",  href: "/gerencial",                group: "Telas" });
+      idx.push({ title: "Usuários",        subtitle: "Gestão de contas",            icon: "usuariosCog",href: "/master/usuarios",          group: "Telas" });
+      idx.push({ title: "Usuários Conectados", subtitle: "Sessões ativas + histórico", icon: "usuarios", href: "/master/usuarios-conectados", group: "Telas" });
+      idx.push({ title: "Auditoria",       subtitle: "Histórico de ações admin",    icon: "auditoria",  href: "/master/auditoria",         group: "Telas" });
+    }
     if (ctx.isMaster) {
-      idx.push({ title: "Painel Master", subtitle: "Visão geral da rede", icon: "master", href: "/master", group: "Telas" });
-      idx.push({ title: "Gerencial Rede", subtitle: "Relatórios consolidados", icon: "gerencial", href: "/gerencial", group: "Telas" });
+      const badge = ctx.pendingApprovals > 0 ? ` · ${ctx.pendingApprovals} pendente(s)` : "";
+      idx.push({ title: "Aprovações", subtitle: "Decidir pedidos da matriz" + badge, icon: "aprovacoes", href: "/master/aprovacoes", group: "Telas" });
     }
     idx.push({ title: "Início", subtitle: "Centro de comando", icon: "home", href: "/home", group: "Telas" });
 
     // Unidades (via API master)
-    if (ctx.isMaster) {
+    if (ctx.isMaster || ctx.isMatriz) {
       try {
         const res = await fetch("/master/api/units", { credentials: "same-origin" });
         if (res.ok) {
@@ -585,7 +605,9 @@
       unitNome:    unitInfo.unidade || (config.unit && config.unit.nome) || null,
       userName:    me.usuario || "",
       isMaster:    !!me.master,
-      isGerencial: !!(me.gerencial || me.master),
+      isMatriz:    !!me.matriz,
+      isGerencial: !!(me.gerencial || me.master || me.matriz),
+      pendingApprovals: me.pending_approvals || 0,
     };
 
     // Override via config

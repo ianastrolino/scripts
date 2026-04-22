@@ -442,6 +442,143 @@ def _end_session_on_logout(email: str) -> None:
         _write_session_log(info, "logout")
 
 
+# ── Audit log (append-only JSONL) ─────────────────────────────────────────────
+# Registra toda acao administrativa feita por usuarios com perfil matriz ou
+# master. Operadores comuns nao entram no audit (volume alto, pouco util).
+_AUDIT_LOG_PATH = DATA_DIR / "audit_log.jsonl"
+_AUDIT_LOG_LOCK = threading.Lock()
+
+
+def _write_audit_log(
+    user: dict[str, Any],
+    action: str,
+    target: str = "",
+    payload: dict[str, Any] | None = None,
+    result: str = "ok",
+    approval_id: str = "",
+) -> None:
+    """Escreve uma entrada no audit log. Chamado apos acoes administrativas."""
+    try:
+        tz = ZoneInfo("America/Sao_Paulo")
+        entry = {
+            "ts":          dt.datetime.now(tz).isoformat(timespec="seconds"),
+            "user_email":  user.get("email", ""),
+            "user_name":   user.get("name", ""),
+            "user_role":   "master" if user.get("master") else ("matriz" if user.get("matriz") else "gerencial"),
+            "action":      action,
+            "target":      target,
+            "payload":     payload or {},
+            "result":      result,
+            "approval_id": approval_id,
+            "ip":          (request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+                            if request else ""),
+        }
+        _AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _AUDIT_LOG_LOCK:
+            with _AUDIT_LOG_PATH.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        app.logger.error("[audit_log] falha ao gravar: %s", exc)
+
+
+def _read_audit_log(limit: int = 500) -> list[dict[str, Any]]:
+    """Le as ultimas `limit` entradas do audit log (mais recentes primeiro)."""
+    if not _AUDIT_LOG_PATH.exists():
+        return []
+    try:
+        with _AUDIT_LOG_LOCK:
+            with _AUDIT_LOG_PATH.open("r", encoding="utf-8") as f:
+                lines = f.readlines()
+        out: list[dict[str, Any]] = []
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+            if len(out) >= limit:
+                break
+        return out
+    except Exception as exc:
+        app.logger.error("[audit_log] falha ao ler: %s", exc)
+        return []
+
+
+# ── Pending approvals (acoes destrutivas que matriz dispara e master aprova) ──
+_APPROVALS_PATH = DATA_DIR / "pending_approvals.jsonl"
+_APPROVALS_LOCK = threading.Lock()
+
+
+def _approvals_read_all() -> list[dict[str, Any]]:
+    if not _APPROVALS_PATH.exists():
+        return []
+    try:
+        with _APPROVALS_LOCK:
+            with _APPROVALS_PATH.open("r", encoding="utf-8") as f:
+                lines = f.readlines()
+        out = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+        return out
+    except Exception as exc:
+        app.logger.error("[approvals] falha ao ler: %s", exc)
+        return []
+
+
+def _approvals_write_all(entries: list[dict[str, Any]]) -> None:
+    _APPROVALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _APPROVALS_PATH.with_suffix(".tmp")
+    with _APPROVALS_LOCK:
+        with tmp.open("w", encoding="utf-8") as f:
+            for e in entries:
+                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+        tmp.replace(_APPROVALS_PATH)
+
+
+def _create_pending_approval(
+    user: dict[str, Any],
+    action: str,
+    target: str,
+    payload: dict[str, Any],
+    description: str = "",
+) -> str:
+    """Cria um pedido de aprovacao pendente. Retorna o approval_id."""
+    tz = ZoneInfo("America/Sao_Paulo")
+    approval_id = f"ap_{secrets.token_hex(8)}"
+    entry = {
+        "id":             approval_id,
+        "created_at":     dt.datetime.now(tz).isoformat(timespec="seconds"),
+        "requested_by":   user.get("email", ""),
+        "requested_name": user.get("name", ""),
+        "action":         action,
+        "target":         target,
+        "payload":        payload,
+        "description":    description,
+        "status":         "pending",     # pending | approved | rejected
+        "reviewed_by":    "",
+        "reviewed_at":    "",
+        "reason":         "",
+    }
+    with _APPROVALS_LOCK:
+        _APPROVALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _APPROVALS_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    _write_audit_log(user, f"approval.request:{action}", target, payload, "pending", approval_id)
+    return approval_id
+
+
+def _approvals_pending_count() -> int:
+    return sum(1 for e in _approvals_read_all() if e.get("status") == "pending")
+
+
 # ── CSRF ───────────────────────────────────────────────────────────────────────
 def _get_csrf_token() -> str:
     """Gera e persiste token CSRF na sessão do usuário."""
@@ -528,6 +665,26 @@ def unit_access_required(f):
 
 def master_view_required(f):
     """Read-only: libera master E matriz (ambos veem todas as unidades)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = _current_user()
+        if not user:
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Sessao expirada.", "session_expired": True}, 401)
+            return redirect(url_for("login_page"))
+        if not (user.get("master") or user.get("matriz")):
+            if "/api/" in request.path:
+                return _json({"success": False, "error": "Acesso negado."}, 403)
+            return Response("Acesso negado", status=403)
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def matriz_or_master(f):
+    """Write permitido para master E matriz. Use em acoes administrativas
+    que ambos podem disparar (criar/editar usuario, editar lancamento, etc).
+    Acoes destrutivas (excluir, reenviar ao Tiny) devem ficar em @master_only_required
+    e, quando disparadas pela matriz via endpoint proprio, criar pending approval."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         user = _current_user()
@@ -657,14 +814,19 @@ def _json(data: Any, status: int = 200) -> Response:
 def api_me():
     """Retorna dados do usuário logado — usado pela home page."""
     user = _current_user()
-    return _json({
+    is_master = bool(user and user.get("master"))
+    payload = {
         "usuario": session.get("name", ""),
         "email":   session.get("email", ""),
-        "master":  bool(user and user.get("master")),
+        "master":  is_master,
         "matriz":  bool(user and user.get("matriz")),
         "gerencial": bool(user and (user.get("gerencial") or user.get("master") or user.get("matriz"))),
         "unit":    user.get("unit", "") if user else "",
-    })
+    }
+    # Master ve o badge de aprovacoes pendentes no sidebar
+    if is_master:
+        payload["pending_approvals"] = _approvals_pending_count()
+    return _json(payload)
 
 
 @app.route("/api/csrf-token")
@@ -3324,13 +3486,13 @@ def master_historico_emitido_page():
 
 
 @app.route("/master/usuarios-conectados")
-@master_only_required
+@master_view_required
 def master_usuarios_conectados_page():
     return _nocache(send_from_directory(UI_DIR, "usuarios_conectados.html"))
 
 
 @app.route("/master/api/usuarios-conectados")
-@master_only_required
+@master_view_required
 def master_api_usuarios_conectados():
     ativos = _get_active_users()
     now_ts = time.time()
@@ -3355,7 +3517,7 @@ def master_api_usuarios_conectados():
 
 
 @app.route("/master/api/usuarios-sessoes")
-@master_only_required
+@master_view_required
 def master_api_usuarios_sessoes():
     """Agregacoes por usuario das sessoes ja encerradas (JSONL) + sessoes em
     andamento (_ACTIVE_USERS). Suporta filtro de periodo: hoje | 7d | 30d | tudo."""
@@ -3504,13 +3666,13 @@ def _validate_user_payload(data: dict[str, Any], editing: bool) -> tuple[str, di
 
 
 @app.route("/master/usuarios")
-@master_only_required
+@master_view_required
 def master_usuarios_page():
     return _nocache(send_from_directory(UI_DIR, "usuarios.html"))
 
 
 @app.route("/master/api/usuarios", methods=["GET"])
-@master_only_required
+@master_view_required
 def master_api_usuarios_list():
     unidades = [{"id": uid, "nome": UNITS[uid].get("nome", uid)} for uid in sorted(UNITS.keys())]
     with _USERS_LOCK:
@@ -3518,28 +3680,63 @@ def master_api_usuarios_list():
     return _json({"usuarios": users, "unidades": unidades})
 
 
+def _is_privileged_target(sanit_new: dict[str, Any], current: dict[str, Any] | None = None) -> bool:
+    """True se o alvo (estado resultante ou atual) tem flag master ou matriz.
+    Matriz editando um master/matriz, ou promovendo alguem a master/matriz, precisa aprovacao."""
+    if sanit_new.get("master") or sanit_new.get("matriz"):
+        return True
+    if current and (current.get("master") or current.get("matriz")):
+        return True
+    return False
+
+
 @app.route("/master/api/usuarios", methods=["POST"])
-@master_only_required
+@matriz_or_master
 @csrf_required
 def master_api_usuarios_create():
+    me = _current_user() or {}
+    me_email = session.get("email", "")
+    me["email"] = me_email  # _write_audit_log espera email no user
     data = request.get_json(silent=True) or {}
     result = _validate_user_payload(data, editing=False)
     if result[0] is None:
         return _json({"success": False, "error": result[1]}, 400)
     email, sanit = result
+
+    # Matriz criando usuario privilegiado -> pending approval
+    if not me.get("master") and _is_privileged_target(sanit):
+        with _USERS_LOCK:
+            if email in USERS:
+                return _json({"success": False, "error": "Já existe usuário com este e-mail."}, 409)
+        approval_id = _create_pending_approval(
+            me, "user.create", email,
+            {"sanit": sanit},
+            description=f"Criar usuário {email} com perfil privilegiado (master/matriz)",
+        )
+        return _json({
+            "success":     True,
+            "pending":     True,
+            "approval_id": approval_id,
+            "message":     "Criação enviada para aprovação do master.",
+        })
+
     with _USERS_LOCK:
         if email in USERS:
             return _json({"success": False, "error": "Já existe usuário com este e-mail."}, 409)
         USERS[email] = sanit
         _save_users(USERS)
     app.logger.info(f"[usuarios] criado: {email}")
+    _write_audit_log(me, "user.create", email, {k: v for k, v in sanit.items() if k != "password_hash"})
     return _json({"success": True, "usuario": _user_public(email, sanit)})
 
 
 @app.route("/master/api/usuarios/<path:email>", methods=["PUT"])
-@master_only_required
+@matriz_or_master
 @csrf_required
 def master_api_usuarios_update(email: str):
+    me = _current_user() or {}
+    me_email = session.get("email", "")
+    me["email"] = me_email
     email = (email or "").strip().lower()
     data = request.get_json(silent=True) or {}
     data["email"] = email
@@ -3550,6 +3747,23 @@ def master_api_usuarios_update(email: str):
     with _USERS_LOCK:
         if email not in USERS:
             return _json({"success": False, "error": "Usuário não encontrado."}, 404)
+        current = dict(USERS[email])
+
+    # Matriz editando user privilegiado (atual ou resultante) -> pending
+    if not me.get("master") and _is_privileged_target(sanit, current):
+        approval_id = _create_pending_approval(
+            me, "user.update", email,
+            {"sanit": sanit},
+            description=f"Editar usuário {email} com perfil privilegiado",
+        )
+        return _json({
+            "success":     True,
+            "pending":     True,
+            "approval_id": approval_id,
+            "message":     "Edição enviada para aprovação do master.",
+        })
+
+    with _USERS_LOCK:
         # Proteger ultimo master: se estava master e vai deixar de ser, confirmar que tem outro
         if USERS[email].get("master") and not sanit.get("master"):
             outros_masters = [e for e, u in USERS.items() if e != email and u.get("master")]
@@ -3561,6 +3775,7 @@ def master_api_usuarios_update(email: str):
         USERS[email] = sanit
         _save_users(USERS)
     app.logger.info(f"[usuarios] atualizado: {email}")
+    _write_audit_log(me, "user.update", email, {k: v for k, v in sanit.items() if k != "password_hash"})
     return _json({"success": True, "usuario": _user_public(email, sanit)})
 
 
@@ -3569,8 +3784,8 @@ def master_api_usuarios_update(email: str):
 @csrf_required
 def master_api_usuarios_delete(email: str):
     email = (email or "").strip().lower()
-    me = session.get("email", "").lower()
-    if email == me:
+    me_email = session.get("email", "").lower()
+    if email == me_email:
         return _json({"success": False, "error": "Você não pode excluir a própria conta."}, 400)
     with _USERS_LOCK:
         if email not in USERS:
@@ -3582,7 +3797,153 @@ def master_api_usuarios_delete(email: str):
         USERS.pop(email, None)
         _save_users(USERS)
     app.logger.info(f"[usuarios] removido: {email}")
+    me = {**(_current_user() or {}), "email": me_email}
+    _write_audit_log(me, "user.delete", email, {})
     return _json({"success": True})
+
+
+# ═══ Auditoria e aprovacoes ══════════════════════════════════════════════════
+@app.route("/master/auditoria")
+@master_view_required
+def master_auditoria_page():
+    return _nocache(send_from_directory(UI_DIR, "auditoria.html"))
+
+
+@app.route("/master/api/auditoria")
+@master_view_required
+def master_api_auditoria():
+    """Retorna as ultimas N entradas do audit log, mais recentes primeiro.
+    Matriz ve apenas as proprias acoes; master ve tudo."""
+    user = _current_user() or {}
+    me_email = session.get("email", "").lower()
+    entries = _read_audit_log(limit=1000)
+    if not user.get("master"):
+        entries = [e for e in entries if (e.get("user_email") or "").lower() == me_email]
+    # Filtros opcionais
+    filtro_email = (request.args.get("email") or "").strip().lower()
+    filtro_acao  = (request.args.get("action") or "").strip()
+    if filtro_email:
+        entries = [e for e in entries if (e.get("user_email") or "").lower() == filtro_email]
+    if filtro_acao:
+        entries = [e for e in entries if (e.get("action") or "").startswith(filtro_acao)]
+    return _json({"entries": entries[:500], "total": len(entries)})
+
+
+@app.route("/master/aprovacoes")
+@master_only_required
+def master_aprovacoes_page():
+    return _nocache(send_from_directory(UI_DIR, "aprovacoes.html"))
+
+
+@app.route("/master/api/aprovacoes", methods=["GET"])
+@master_only_required
+def master_api_aprovacoes_list():
+    entries = _approvals_read_all()
+    # Mais recentes primeiro
+    entries.sort(key=lambda e: e.get("created_at", ""), reverse=True)
+    pend = [e for e in entries if e.get("status") == "pending"]
+    hist = [e for e in entries if e.get("status") != "pending"][:200]
+    return _json({"pending": pend, "historico": hist, "total_pending": len(pend)})
+
+
+@app.route("/master/api/aprovacoes/<approval_id>", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_aprovacoes_decidir(approval_id: str):
+    """Aprova ou rejeita um pedido pendente. body: {decisao: 'aprovar'|'rejeitar', reason?: str}"""
+    body = request.get_json(silent=True) or {}
+    decisao = (body.get("decisao") or "").strip().lower()
+    reason  = (body.get("reason")  or "").strip()
+    if decisao not in ("aprovar", "rejeitar"):
+        return _json({"success": False, "error": "Decisao invalida (use aprovar ou rejeitar)."}, 400)
+
+    entries = _approvals_read_all()
+    target = next((e for e in entries if e.get("id") == approval_id), None)
+    if not target:
+        return _json({"success": False, "error": "Aprovacao nao encontrada."}, 404)
+    if target.get("status") != "pending":
+        return _json({"success": False, "error": f"Aprovacao ja foi {target.get('status')}."}, 409)
+
+    me_email = session.get("email", "").lower()
+    me = {**(_current_user() or {}), "email": me_email}
+    tz = ZoneInfo("America/Sao_Paulo")
+    target["status"]      = "approved" if decisao == "aprovar" else "rejected"
+    target["reviewed_by"] = me_email
+    target["reviewed_at"] = dt.datetime.now(tz).isoformat(timespec="seconds")
+    target["reason"]      = reason
+
+    # Se aprovado, executar a acao
+    exec_result = "ok"
+    exec_error  = ""
+    if decisao == "aprovar":
+        try:
+            _execute_approved_action(target)
+        except Exception as exc:
+            exec_result = "error"
+            exec_error  = str(exc)
+            target["reason"] = (reason + " | ERRO: " + str(exc)).strip(" |")
+            app.logger.error("[approvals] erro ao executar acao aprovada %s: %s", approval_id, exc)
+
+    # Reescreve arquivo com a entry atualizada
+    out = []
+    for e in entries:
+        out.append(target if e.get("id") == approval_id else e)
+    _approvals_write_all(out)
+
+    _write_audit_log(
+        me, f"approval.{target['status']}:{target.get('action','')}",
+        target.get("target", ""),
+        {"requested_by": target.get("requested_by", ""), "reason": reason},
+        result=exec_result,
+        approval_id=approval_id,
+    )
+    return _json({
+        "success":     exec_result == "ok",
+        "status":      target["status"],
+        "exec_result": exec_result,
+        "exec_error":  exec_error,
+    })
+
+
+def _execute_approved_action(entry: dict[str, Any]) -> None:
+    """Executa a acao descrita em uma pending approval aprovada. Levanta excecao em caso de erro."""
+    action  = entry.get("action", "")
+    target  = entry.get("target", "")
+    payload = entry.get("payload", {}) or {}
+    # Usuario que originou a acao — para registrar no audit como 'executada em nome de'
+    origem = {
+        "email": entry.get("requested_by", ""),
+        "name":  entry.get("requested_name", ""),
+        "matriz": True,
+    }
+    if action == "user.create":
+        sanit = payload.get("sanit", {})
+        with _USERS_LOCK:
+            if target in USERS:
+                raise RuntimeError(f"Usuario {target} ja existe — criacao nao pode seguir.")
+            USERS[target] = sanit
+            _save_users(USERS)
+        _write_audit_log(origem, "user.create", target,
+                         {k: v for k, v in sanit.items() if k != "password_hash"},
+                         approval_id=entry.get("id", ""))
+    elif action == "user.update":
+        sanit = payload.get("sanit", {})
+        with _USERS_LOCK:
+            if target not in USERS:
+                raise RuntimeError(f"Usuario {target} nao existe.")
+            if USERS[target].get("master") and not sanit.get("master"):
+                outros = [e for e, u in USERS.items() if e != target and u.get("master")]
+                if not outros:
+                    raise RuntimeError("Nao e possivel remover status master do ultimo master.")
+            if "password_hash" not in sanit:
+                sanit["password_hash"] = USERS[target].get("password_hash", "")
+            USERS[target] = sanit
+            _save_users(USERS)
+        _write_audit_log(origem, "user.update", target,
+                         {k: v for k, v in sanit.items() if k != "password_hash"},
+                         approval_id=entry.get("id", ""))
+    else:
+        raise RuntimeError(f"Acao desconhecida: {action}")
 
 
 # ── Convites por email ─────────────────────────────────────────────────────────

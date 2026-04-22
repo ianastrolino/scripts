@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Aprovações</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+    }
+
+    .section-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin: var(--ds-space-5) 0 var(--ds-space-3);
+    }
+    .section-title {
+      font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1);
+    }
+    .section-meta {
+      font-size: var(--ds-text-sm); color: var(--t3);
+    }
+
+    .queue { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+
+    .appr-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .appr-card.is-pending { border-left: 4px solid #d97706; }
+    .appr-card.is-approved { border-left: 4px solid #16a34a; }
+    .appr-card.is-rejected { border-left: 4px solid #dc2626; }
+
+    .appr-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: var(--ds-space-3); flex-wrap: wrap;
+    }
+    .appr-title {
+      font-size: var(--ds-text-base); font-weight: 700; color: var(--t1);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .appr-sub { font-size: var(--ds-text-sm); color: var(--t2); margin-top: 2px; }
+    .appr-time { font-size: var(--ds-text-xs); color: var(--t3); white-space: nowrap; }
+
+    .act-tag {
+      display: inline-block; font-size: 10.5px; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+      background: var(--card2); color: var(--t2); border: 1px solid var(--border);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .status-tag {
+      display: inline-block; font-size: 10.5px; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .status-pending  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .status-approved { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .status-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+    .appr-body {
+      margin-top: var(--ds-space-3);
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--ds-space-2) var(--ds-space-4);
+    }
+    .kv-label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t3);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .kv-value { font-size: var(--ds-text-sm); color: var(--t1); margin-top: 2px; }
+    .kv-value .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--t2); font-size: 12px; }
+
+    details.payload-details { margin-top: var(--ds-space-3); font-size: 12px; }
+    details.payload-details summary {
+      cursor: pointer; color: var(--t3); font-weight: 600;
+      list-style: none; user-select: none;
+    }
+    details.payload-details[open] summary { color: var(--t2); }
+    details.payload-details pre {
+      margin: 6px 0 0; padding: 10px 12px;
+      background: var(--card2); border-radius: var(--ds-radius-sm);
+      border: 1px solid var(--border);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px; color: var(--t2);
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    .appr-actions {
+      margin-top: var(--ds-space-4); display: flex; gap: var(--ds-space-2);
+      flex-wrap: wrap; align-items: center;
+    }
+    .appr-reason {
+      flex: 1 1 260px; min-width: 200px;
+      padding: 8px 10px; font: inherit; font-size: var(--ds-text-sm); color: var(--t1);
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); outline: none;
+    }
+    .appr-reason:focus { border-color: var(--t2); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; font-size: var(--ds-text-sm); font-weight: 600;
+      border-radius: var(--ds-radius-md); border: 1px solid transparent;
+      cursor: pointer; transition: transform .08s, filter .15s;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-approve { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn-approve:hover:not(:disabled) { filter: brightness(1.06); }
+    .btn-reject  { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .btn-reject:hover:not(:disabled) { background: #fecaca; }
+
+    .appr-review {
+      margin-top: var(--ds-space-3); padding-top: var(--ds-space-3);
+      border-top: 1px dashed var(--border);
+      font-size: var(--ds-text-sm); color: var(--t2);
+    }
+    .appr-review strong { color: var(--t1); }
+
+    .empty {
+      padding: 40px 20px; text-align: center; color: var(--t3);
+      background: var(--card); border: 1px dashed var(--border);
+      border-radius: var(--rl); font-size: var(--ds-text-base);
+    }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #fff;
+      padding: 10px 18px; border-radius: var(--ds-radius-md);
+      font-size: var(--ds-text-sm); font-weight: 600;
+      box-shadow: var(--ds-shadow-md);
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+      z-index: 2000;
+    }
+    .toast.is-error { background: #dc2626; }
+    .toast.is-show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Aprovações</h1>
+        <p class="app-page-sub">Ações sensíveis disparadas por usuários matriz aguardando decisão do master</p>
+      </div>
+
+      <div class="section-head">
+        <div class="section-title">Pendentes</div>
+        <div class="section-meta" id="metaPending">—</div>
+      </div>
+      <div id="queuePending" class="queue">
+        <div class="empty">Carregando…</div>
+      </div>
+
+      <div class="section-head">
+        <div class="section-title">Histórico recente</div>
+        <div class="section-meta" id="metaHistorico">—</div>
+      </div>
+      <div id="queueHistorico" class="queue">
+        <div class="empty">—</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "aprovacoes",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Aprovações", current: true }
+    ]
+  });
+
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  let CSRF_TOKEN = "";
+  async function loadCsrf() {
+    try {
+      const r = await fetch("/api/csrf-token", { credentials: "same-origin" });
+      if (r.ok) {
+        const d = await r.json();
+        CSRF_TOKEN = d.token || "";
+      }
+    } catch (_) {}
+  }
+
+  function toast(msg, isError) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.toggle("is-error", !!isError);
+    el.classList.add("is-show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("is-show"), 2600);
+  }
+
+  function fmtWhen(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      const hoje = new Date();
+      const ontem = new Date(Date.now() - 86400000);
+      const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      if (sameDay(d, hoje))  return `Hoje, ${hora}`;
+      if (sameDay(d, ontem)) return `Ontem, ${hora}`;
+      return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) + ", " + hora;
+    } catch (_) { return iso; }
+  }
+
+  function actionLabel(action) {
+    const map = {
+      "user.create": "Criar usuário",
+      "user.update": "Editar usuário",
+      "user.delete": "Excluir usuário",
+    };
+    return map[action] || action;
+  }
+
+  function statusTag(s) {
+    if (s === "approved") return '<span class="status-tag status-approved">Aprovado</span>';
+    if (s === "rejected") return '<span class="status-tag status-rejected">Rejeitado</span>';
+    return '<span class="status-tag status-pending">Pendente</span>';
+  }
+
+  function renderPayloadPreview(entry) {
+    const payload = entry.payload || {};
+    const sanit = payload.sanit || {};
+    const bits = [];
+    if (sanit.name)   bits.push(`<div><span class="kv-label">Nome</span><div class="kv-value">${escHtml(sanit.name)}</div></div>`);
+    if (sanit.unit || sanit.master || sanit.matriz || sanit.gerencial) {
+      let perfil = "Gerencial";
+      if (sanit.master) perfil = "Master";
+      else if (sanit.matriz) perfil = "Matriz";
+      const unidade = sanit.unit ? ` · Unidade: ${escHtml(sanit.unit)}` : "";
+      bits.push(`<div><span class="kv-label">Perfil</span><div class="kv-value">${perfil}${unidade}</div></div>`);
+    }
+    return bits.join("");
+  }
+
+  function renderCard(e, isPending) {
+    const klass = isPending ? "is-pending" : (e.status === "approved" ? "is-approved" : "is-rejected");
+    const prev = renderPayloadPreview(e);
+    const payloadJson = e.payload && Object.keys(e.payload).length
+      ? `<details class="payload-details"><summary>ver payload completo</summary><pre>${escHtml(JSON.stringify(e.payload, null, 2))}</pre></details>`
+      : "";
+
+    const reviewBlock = !isPending ? `
+      <div class="appr-review">
+        <div>Decidido por <strong>${escHtml(e.reviewed_by || "—")}</strong> em <span class="mono">${escHtml(fmtWhen(e.reviewed_at))}</span></div>
+        ${e.reason ? `<div style="margin-top:4px;">Motivo: ${escHtml(e.reason)}</div>` : ""}
+      </div>` : "";
+
+    const actions = isPending ? `
+      <div class="appr-actions">
+        <input type="text" class="appr-reason" id="reason-${escHtml(e.id)}" placeholder="Motivo (opcional — recomendado para rejeição)">
+        <button class="btn btn-approve" data-decide="aprovar" data-id="${escHtml(e.id)}">Aprovar</button>
+        <button class="btn btn-reject"  data-decide="rejeitar" data-id="${escHtml(e.id)}">Rejeitar</button>
+      </div>` : "";
+
+    return `<article class="appr-card ${klass}" data-card-id="${escHtml(e.id)}">
+      <div class="appr-head">
+        <div>
+          <div class="appr-title">
+            <span>${escHtml(actionLabel(e.action))}</span>
+            <span class="act-tag">${escHtml(e.action)}</span>
+            ${statusTag(e.status)}
+          </div>
+          <div class="appr-sub">${escHtml(e.description || "—")}</div>
+        </div>
+        <div class="appr-time">${escHtml(fmtWhen(e.created_at))}</div>
+      </div>
+
+      <div class="appr-body">
+        <div>
+          <span class="kv-label">Solicitante</span>
+          <div class="kv-value"><strong>${escHtml(e.requested_name || "—")}</strong><br><span class="mono">${escHtml(e.requested_by || "")}</span></div>
+        </div>
+        <div>
+          <span class="kv-label">Alvo</span>
+          <div class="kv-value"><span class="mono">${escHtml(e.target || "—")}</span></div>
+        </div>
+        ${prev}
+      </div>
+
+      ${payloadJson}
+      ${actions}
+      ${reviewBlock}
+    </article>`;
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/master/api/aprovacoes", { cache: "no-store", credentials: "same-origin" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const data = await r.json();
+
+      const pend = data.pending || [];
+      const hist = data.historico || [];
+
+      document.getElementById("metaPending").textContent =
+        pend.length === 0 ? "Nenhum pedido aguardando" : `${pend.length} aguardando decisão`;
+      document.getElementById("metaHistorico").textContent =
+        hist.length === 0 ? "Sem histórico" : `Últimas ${hist.length} decisões`;
+
+      const qp = document.getElementById("queuePending");
+      qp.innerHTML = pend.length
+        ? pend.map(e => renderCard(e, true)).join("")
+        : `<div class="empty">Nenhum pedido pendente.</div>`;
+
+      const qh = document.getElementById("queueHistorico");
+      qh.innerHTML = hist.length
+        ? hist.map(e => renderCard(e, false)).join("")
+        : `<div class="empty">Nenhuma decisão ainda.</div>`;
+    } catch (e) {
+      document.getElementById("queuePending").innerHTML =
+        `<div class="empty">Erro ao carregar: ${escHtml(e.message)}</div>`;
+    }
+  }
+
+  async function decidir(id, decisao, reason) {
+    if (!CSRF_TOKEN) await loadCsrf();
+    const confirmMsg = decisao === "aprovar"
+      ? "Aprovar este pedido? A ação será executada imediatamente."
+      : "Rejeitar este pedido? A ação não será executada.";
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const r = await fetch(`/master/api/aprovacoes/${encodeURIComponent(id)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type":  "application/json",
+          "X-CSRF-Token":  CSRF_TOKEN,
+        },
+        body: JSON.stringify({ decisao, reason: reason || "" }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || data.success === false) {
+        const err = data.error || data.exec_error || `HTTP ${r.status}`;
+        toast("Erro: " + err, true);
+        return;
+      }
+      toast(decisao === "aprovar" ? "Aprovado e executado." : "Rejeitado.");
+      load();
+    } catch (e) {
+      toast("Erro: " + e.message, true);
+    }
+  }
+
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-decide]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const decisao = btn.dataset.decide;
+    const reasonEl = document.getElementById("reason-" + id);
+    const reason = reasonEl ? reasonEl.value.trim() : "";
+    btn.disabled = true;
+    decidir(id, decisao, reason).finally(() => { btn.disabled = false; });
+  });
+
+  loadCsrf();
+  load();
+  setInterval(load, 30_000);
+</script>
+
+</body>
+</html>
