@@ -2178,7 +2178,7 @@ def api_send(unit: str):
             # Camada 1: check local (thread-safe via lock)
             with lock:
                 if rec.chave_deduplicacao in imported:
-                    results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja importado"})
+                    results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja importado", "record": r})
                     return
 
             try:
@@ -2205,7 +2205,7 @@ def api_send(unit: str):
                         "enviado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
                         "resposta": resp,
                     }
-                    results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente})
+                    results["enviados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "record": r})
             except Exception as exc:
                 with lock:
                     if _is_doc_already_registered(exc):
@@ -2215,13 +2215,14 @@ def api_send(unit: str):
                             "enviado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
                             "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
                         }
-                        results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny"})
+                        results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny", "record": r})
                     else:
                         app.logger.exception("[send] falha chave=%s cliente=%s", rec.chave_deduplicacao, rec.cliente)
                         results["falhas"].append({
                             "chave": rec.chave_deduplicacao,
                             "cliente": rec.cliente,
                             "erro": str(exc),
+                            "record": r,
                         })
 
         # Processa todos os registros do lote em paralelo (5 threads concorrentes)
@@ -2235,11 +2236,10 @@ def api_send(unit: str):
         save_state(state_path, st)
 
         # Modo espelho: grava na tabela envios_tiny em paralelo ao imported.json.
-        # Nao afeta decisao (quem consulta duplicata ainda le do JSON). Falha aqui
-        # e logada mas nao derruba a resposta do envio.
+        # Cada entry em results ja carrega o 'record' original (nao depende de lookup
+        # por id, que quebrava quando a chave era recalculada via record_key).
         try:
             ts_now = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
-            records_by_chave = {r.get("id", ""): r for r in records if r.get("id")}
 
             def _fp_normalizado(r: dict) -> str:
                 """Resolve fp pro gerencial: FA/faturado→faturado, AV→avPagamento (dinheiro/pix/...)."""
@@ -2253,7 +2253,7 @@ def api_send(unit: str):
 
             for e in results["enviados"]:
                 chave = e["chave"]
-                r = records_by_chave.get(chave, {})
+                r = e.get("record") or {}
                 _db_insert_envio(unit, state_dir, {
                     "chave_deduplicacao": chave,
                     "timestamp":          ts_now,
@@ -2270,7 +2270,7 @@ def api_send(unit: str):
                 })
             for p in results["pulados"]:
                 chave = p["chave"]
-                r = records_by_chave.get(chave, {})
+                r = p.get("record") or {}
                 motivo = p.get("motivo", "")
                 status = "ja_existia_tiny" if "existia no Tiny" in motivo else "ja_importado_local"
                 _db_insert_envio(unit, state_dir, {
@@ -2289,7 +2289,7 @@ def api_send(unit: str):
                 })
             for f in results["falhas"]:
                 chave = f["chave"]
-                r = records_by_chave.get(chave, {})
+                r = f.get("record") or {}
                 _db_insert_envio(unit, state_dir, {
                     "chave_deduplicacao": chave,
                     "timestamp":          ts_now,
