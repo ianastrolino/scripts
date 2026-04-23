@@ -1198,11 +1198,57 @@ def master_api_units_status():
     today = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
     status = []
     for uid, ud in UNITS.items():
+        unit_dir = _unit_state_dir(uid)
+        # PDV local
         try:
-            lancamentos = _db_load(uid, _unit_state_dir(uid), today)
+            lancamentos = _db_load(uid, unit_dir, today)
         except Exception:
             lancamentos = []
-        totais = calcular_totais(lancamentos)
+        totais_pdv = calcular_totais(lancamentos)
+        # Envios_tiny do dia (planilha enviada + PDV ja enviado)
+        try:
+            envios_hoje = _db_load_envios_range(uid, unit_dir, today, today)
+        except Exception:
+            envios_hoje = []
+
+        # Chaves pra dedupe: (placa, servico, valor, fp) dos envios_tiny
+        chaves_tiny: set[tuple] = set()
+        total_tiny_av = 0.0
+        total_tiny_fa = 0.0
+        for e in envios_hoje:
+            placa = (e.get("placa") or "").upper().strip()
+            servico = (e.get("servico") or "").upper().strip()
+            valor = float(e.get("valor", 0) or 0)
+            fp_raw = (e.get("fp") or "").lower().strip()
+            fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
+            chaves_tiny.add((placa, servico, round(valor, 2), fp_norm))
+            if fp_norm in ("faturado", "fa"):
+                total_tiny_fa += valor
+            else:
+                total_tiny_av += valor
+
+        # PDV exclui o que ja esta em envios_tiny (nao duplica)
+        total_pdv_av = 0.0
+        total_pdv_fa = 0.0
+        pdv_dedupe_count = 0
+        for lc in lancamentos:
+            placa = (lc.get("placa") or "").upper().strip()
+            servico = (lc.get("servico") or "").upper().strip()
+            valor = float(lc.get("valor", 0) or 0)
+            fp = (lc.get("fp") or "").lower().strip()
+            if (placa, servico, round(valor, 2), fp) in chaves_tiny:
+                continue  # ja enviado
+            pdv_dedupe_count += 1
+            if fp == "faturado":
+                total_pdv_fa += valor
+            else:
+                total_pdv_av += valor
+
+        total_av = total_tiny_av + total_pdv_av
+        total_fa = total_tiny_fa + total_pdv_fa
+        total_geral = total_av + total_fa
+        total_lcs = len(envios_hoje) + pdv_dedupe_count
+
         ultimo_lc = max(lancamentos, key=lambda x: x.get("timestamp", ""), default=None) if lancamentos else None
         ultima = ultimo_lc.get("timestamp", "") if ultimo_lc else None
         ultimo_resumo = None
@@ -1217,10 +1263,15 @@ def master_api_units_status():
             "id":   uid,
             "nome": ud.get("nome", uid),
             "hoje": {
-                "lancamentos":    len(lancamentos),
-                "total":          totais["total"],
+                "lancamentos":      total_lcs,
+                "total":            round(total_geral, 2),
+                "total_avista":     round(total_av, 2),
+                "total_faturado":   round(total_fa, 2),
                 "ultima_atividade": ultima,
-                "ultimo": ultimo_resumo,
+                "ultimo":           ultimo_resumo,
+                # Compatibilidade: mantem campos legados pra nao quebrar consumidores
+                "pdv_only_total":   totais_pdv["total"],
+                "pdv_only_count":   len(lancamentos),
             },
         })
     return _json({"status": status, "data": today})

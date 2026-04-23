@@ -318,6 +318,28 @@
       const r = await fetch("/master/api/units/status", { cache: "no-store" });
       const d = await r.json();
       (d.status || []).forEach(u => {
+        // Totais consolidados (PDV + envios_tiny deduplicados)
+        const lancEl = document.getElementById(`lancamentos-${u.id}`);
+        const totalEl = document.getElementById(`total-${u.id}`);
+        const faEl = document.getElementById(`fa-${u.id}`);
+        if (lancEl) lancEl.textContent = u.hoje?.lancamentos ?? 0;
+        if (totalEl) totalEl.textContent = fmt(u.hoje?.total_avista ?? 0);
+        if (faEl) faEl.textContent = fmt(u.hoje?.total_faturado ?? 0);
+
+        // Delta: pulse no card quando contagem sobe entre refreshes
+        const prev = _lastSnapshot[u.id];
+        const atual = u.hoje?.lancamentos ?? 0;
+        if (prev !== undefined && atual > prev) {
+          const card = document.getElementById(`card-${u.id}`);
+          if (card) {
+            card.classList.remove("pulse-new");
+            void card.offsetWidth;
+            card.classList.add("pulse-new");
+          }
+        }
+        _lastSnapshot[u.id] = atual;
+
+        // Ultima atividade + detalhe leve
         const el = document.getElementById(`last-text-${u.id}`);
         const wrap = document.getElementById(`last-${u.id}`);
         const extra = document.getElementById(`last-extra-${u.id}`);
@@ -333,7 +355,6 @@
         const diffMs = Date.now() - new Date(ultima).getTime();
         wrap.classList.toggle("fresh", diffMs < 2 * 60_000);
 
-        // Linha leve com detalhes do ultimo lancamento
         const ult = u.hoje?.ultimo;
         if (extra) {
           if (ult && (ult.placa || ult.servico || ult.valor)) {
@@ -365,13 +386,12 @@
   }
 
   async function loadUnitStatus(unitId) {
+    // So busca o badge 'Aberto/Fechado' do caixa (os totais ja vem do
+    // loadUnitsAggregate que consome /master/api/units/status consolidado).
     try {
       const res  = await fetch(`/u/${unitId}/api/caixa/estado`, { cache: "no-store" });
       const data = await res.json();
       const badge = document.getElementById(`status-${unitId}`);
-      const lancamentos = (data.lancamentos || []).length;
-      const totais = data.totais || {};
-
       if (data.aberto) {
         badge.textContent = "● Aberto";
         badge.className = "status-badge open";
@@ -379,23 +399,6 @@
         badge.textContent = "Fechado";
         badge.className = "status-badge closed";
       }
-
-      document.getElementById(`lancamentos-${unitId}`).textContent = lancamentos;
-      document.getElementById(`total-${unitId}`).textContent = fmt(totais.total_avista ?? totais.total ?? 0);
-      document.getElementById(`fa-${unitId}`).textContent = fmt(totais.faturado ?? 0);
-
-      // Delta: se contagem aumentou desde o ultimo refresh, pulse no card
-      const prev = _lastSnapshot[unitId];
-      if (prev !== undefined && lancamentos > prev) {
-        const card = document.getElementById(`card-${unitId}`);
-        if (card) {
-          card.classList.remove("pulse-new");
-          // reflow pra reiniciar a animacao
-          void card.offsetWidth;
-          card.classList.add("pulse-new");
-        }
-      }
-      _lastSnapshot[unitId] = lancamentos;
     } catch (_) {
       const badge = document.getElementById(`status-${unitId}`);
       if (badge) { badge.textContent = "—"; badge.className = "status-badge closed"; }
