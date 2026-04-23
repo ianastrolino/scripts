@@ -3454,6 +3454,49 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostico-resolve-contact", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_diagnostico_resolve_contact(unit: str):
+    """Reproduz o resolve_contact sem criar ou vincular nada.
+    Body: {cliente, cpf}. Retorna cada passo do lookup + o ID que seria usado.
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        nome = (data.get("cliente") or "").strip()
+        cpf = "".join(c for c in (data.get("cpf") or "") if c.isdigit())
+        if not nome:
+            return _json({"success": False, "error": "cliente obrigatorio"}, 400)
+        config = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        importer = TinyImporter(config, state_dir)
+        client = importer.client
+        steps = {"cliente": nome, "cpf": cpf}
+        # 1) lookup_config_id (mapeamento local)
+        mapped = lookup_config_id(config.get("tiny", {}).get("cliente_ids", {}), nome)
+        steps["1_lookup_config_id"] = mapped
+        # 2) busca por CPF
+        if cpf:
+            try:
+                r = client.request("GET", "contatos", params={"cpf_cnpj": cpf, "limit": 10})
+                items = r.get("itens", []) or []
+                steps["2_busca_por_cpf_items"] = [{"id": i.get("id"), "nome": i.get("nome"), "cpf": i.get("cpfCnpj") or i.get("cpf_cnpj")} for i in items]
+                steps["2_busca_por_cpf_usaria_id"] = int(items[0]["id"]) if items else None
+            except Exception as exc:
+                steps["2_busca_por_cpf_erro"] = str(exc)
+        # 3) busca por nome
+        try:
+            r = client.request("GET", "contatos", params={"nome": nome, "limit": 10})
+            items = r.get("itens", []) or []
+            steps["3_busca_por_nome_items"] = [{"id": i.get("id"), "nome": i.get("nome"), "cpf": i.get("cpfCnpj") or i.get("cpf_cnpj")} for i in items]
+        except Exception as exc:
+            steps["3_busca_por_nome_erro"] = str(exc)
+        return _json({"success": True, "unit": unit, "steps": steps})
+    except Exception as exc:
+        app.logger.exception("[diagnostico-resolve-contact]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/diagnostico-pdv-dia")
 @unit_access_required
 def api_diagnostico_pdv_dia(unit: str):
