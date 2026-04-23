@@ -776,6 +776,30 @@ _GLOBAL_ALIASES: dict[str, dict[str, str]] = {
 }
 
 
+# Mapa de categorias Tiny por unidade — cada Tiny tem IDs proprios.
+# Substitui o categoria_ids do UNITS_CONFIG; serve tambem como lista de servicos
+# do dropdown do PDV (api/info deriva isso das chaves de categoria_ids).
+# Pra adicionar uma unidade nova, chamar /u/<unit>/api/diagnostic-categorias
+# no Tiny dela e preencher aqui.
+_CATEGORIAS_POR_UNIDADE: dict[str, dict[str, int]] = {
+    "barueri": {
+        "VISTORIA CAUTELAR":                       897968382,
+        "LAUDO DE TRANSFERENCIA":                  897968383,
+        "LAUDO DE VERIFICACAO":                    897968384,
+        "LAUDO CAUTELAR VERIFICACAO":              897968384,
+        "CAUTELAR COM ANALISE":                    897968384,
+        "CAUTELAR COM ANALISE DE PINTURA":         897968384,
+        "REVISTORIA":                              897968385,
+        "BAIXA PERMANENTE":                        897968385,
+        "CONSULTA GRAVAME":                        897968385,
+        "EMISSAO CRLV":                            897968394,
+        "PESQUISA AVULSA":                         897968391,
+        "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO": 897968392,
+        "TAXA DE VISITA":                          897968393,
+    },
+}
+
+
 def _build_unit_config(unit: str) -> dict[str, Any]:
     """Monta config completo para a unidade a partir de UNITS_CONFIG."""
     ud = UNITS.get(unit, {})
@@ -804,6 +828,11 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
         merged_aliases[field] = dict(_GLOBAL_ALIASES.get(field, {}))
         merged_aliases[field].update(unit_aliases.get(field, {}) or {})
     tiny["aliases"] = merged_aliases
+
+    # Sobrescreve categoria_ids com o mapa por unidade (IDs do Tiny de cada unidade).
+    # Tambem sera usado pelo /api/info pra popular o dropdown de servicos no PDV.
+    if unit in _CATEGORIAS_POR_UNIDADE:
+        tiny["categoria_ids"] = dict(_CATEGORIAS_POR_UNIDADE[unit])
 
     # Sobrescreve com IDs salvos via modal de mapeamento
     extra = _load_extra_cliente_ids(unit)
@@ -2028,6 +2057,8 @@ def api_info(unit: str):
     servicos_pdv = ud.get("servicos_pdv")
     if servicos_pdv:
         servicos = servicos_pdv
+    elif unit in _CATEGORIAS_POR_UNIDADE:
+        servicos = list(_CATEGORIAS_POR_UNIDADE[unit].keys())
     else:
         categoria_ids = ud.get("categoria_ids", {})
         servicos = list(categoria_ids.keys()) if categoria_ids else [
