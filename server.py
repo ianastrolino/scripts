@@ -358,6 +358,10 @@ _ACTIVE_USERS: dict[str, dict[str, Any]] = {}
 _ACTIVE_USERS_LOCK = threading.Lock()
 _ACTIVE_TTL_SECONDS = 180   # 3 min sem atividade = desconectado
 
+# Cache do tiny-health: evita test_call em toda chamada (painel master refresh 30s).
+# Chaveado por unit; valor {status, test_call, cached_at}.
+_TINY_HEALTH_CACHE: dict[str, dict[str, Any]] = {}
+
 # Log persistente de sessoes (append-only JSONL). Cada linha e uma sessao fechada.
 # Nova sessao abre quando o usuario ativa e nao estava em _ACTIVE_USERS (primeiro acesso
 # ou retorno apos gap > TTL). Fecha quando expira por inatividade ou logout explicito.
@@ -1236,6 +1240,12 @@ def master_api_tiny_health():
     """
     now = time.time()
     items = []
+    # Cache de test_call por unidade (chave: unit; valor: {result, cached_at}).
+    # Valida de verdade o token fazendo 1 chamada leve ao Tiny, mas cacheia por
+    # 3 min pra nao bombardear a API a cada refresh do painel master (30s).
+    cache = _TINY_HEALTH_CACHE
+    CACHE_TTL = 180  # segundos
+
     for uid in UNITS.keys():
         p = _unit_state_dir(uid) / "tiny_tokens.json"
         entry = {"id": uid, "nome": UNITS[uid].get("nome", uid)}
@@ -1253,12 +1263,45 @@ def master_api_tiny_health():
             entry["refresh_token_tail"] = rt[-6:] if rt else ""
             entry["access_expires_in"] = expires_in
             entry["file_mtime"] = dt.datetime.fromtimestamp(p.stat().st_mtime, ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+
             if not rt:
                 entry["status"] = "ausente"
-            elif expires_in is not None and expires_in < 0:
+                items.append(entry)
+                continue
+            if expires_in is not None and expires_in < 0:
                 entry["status"] = "renovar"
+                items.append(entry)
+                continue
+
+            # Test call real contra o Tiny (com cache). Captura 401/403 que indicam
+            # token com empresa errada — mesmo metadados 'ok', a API rejeita.
+            cached = cache.get(uid)
+            if cached and (now - cached["cached_at"]) < CACHE_TTL:
+                entry["status"] = cached["status"]
+                entry["test_call"] = cached.get("test_call", {})
             else:
-                entry["status"] = "ok"
+                try:
+                    import requests as _rq
+                    config = _build_unit_config(uid)
+                    importer = TinyImporter(config, _unit_state_dir(uid))
+                    url = f"{importer.client.base_url}/contas-receber"
+                    headers = {"Authorization": f"Bearer {importer.client.access_token()}", "Accept": "application/json"}
+                    resp = _rq.get(url, headers=headers, params={"limit": 1}, timeout=8)
+                    status_http = resp.status_code
+                    entry["test_call"] = {"status": status_http}
+                    if status_http == 200:
+                        entry["status"] = "ok"
+                    elif status_http in (401, 403):
+                        entry["status"] = "erro"
+                        entry["error"] = f"HTTP {status_http} — token sem acesso a empresa (reautorizar com empresa certa ativa no Tiny)"
+                    else:
+                        entry["status"] = "erro"
+                        entry["error"] = f"HTTP {status_http}"
+                except Exception as exc_call:
+                    entry["status"] = "erro"
+                    entry["error"] = f"test_call falhou: {str(exc_call)[:120]}"
+                    entry["test_call"] = {"error": str(exc_call)[:120]}
+                cache[uid] = {"status": entry["status"], "test_call": entry.get("test_call", {}), "cached_at": now}
         except Exception as exc:
             entry["status"] = "erro"
             entry["error"] = str(exc)[:200]
