@@ -1527,6 +1527,33 @@
     }
     body.caixa-travado .ledger tbody tr { opacity: .85; }
     body.caixa-travado .ledger tbody tr:hover { opacity: 1; }
+
+    /* Botoes de acao das linhas quando travado: visual esmaecido de "trancado" */
+    body.caixa-travado .ledger .btn-icon.action-btn {
+      color: var(--t4) !important;
+      background: transparent !important;
+      border-color: transparent !important;
+      opacity: .5;
+      position: relative;
+      cursor: pointer;
+    }
+    body.caixa-travado .ledger .btn-icon.action-btn:hover {
+      opacity: 1;
+      color: var(--ds-danger) !important;
+      background: var(--ds-danger-soft) !important;
+    }
+    body.caixa-travado .ledger .btn-icon.action-btn::after {
+      content: "";
+      position: absolute;
+      bottom: -2px; right: -2px;
+      width: 9px; height: 9px;
+      background: var(--sf1);
+      border-radius: 50%;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dc2626' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>");
+      background-size: 7px 7px;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
   </style>
 </head>
 <body>
