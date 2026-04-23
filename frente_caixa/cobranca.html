@@ -211,6 +211,17 @@
             <label>Buscar</label>
             <input type="text" id="filtroQ" placeholder="cliente ou nº doc" autocomplete="off">
           </div>
+          <div class="filter">
+            <label>Ordenar por</label>
+            <select id="selOrdem">
+              <option value="atraso_desc">Maior atraso</option>
+              <option value="atraso_asc">Menor atraso</option>
+              <option value="valor_desc">Maior valor</option>
+              <option value="valor_asc">Menor valor</option>
+              <option value="cliente_asc">Cliente (A–Z)</option>
+              <option value="contas_desc">Mais contas em aberto</option>
+            </select>
+          </div>
         </div>
         <div class="toolbar-actions">
           <button type="button" id="btnAtualizar" class="btn-primary">Atualizar</button>
@@ -324,7 +335,9 @@
     const faixa = document.getElementById("selFaixa").value;
     const q = document.getElementById("filtroQ").value.trim().toLowerCase();
 
-    let filtered = state.clientes;
+    const ordem = document.getElementById("selOrdem").value || "atraso_desc";
+
+    let filtered = state.clientes.slice();  // copia para nao mutar o state
     if (faixa) {
       filtered = filtered.filter(c => c.contas.some(conta => conta.faixa === faixa));
     }
@@ -334,6 +347,16 @@
         return hay.includes(q);
       });
     }
+
+    const cmp = {
+      atraso_desc:  (a, b) => (b.max_dias_atraso - a.max_dias_atraso) || (b.total_devido - a.total_devido),
+      atraso_asc:   (a, b) => (a.max_dias_atraso - b.max_dias_atraso) || (b.total_devido - a.total_devido),
+      valor_desc:   (a, b) => (b.total_devido - a.total_devido) || (b.max_dias_atraso - a.max_dias_atraso),
+      valor_asc:    (a, b) => (a.total_devido - b.total_devido) || (b.max_dias_atraso - a.max_dias_atraso),
+      cliente_asc:  (a, b) => a.cliente_nome.localeCompare(b.cliente_nome, "pt-BR"),
+      contas_desc:  (a, b) => (b.qtd_contas - a.qtd_contas) || (b.total_devido - a.total_devido),
+    }[ordem];
+    filtered.sort(cmp);
 
     meta.textContent = filtered.length === 0 ? "Nenhum cliente"
                     : filtered.length === 1 ? "1 cliente"
@@ -405,6 +428,7 @@
     window.location.href = `/master/api/inadimplencia.csv?unit=${encodeURIComponent(unit)}`;
   });
   document.getElementById("selFaixa").addEventListener("change", renderLista);
+  document.getElementById("selOrdem").addEventListener("change", renderLista);
   let deb;
   document.getElementById("filtroQ").addEventListener("input", () => {
     clearTimeout(deb); deb = setTimeout(renderLista, 250);
