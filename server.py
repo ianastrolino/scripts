@@ -3224,7 +3224,7 @@ def api_diagnostico_envios_raw(unit: str):
         state_dir = _unit_state_dir(unit)
         with _db_connect(state_dir) as conn:
             rows = conn.execute(
-                "SELECT unit, data_lancamento, timestamp, placa, servico, valor, fp, status, erro "
+                "SELECT unit, data_lancamento, timestamp, placa, cliente, servico, valor, fp, status, erro, chave_deduplicacao, resposta_tiny "
                 "FROM envios_tiny WHERE unit=? "
                 "ORDER BY timestamp DESC LIMIT 50",
                 (unit,),
