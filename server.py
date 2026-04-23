@@ -3731,6 +3731,7 @@ def api_caixa_conferir(unit: str):
                 "servico":  lc.get("servico"),
                 "valor":    lc.get("valor"),
                 "fp":       lc.get("fp"),
+                "cpf":      lc.get("cpf", ""),
                 "timestamp": lc.get("timestamp"),
             })
 
