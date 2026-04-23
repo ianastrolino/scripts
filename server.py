@@ -3215,6 +3215,38 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostico-pdv-dia")
+@unit_access_required
+def api_diagnostico_pdv_dia(unit: str):
+    """Lista todos os lançamentos do PDV de uma data especifica (default: hoje)."""
+    try:
+        data_iso = (request.args.get("data") or "").strip() or dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        state_dir = _unit_state_dir(unit)
+        try:
+            _db_migrate(unit, state_dir)
+        except Exception:
+            pass
+        lcs = []
+        try:
+            lcs = _db_load(unit, state_dir, data_iso)
+        except Exception as exc:
+            return _json({"success": False, "error": str(exc)}, 500)
+        out = [{
+            "id": lc.get("id", ""),
+            "hora": lc.get("hora", ""),
+            "timestamp": lc.get("timestamp", ""),
+            "placa": lc.get("placa", ""),
+            "cliente": lc.get("cliente", ""),
+            "servico": lc.get("servico", ""),
+            "valor": lc.get("valor", 0),
+            "fp": lc.get("fp", ""),
+        } for lc in lcs]
+        return _json({"success": True, "unit": unit, "data": data_iso, "total": len(out), "lancamentos": out})
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/diagnostico-envios-raw")
 @unit_access_required
 def api_diagnostico_envios_raw(unit: str):
