@@ -1837,10 +1837,15 @@ def _fetch_contas_abertas_tiny(unit: str) -> list[dict]:
 @master_view_required
 def master_api_inadimplencia():
     """Agrega contas em aberto (nao pagas) do Tiny, classificadas por atraso.
-    Params: unit=<slug>|all (default all).
+    Params:
+      unit=<slug>|all (default all)
+      mes_emissao=AAAA-MM (opcional) — filtra contas emitidas nesse mes; o cliente
+        ganha tambem um agregado 'outros_meses' com total/count das contas em
+        aberto em outros meses (visivel como aviso na tela).
     Agrupa por cliente (mesmo cliente com N contas vira 1 entrada com lista)."""
     try:
         unit_filter = (request.args.get("unit") or "all").strip()
+        mes_filter  = (request.args.get("mes_emissao") or "").strip()  # AAAA-MM
         units_iter = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
@@ -1863,6 +1868,7 @@ def master_api_inadimplencia():
                 cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
                 cliente_id = cliente_obj.get("id") or 0
                 venc_str = c.get("dataVencimento") or c.get("data") or ""
+                emi_str  = c.get("data") or c.get("dataEmissao") or ""
                 try:
                     # Tiny devolve "DD/MM/AAAA" ou "AAAA-MM-DD"
                     if "/" in venc_str:
@@ -1872,13 +1878,21 @@ def master_api_inadimplencia():
                         venc = dt.date.fromisoformat(venc_str[:10])
                 except Exception:
                     venc = hoje
+                try:
+                    if "/" in emi_str:
+                        d, m, y = emi_str.split("/")
+                        emi = dt.date(int(y), int(m), int(d))
+                    else:
+                        emi = dt.date.fromisoformat(emi_str[:10])
+                except Exception:
+                    emi = venc  # fallback: usa vencimento como proxy de emissao
                 dias_atraso = (hoje - venc).days
                 faixa = _classificar_inadimplencia_faixa(dias_atraso)
                 valor = float(c.get("saldo") or c.get("valor") or 0)
                 if valor <= 0:
                     continue
-                # Agrega por cliente (mesmo cliente em unidades diferentes vira chaves separadas,
-                # pra nao misturar empresas que existem nas 2 unidades com CNPJs diferentes)
+                mes_emi = f"{emi.year:04d}-{emi.month:02d}"
+                # Agrega por cliente
                 key = f"{uid}::{cliente_id}::{cliente_nome}"
                 bucket = por_cliente.setdefault(key, {
                     "cliente_nome": cliente_nome,
@@ -1889,23 +1903,41 @@ def master_api_inadimplencia():
                     "qtd_contas":   0,
                     "max_dias_atraso": 0,
                     "pior_faixa":   "a_vencer",
-                    "contas":       [],
+                    "contas":       [],       # contas do mes filtrado (ou todas se sem filtro)
+                    "outros_total": 0.0,
+                    "outros_count": 0,
+                    "outros_meses_map": {},   # {mes: {total, count}}
                 })
-                bucket["total_devido"] += valor
-                bucket["qtd_contas"]   += 1
-                if dias_atraso > bucket["max_dias_atraso"]:
-                    bucket["max_dias_atraso"] = dias_atraso
-                    bucket["pior_faixa"] = faixa
-                bucket["contas"].append({
+
+                conta_row = {
                     "id":              c.get("id"),
                     "numero_documento": c.get("numeroDocumento") or "",
+                    "data_emissao":    emi.isoformat(),
+                    "mes_emissao":     mes_emi,
                     "data_vencimento": venc.isoformat(),
                     "valor":           round(valor, 2),
                     "historico":       (c.get("historico") or "")[:200],
                     "dias_atraso":     dias_atraso,
                     "faixa":           faixa,
                     "situacao":        c.get("situacao") or "",
-                })
+                }
+
+                # Se ha filtro de mes, separa: contas_no_mes vs outros_meses
+                if mes_filter and mes_emi != mes_filter:
+                    bucket["outros_total"] += valor
+                    bucket["outros_count"] += 1
+                    m_bucket = bucket["outros_meses_map"].setdefault(mes_emi, {"mes": mes_emi, "total": 0.0, "count": 0})
+                    m_bucket["total"] += valor
+                    m_bucket["count"] += 1
+                    # nao conta na faixa/por_unit totais (pra nao confundir; o totalizador reflete o filtro)
+                    continue
+
+                bucket["contas"].append(conta_row)
+                bucket["total_devido"] += valor
+                bucket["qtd_contas"]   += 1
+                if dias_atraso > bucket["max_dias_atraso"]:
+                    bucket["max_dias_atraso"] = dias_atraso
+                    bucket["pior_faixa"] = faixa
                 por_faixa_total[faixa] += valor
                 por_faixa_count[faixa] += 1
                 por_unit[uid]["total"] += valor
@@ -1913,8 +1945,18 @@ def master_api_inadimplencia():
 
         lista = []
         for b in por_cliente.values():
+            # Se ha filtro de mes e o cliente nao tem nenhuma conta no mes selecionado,
+            # ele nao aparece na lista (so seria ruido).
+            if mes_filter and not b["contas"]:
+                continue
             b["total_devido"] = round(b["total_devido"], 2)
             b["contas"].sort(key=lambda x: x["data_vencimento"])
+            b["outros_total"] = round(b["outros_total"], 2)
+            b["outros_meses"] = sorted(
+                [{**v, "total": round(v["total"], 2)} for v in b["outros_meses_map"].values()],
+                key=lambda m: m["mes"],
+            )
+            b.pop("outros_meses_map", None)
             lista.append(b)
         lista.sort(key=lambda x: (-x["max_dias_atraso"], -x["total_devido"]))
 
@@ -1928,6 +1970,7 @@ def master_api_inadimplencia():
             "por_unit":      por_unit,
             "total_geral":   round(sum(por_faixa_total.values()), 2),
             "clientes_count": len(lista),
+            "mes_emissao":   mes_filter or None,
             "hoje":          hoje.isoformat(),
         })
     except Exception as exc:

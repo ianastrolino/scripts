@@ -152,6 +152,23 @@
       background: var(--card2);
     }
     .cliente-row.open .contas-detail { display: block; }
+
+    .alert-outros {
+      margin: 0 var(--ds-space-5) 0;
+      padding: 8px 12px;
+      background: var(--ds-warning-soft);
+      border-left: 3px solid var(--ds-warning);
+      border-radius: var(--ds-radius-sm);
+      font-size: var(--ds-text-xs);
+      color: var(--ds-warning);
+    }
+    .cliente-row .alert-outros { margin-bottom: 10px; }
+    .outros-detalhe { margin-top: 14px; }
+    .outros-titulo {
+      font-size: var(--ds-text-xs); font-weight: 700;
+      color: var(--t2); text-transform: uppercase; letter-spacing: .04em;
+      margin-bottom: 6px;
+    }
     table.contas { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
     table.contas th {
       text-align: left; padding: 8px 10px;
@@ -276,6 +293,12 @@
             </select>
           </div>
           <div class="filter">
+            <label>Mês emissão</label>
+            <select id="selMesEmissao">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="filter">
             <label>Faixa</label>
             <select id="selFaixa">
               <option value="">Todas</option>
@@ -376,12 +399,16 @@
     list.innerHTML = `<div class="loading">Buscando contas em aberto no Tiny. Pode levar alguns segundos…</div>`;
     try {
       const unit = document.getElementById("selUnit").value || "all";
-      const r = await fetch(`/master/api/inadimplencia?unit=${encodeURIComponent(unit)}`, { cache: "no-store" });
+      const mes  = document.getElementById("selMesEmissao").value || "";
+      const qs = new URLSearchParams({ unit });
+      if (mes) qs.set("mes_emissao", mes);
+      const r = await fetch(`/master/api/inadimplencia?${qs.toString()}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || "erro");
       state.clientes = j.clientes || [];
       state.por_faixa = j.por_faixa || {};
       state.total_geral = j.total_geral || 0;
+      populateMesEmissao();
       renderFaixas();
       renderLista();
       document.getElementById("totalGeral").textContent = brl(j.total_geral);
@@ -392,6 +419,25 @@
       btn.disabled = false;
       btn.textContent = "Atualizar";
     }
+  }
+
+  function populateMesEmissao() {
+    const sel = document.getElementById("selMesEmissao");
+    const current = sel.value;
+    const meses = new Set();
+    state.clientes.forEach(c => {
+      (c.contas || []).forEach(ct => { if (ct.mes_emissao) meses.add(ct.mes_emissao); });
+      (c.outros_meses || []).forEach(m => meses.add(m.mes));
+    });
+    const ordenados = Array.from(meses).sort().reverse();
+    if (!ordenados.length) return; // nao mexe se nao tem dado
+    const fmt = m => {
+      const [y, mm] = m.split("-");
+      const nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      return `${nomes[parseInt(mm, 10) - 1]}/${y}`;
+    };
+    sel.innerHTML = `<option value="">Todos</option>` +
+      ordenados.map(m => `<option value="${m}" ${m === current ? "selected" : ""}>${fmt(m)}</option>`).join("");
   }
 
   function renderFaixas() {
@@ -463,18 +509,49 @@
         `;
       }).join("");
 
+      // Aviso de outros meses (so quando ha filtro de mes_emissao)
+      let alertOutros = "";
+      let detalheOutros = "";
+      if ((c.outros_count || 0) > 0) {
+        const nomesMes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+        const fmtMes = m => { const [y, mm] = m.split("-"); return `${nomesMes[parseInt(mm, 10) - 1]}/${y}`; };
+        alertOutros = `
+          <div class="alert-outros">
+            ⚠️ Também tem <strong>${brl(c.outros_total)}</strong> em <strong>${c.outros_count} conta${c.outros_count === 1 ? "" : "s"}</strong> de outros meses
+          </div>
+        `;
+        detalheOutros = `
+          <div class="outros-detalhe">
+            <div class="outros-titulo">Outros meses em aberto (não aplicados no filtro atual):</div>
+            <table class="contas">
+              <thead><tr><th>Mês</th><th class="num">Qtd</th><th class="num">Total</th></tr></thead>
+              <tbody>
+                ${(c.outros_meses || []).map(m => `
+                  <tr>
+                    <td>${escHtml(fmtMes(m.mes))}</td>
+                    <td class="num">${m.count}</td>
+                    <td class="num">${brl(m.total)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
       return `
         <div class="cliente-row" data-idx="${idx}">
           <div class="cliente-main">
             <div>
               <div class="cliente-nome">${escHtml(c.cliente_nome)}</div>
-              <div class="cliente-sub">${escHtml(c.unit_nome)}</div>
+              <div class="cliente-sub">${escHtml(c.unit_nome)}${alertOutros ? " · tem outros meses em aberto" : ""}</div>
             </div>
             <div class="cliente-total">${brl(c.total_devido)}</div>
             <div class="cliente-contas">${c.qtd_contas} conta${c.qtd_contas === 1 ? "" : "s"}</div>
             <div class="cliente-atraso">${c.max_dias_atraso}d atraso</div>
             <div><span class="faixa-tag f-${c.pior_faixa === 'aguardando' ? 'aguard' : c.pior_faixa.replace('_','-')}">${faixaMeta.label}</span></div>
           </div>
+          ${alertOutros}
           <div class="contas-detail">
             <table class="contas">
               <thead>
@@ -489,6 +566,7 @@
               </thead>
               <tbody>${contasHtml}</tbody>
             </table>
+            ${detalheOutros}
           </div>
         </div>
       `;
@@ -527,6 +605,8 @@
   });
   document.getElementById("selFaixa").addEventListener("change", renderLista);
   document.getElementById("selOrdem").addEventListener("change", renderLista);
+  document.getElementById("selMesEmissao").addEventListener("change", atualizar);  // re-fetch porque backend filtra
+  document.getElementById("selUnit").addEventListener("change", () => { /* so aplica no proximo 'Atualizar' */ });
   let deb;
   document.getElementById("filtroQ").addEventListener("input", () => {
     clearTimeout(deb); deb = setTimeout(renderLista, 250);
