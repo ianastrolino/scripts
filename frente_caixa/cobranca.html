@@ -133,6 +133,7 @@
       text-transform: uppercase; letter-spacing: .04em;
       text-align: center;
     }
+    .f-a-vencer { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
     .f-aguard  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .f-recente { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
     .f-atraso  { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
@@ -313,6 +314,10 @@
             <label>Buscar</label>
             <input type="text" id="filtroQ" placeholder="cliente ou nº doc" autocomplete="off">
           </div>
+          <div class="filter" style="cursor:pointer" title="Quando marcado, esconde contas que ainda não venceram (dias de atraso ≤ 0)">
+            <input type="checkbox" id="chkSoVencidas" checked style="accent-color: var(--ds-accent-600); cursor:pointer">
+            <label for="chkSoVencidas" style="cursor:pointer">Só vencidas</label>
+          </div>
           <div class="filter">
             <label>Ordenar por</label>
             <select id="selOrdem">
@@ -371,6 +376,7 @@
   const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const FAIXA_LABELS = {
+    a_vencer:   { label: "A vencer",   help: "ainda no prazo", color: "var(--ds-ink-muted)" },
     aguardando: { label: "Aguardando", help: "0–15 dias", color: "var(--f-aguard)" },
     recente:    { label: "Recente",    help: "16–30 dias", color: "var(--f-recente)" },
     em_atraso:  { label: "Em atraso",  help: "31–60 dias", color: "var(--f-atraso)" },
@@ -400,8 +406,10 @@
     try {
       const unit = document.getElementById("selUnit").value || "all";
       const mes  = document.getElementById("selMesEmissao").value || "";
+      const soVencidas = document.getElementById("chkSoVencidas").checked;
       const qs = new URLSearchParams({ unit });
       if (mes) qs.set("mes_emissao", mes);
+      qs.set("apenas_vencidas", soVencidas ? "1" : "0");
       const r = await fetch(`/master/api/inadimplencia?${qs.toString()}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || "erro");
@@ -613,6 +621,7 @@
   document.getElementById("selFaixa").addEventListener("change", renderLista);
   document.getElementById("selOrdem").addEventListener("change", renderLista);
   document.getElementById("selMesEmissao").addEventListener("change", atualizar);  // re-fetch porque backend filtra
+  document.getElementById("chkSoVencidas").addEventListener("change", atualizar);  // re-fetch
   document.getElementById("selUnit").addEventListener("change", () => { /* so aplica no proximo 'Atualizar' */ });
   let deb;
   document.getElementById("filtroQ").addEventListener("input", () => {

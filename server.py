@@ -1846,6 +1846,7 @@ def master_api_inadimplencia():
     try:
         unit_filter = (request.args.get("unit") or "all").strip()
         mes_filter  = (request.args.get("mes_emissao") or "").strip()  # AAAA-MM
+        apenas_vencidas = (request.args.get("apenas_vencidas") or "1").strip() not in ("0", "false", "no")
         units_iter = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
@@ -1890,6 +1891,9 @@ def master_api_inadimplencia():
                 faixa = _classificar_inadimplencia_faixa(dias_atraso)
                 valor = float(c.get("saldo") or c.get("valor") or 0)
                 if valor <= 0:
+                    continue
+                # Exclui contas que ainda nao venceram quando filtro estiver ativo (default).
+                if apenas_vencidas and dias_atraso <= 0:
                     continue
                 mes_emi = f"{emi.year:04d}-{emi.month:02d}"
                 # Agrega por cliente
