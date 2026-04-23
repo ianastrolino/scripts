@@ -865,12 +865,19 @@ class TinyImporter:
                 self.contact_cache[key] = mapped
                 return mapped
 
-        # Se CPF fornecido, busca por cpf_cnpj primeiro (mais preciso)
+        # Se CPF fornecido, busca por cpf_cnpj primeiro (mais preciso).
+        # IMPORTANTE: a API do Tiny v3 nao respeita o filtro cpf_cnpj — devolve uma
+        # lista generica de contatos com cpf null ou cpf diferente. Por isso filtramos
+        # LOCALMENTE: so aceita item cujo cpfCnpj bate EXATAMENTE com o CPF pedido.
         if cpf_digits:
             result = self.client.request("GET", "contatos", params={"cpf_cnpj": cpf_digits, "limit": 10})
-            items = result.get("itens", [])
-            if items:
-                contact_id = int(items[0]["id"])
+            items = result.get("itens", []) or []
+            matched = [
+                i for i in items
+                if "".join(c for c in str(i.get("cpfCnpj") or i.get("cpf_cnpj") or "") if c.isdigit()) == cpf_digits
+            ]
+            if matched:
+                contact_id = int(matched[0]["id"])
                 with self._lock:
                     self.contact_cache[key] = contact_id
                 return contact_id
