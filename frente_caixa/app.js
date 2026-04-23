@@ -758,7 +758,7 @@ async function conferirComPDV() {
   const temPlanilha = state.records.some((r) => !r.pdvExtra);
   const planilhaRecords = state.records
     .filter((r) => !r.pdvExtra)
-    .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp }));
+    .map((r) => ({ id: r.id, placa: r.placa, servico: r.servico, preco: r.preco, fp: r.fp, data: r.data }));
   try {
     const result = await apiFetch(`${apiBase}/api/caixa/conferir`, {
       method: "POST",
