@@ -127,16 +127,18 @@ function renderFechamentoTarja() {
   if (!tarja) return;
   if (!state.fechado) {
     tarja.style.display = "none";
+    document.body.classList.remove("caixa-travado");
     return;
   }
   tarja.style.display = "";
+  document.body.classList.add("caixa-travado");
   const fech = state.fechamento || {};
   const hora = fech.fechado_em ? new Date(fech.fechado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
-  const por = fech.fechado_por ? ` por ${fech.fechado_por}` : "";
+  const por = fech.fechado_por ? ` · por ${fech.fechado_por}` : "";
   const titleEl = document.getElementById("fechamentoTarjaTitle");
   const subEl = document.getElementById("fechamentoTarjaSub");
-  if (titleEl) titleEl.textContent = "Caixa fechado — enviado ao Tiny às " + hora;
-  if (subEl) subEl.textContent = `Novos lançamentos, edições e exclusões exigem PIN master${por}. O caixa abre vazio amanhã.`;
+  if (titleEl) titleEl.textContent = "Caixa conferido e enviado ao Tiny";
+  if (subEl) subEl.textContent = `Fechamento registrado às ${hora}${por}`;
 }
 
 async function reabrirCaixaComPin() {
