@@ -160,6 +160,40 @@
       color: var(--ds-ink-muted); margin-bottom: var(--ds-space-3);
     }
 
+    /* ── Por forma de pagamento ─────────────────────────── */
+    .fp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: var(--ds-space-3);
+    }
+    .fp-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      position: relative; overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .fp-card::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 4px; height: 100%; background: var(--fp-color, var(--ds-accent-600));
+    }
+    .fp-card .fp-label {
+      font-size: var(--ds-text-xs); font-weight: 700;
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: .04em; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .fp-card .fp-value {
+      font-size: var(--ds-text-lg); font-weight: 800;
+      color: var(--t1); font-variant-numeric: tabular-nums;
+    }
+    .fp-card .fp-count {
+      font-size: 11px; color: var(--ds-ink-subtle); margin-top: 2px;
+    }
+    .fp-card .fp-pct {
+      font-size: 11px; color: var(--ds-ink-muted); margin-top: 2px;
+      font-weight: 600;
+    }
+
     /* ── Comparativo por unidade ─────────────────────────── */
     .unidade-grid {
       display: grid;
@@ -423,6 +457,14 @@
         </div>
       </div>
 
+      <!-- Por forma de pagamento -->
+      <div class="g-section" id="secaoFp">
+        <div class="g-section-title">Por forma de pagamento</div>
+        <div class="fp-grid" id="fpGrid">
+          <div class="g-loading">Carregando…</div>
+        </div>
+      </div>
+
       <!-- Comparativo por unidade -->
       <div class="g-section" id="secaoUnidades">
         <div class="g-section-title">Comparativo por unidade</div>
@@ -627,6 +669,7 @@
       if (data.unidades) populaSelUnit(data.unidades);
 
       renderResumo(data.resumo);
+      renderFp(data.resumo);
       renderUnidades(data.por_unidade, data.unit_filter);
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
@@ -730,6 +773,39 @@
         <div class="r-value">${t.val}</div>
         ${t.sub ? `<div class="r-sub">${t.sub}</div>` : ""}
       </div>`).join("");
+  }
+
+  // ── Render: por forma de pagamento ─────────────────────
+  function renderFp(r) {
+    const grid = document.getElementById("fpGrid");
+    const total = Number(r.total) || 0;
+    const fps = [
+      { key: "dinheiro", label: "Dinheiro", color: "#16a34a" },
+      { key: "debito",   label: "Débito",   color: "#2563eb" },
+      { key: "credito",  label: "Crédito",  color: "#7c3aed" },
+      { key: "pix",      label: "PIX",      color: "#0891b2" },
+      { key: "faturado", label: "Faturado", color: "#d97706" },
+      { key: "detran",   label: "DETRAN",   color: "#be185d" },
+    ];
+    const items = fps
+      .map(fp => ({ ...fp, val: Number(r[fp.key]) || 0 }))
+      .filter(fp => fp.val > 0);
+
+    if (!items.length) {
+      grid.innerHTML = `<div class="g-empty" style="grid-column:1/-1">Nenhum envio no período.</div>`;
+      return;
+    }
+
+    grid.innerHTML = items.map(fp => {
+      const pct = total > 0 ? ((fp.val / total) * 100).toFixed(1) : "0.0";
+      return `
+        <div class="fp-card" style="--fp-color: ${fp.color}">
+          <div class="fp-label">${fp.label}</div>
+          <div class="fp-value">${brl(fp.val)}</div>
+          <div class="fp-pct">${pct}% do total</div>
+        </div>
+      `;
+    }).join("");
   }
 
   // ── Render: comparativo por unidade ────────────────────
