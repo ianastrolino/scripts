@@ -140,24 +140,27 @@ function renderFechamentoTarja() {
   if (subEl) subEl.textContent = `enviado ao Tiny às ${hora} · alterações exigem PIN`;
 }
 
-async function reabrirCaixaComPin() {
-  const pin = prompt("PIN master para reabrir o caixa do dia:");
-  if (!pin) return;
-  try {
+function reabrirCaixaComPin() {
+  document.getElementById("pinModalTitle").textContent = "Reabrir caixa do dia";
+  const hora = (state.fechamento && state.fechamento.fechado_em)
+    ? new Date(state.fechamento.fechado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : "—";
+  document.getElementById("pinModalDesc").textContent =
+    `Caixa fechado às ${hora}. Informe o PIN master para liberar novos lançamentos.`;
+  document.getElementById("pinInput").value = "";
+  document.getElementById("pinError").textContent = "";
+  document.getElementById("pinModal").classList.add("open");
+  setTimeout(() => document.getElementById("pinInput").focus(), 50);
+
+  state.pinCallback = async (pin) => {
     const res = await apiFetch(`${apiBase}/api/caixa/reabrir`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pin }),
     });
-    if (!res.success) {
-      alert("Erro: " + (res.error || "Falha ao reabrir."));
-      return;
-    }
-    alert("Caixa reaberto. Lançamentos liberados.");
+    if (!res.success) throw new Error(res.error || "Falha ao reabrir.");
     await carregarEstado();
-  } catch (e) {
-    if (e.message !== "session_expired") alert("Erro: " + e.message);
-  }
+  };
 }
 
 // ── Render tabela ─────────────────────────────────────────────────────────────
@@ -508,19 +511,15 @@ async function lancar() {
       body: JSON.stringify(payload),
     });
 
-    // Caixa fechado — pede PIN e reenvia com o PIN junto
+    // Caixa fechado — direciona o usuario ao botao 'Reabrir com PIN' da tarja
+    // (evita fluxo paralelo: o caixa deve ser reaberto de forma explicita antes
+    // de aceitar lancamentos).
     if (!res.success && res.reason === "caixa_fechado") {
-      const pin = prompt("Caixa do dia fechado (enviado ao Tiny).\nInforme o PIN master para lançar mesmo assim:");
-      if (!pin) {
-        msg.textContent = "Lançamento cancelado — caixa fechado.";
-        btn.disabled = false;
-        return;
-      }
-      res = await apiFetch(`${apiBase}/api/caixa/lancar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, pin }),
-      });
+      msg.style.color = "var(--red)";
+      msg.textContent = "Caixa fechado. Clique em 'Reabrir com PIN' no topo antes de lançar.";
+      btn.disabled = false;
+      await carregarEstado();  // atualiza tarja visual
+      return;
     }
 
     if (!res.success) {
