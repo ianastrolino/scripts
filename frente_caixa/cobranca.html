@@ -421,23 +421,30 @@
     }
   }
 
+  function fmtMesLabel(m) {
+    const [y, mm] = m.split("-");
+    const nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    return `${nomes[parseInt(mm, 10) - 1]}/${y}`;
+  }
+
   function populateMesEmissao() {
     const sel = document.getElementById("selMesEmissao");
     const current = sel.value;
+    // Une meses vindos do backend (se tiver) com os ultimos 24 meses default,
+    // pra usuario poder escolher um mes antes mesmo de clicar Atualizar.
     const meses = new Set();
     state.clientes.forEach(c => {
       (c.contas || []).forEach(ct => { if (ct.mes_emissao) meses.add(ct.mes_emissao); });
       (c.outros_meses || []).forEach(m => meses.add(m.mes));
     });
+    const hoje = new Date();
+    for (let i = 0; i < 24; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      meses.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
     const ordenados = Array.from(meses).sort().reverse();
-    if (!ordenados.length) return; // nao mexe se nao tem dado
-    const fmt = m => {
-      const [y, mm] = m.split("-");
-      const nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-      return `${nomes[parseInt(mm, 10) - 1]}/${y}`;
-    };
     sel.innerHTML = `<option value="">Todos</option>` +
-      ordenados.map(m => `<option value="${m}" ${m === current ? "selected" : ""}>${fmt(m)}</option>`).join("");
+      ordenados.map(m => `<option value="${m}" ${m === current ? "selected" : ""}>${fmtMesLabel(m)}</option>`).join("");
   }
 
   function renderFaixas() {
@@ -613,6 +620,7 @@
   });
 
   loadUnits();
+  populateMesEmissao();  // popula com ultimos 24 meses ja na abertura
 </script>
 
 </body>
