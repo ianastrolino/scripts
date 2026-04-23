@@ -399,7 +399,34 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
             )
             return True
         except sqlite3.IntegrityError:
-            return False  # UNIQUE violation — ja tinha sido gravado
+            # Ja existia — atualiza campos que vieram preenchidos agora.
+            # Guard: so sobrescreve se o novo row tem dado; nao apaga dado bom com vazio.
+            sets = []
+            params = {"unit": row["unit"], "chave": row["chave_deduplicacao"]}
+            for col in ("data_lancamento", "placa", "cliente", "servico", "fp", "arquivo", "resposta_tiny", "erro"):
+                val = row.get(col, "")
+                if val:
+                    sets.append(f"{col}=:{col}")
+                    params[col] = val
+            if float(row.get("valor", 0) or 0) > 0:
+                sets.append("valor=:valor")
+                params["valor"] = row["valor"]
+            if row.get("linha"):
+                sets.append("linha=:linha")
+                params["linha"] = row["linha"]
+            if row.get("status"):
+                sets.append("status=:status")
+                params["status"] = row["status"]
+            if row.get("timestamp"):
+                sets.append("timestamp=:timestamp")
+                params["timestamp"] = row["timestamp"]
+            if sets:
+                conn.execute(
+                    "UPDATE envios_tiny SET " + ", ".join(sets) +
+                    " WHERE unit=:unit AND chave_deduplicacao=:chave",
+                    params,
+                )
+            return False
 
 
 def has_envio_tiny(unit: str, unit_dir: Path, chave_deduplicacao: str) -> bool:
