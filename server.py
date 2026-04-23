@@ -797,6 +797,20 @@ _CATEGORIAS_POR_UNIDADE: dict[str, dict[str, int]] = {
         "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO": 897968392,
         "TAXA DE VISITA":                          897968393,
     },
+    "mooca": {
+        "VISTORIA CAUTELAR":                       747861717,
+        "LAUDO DE TRANSFERENCIA":                  747861718,
+        "LAUDO DE VERIFICACAO":                    747861719,
+        "LAUDO CAUTELAR VERIFICACAO":              747861719,
+        "CAUTELAR COM ANALISE":                    747861719,
+        "CAUTELAR COM ANALISE DE PINTURA":         747861719,
+        "REVISTORIA":                              757397501,
+        "BAIXA PERMANENTE":                        774162345,
+        "CONSULTA GRAVAME":                        786613890,
+        "EMISSAO CRLV":                            747861715,
+        "PESQUISA AVULSA":                         747861721,
+        "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO": 747861714,
+    },
 }
 
 
