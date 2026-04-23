@@ -1236,20 +1236,29 @@ def master_api_bi_sync_historico():
         def _br(d: dt.date) -> str:
             return d.strftime("%d/%m/%Y")
 
+        # Itera dia a dia — Tiny rejeita ranges longos com 400 quando o
+        # volume ultrapassa o limite interno ("seja mais especifico").
         todos: list[dict] = []
-        offset = 0
-        limit  = 100
-        while True:
-            params = {
-                "limit": limit, "offset": offset,
-                "dataInicial": _br(data_ini), "dataFinal": _br(data_fim),
-            }
-            resp = client.request("GET", "contas-receber", params=params)
-            page = resp.get("itens", [])
-            todos.extend(page)
-            if len(page) < limit:
-                break
-            offset += limit
+        d = data_ini
+        while d <= data_fim:
+            offset = 0
+            limit  = 100
+            while True:
+                params = {
+                    "limit": limit, "offset": offset,
+                    "dataInicial": _br(d), "dataFinal": _br(d),
+                }
+                try:
+                    resp = client.request("GET", "contas-receber", params=params)
+                except Exception as exc:
+                    app.logger.warning("[bi.sync] falha dia=%s: %s", d, exc)
+                    break
+                page = resp.get("itens", [])
+                todos.extend(page)
+                if len(page) < limit:
+                    break
+                offset += limit
+            d += dt.timedelta(days=1)
 
         # GET detalhe em paralelo pra pegar categoria (lista nao retorna)
         from concurrent.futures import ThreadPoolExecutor
