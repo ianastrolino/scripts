@@ -4147,11 +4147,11 @@ def api_gerencial_historico(unit: str):
         unit_dir = _unit_state_dir(unit)
         today    = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
 
-        # Corte: envios_tiny de date_from até min(date_to, ontem). PDV só do dia de hoje.
-        # Se date_to < hoje: usa todo o range em envios_tiny, sem PDV.
-        # Se date_to >= hoje: envios até ontem + PDV de hoje.
+        # Fonte: envios_tiny cobre todo o range (inclui hoje se tiver sido enviado).
+        # PDV de hoje eh adicionado por cima com dedupe (placa+servico+valor+fp),
+        # pra capturar lancamentos que ainda nao foram enviados sem duplicar
+        # os que ja estao em envios_tiny.
         incluir_hoje = (date_to >= today >= date_from)
-        envios_ate = min(date_to, (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()) if incluir_hoje else date_to
 
         def _norm_fp(fp: str) -> str:
             f = (fp or "").strip().lower()
@@ -4160,20 +4160,31 @@ def api_gerencial_historico(unit: str):
             return f
 
         registros: list[dict] = []
-        if envios_ate >= date_from:
-            envios = _db_load_envios_range(unit, unit_dir, date_from, envios_ate)
-            for e in envios:
-                registros.append({
-                    "data":    e.get("data_lancamento") or "",
-                    "placa":   e.get("placa", ""),
-                    "cliente": e.get("cliente", ""),
-                    "servico": e.get("servico", ""),
-                    "valor":   float(e.get("valor", 0) or 0),
-                    "fp":      _norm_fp(e.get("fp", "")),
-                    "fonte":   "tiny",
-                })
+        chaves_tiny: set[tuple] = set()
+        envios = _db_load_envios_range(unit, unit_dir, date_from, date_to)
+        for e in envios:
+            placa = (e.get("placa") or "").upper().strip()
+            servico = (e.get("servico") or "").upper().strip()
+            valor = float(e.get("valor", 0) or 0)
+            fp = _norm_fp(e.get("fp", ""))
+            registros.append({
+                "data":    e.get("data_lancamento") or "",
+                "placa":   placa,
+                "cliente": e.get("cliente", ""),
+                "servico": servico,
+                "valor":   valor,
+                "fp":      fp,
+                "fonte":   "tiny",
+            })
+            chaves_tiny.add((placa, servico, round(valor, 2), fp))
         if incluir_hoje:
             for lc in _db_load_range(unit, unit_dir, today, today):
+                placa = (lc.get("placa") or "").upper().strip()
+                servico = (lc.get("servico") or "").upper().strip()
+                valor = float(lc.get("valor", 0) or 0)
+                fp = (lc.get("fp") or "").lower().strip()
+                if (placa, servico, round(valor, 2), fp) in chaves_tiny:
+                    continue  # ja enviado, nao duplica
                 registros.append({**lc, "fonte": "pdv"})
 
         fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran", "avista")
@@ -4235,7 +4246,7 @@ def api_gerencial_historico(unit: str):
             "success":  True,
             "unidade":  ud.get("nome", unit),
             "periodo":  {"from": date_from, "to": date_to},
-            "fonte":    {"tiny_ate": envios_ate, "pdv_hoje": incluir_hoje, "hoje": today},
+            "fonte":    {"tiny_ate": date_to, "pdv_hoje": incluir_hoje, "hoje": today},
             "resumo": {
                 "total":        round(total, 2),
                 "avista":       round(avista, 2),
