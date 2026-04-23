@@ -295,6 +295,20 @@
 
   load();
   setInterval(load, 60_000);
+
+  // Fecha qualquer <details> aberto ao clicar fora dele
+  document.addEventListener("click", (ev) => {
+    document.querySelectorAll("details.payload-details[open]").forEach(d => {
+      if (!d.contains(ev.target)) d.removeAttribute("open");
+    });
+  });
+
+  // ESC tambem fecha
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") {
+      document.querySelectorAll("details.payload-details[open]").forEach(d => d.removeAttribute("open"));
+    }
+  });
 </script>
 
 </body>
