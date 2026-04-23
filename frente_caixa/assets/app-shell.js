@@ -85,6 +85,7 @@
     auditoria:   _svg('<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/>'),
     aprovacoes:  _svg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
     categorias:  _svg('<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5"/>'),
+    cobranca:    _svg('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 14h4"/><path d="M14 14h4"/>'),
   };
   const renderIcon = (key) => ICONS[key] || `<span class="sb-item-emoji">•</span>`;
 
@@ -147,6 +148,7 @@
         { id: "usuarios",            label: "Usuários",             icon: "usuariosCog", href: "/master/usuarios" },
         { id: "auditoria",           label: "Auditoria",            icon: "auditoria",  href: "/master/auditoria" },
         { id: "aprovacoes",          label: "Aprovações",           icon: "aprovacoes", href: "/master/aprovacoes", requires: "master", dynamicBadge: "pendingApprovals" },
+        { id: "cobranca",            label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
         { id: "categorias",          label: "Categorias",           icon: "categorias", href: "/master/categorias" },
         { id: "unidades",            label: "Unidades",             icon: "unidades",   disabled: true, badge: "Em breve" },
       ],

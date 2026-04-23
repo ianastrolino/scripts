@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Cobrança</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+      --f-aguard: #eab308;
+      --f-recente: #f59e0b;
+      --f-atraso: #ea580c;
+      --f-vencido: #dc2626;
+      --f-critico: #7c3aed;
+    }
+
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .filters { display: flex; gap: var(--ds-space-3); flex-wrap: wrap; }
+    .filter {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); padding: 6px 10px;
+    }
+    .filter label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .filter select, .filter input {
+      border: none; background: transparent; font: inherit;
+      font-size: var(--ds-text-sm); color: var(--t1); outline: none; min-width: 140px;
+    }
+    .toolbar-actions { display: flex; gap: 8px; }
+    .btn, .btn-primary, .btn-secondary {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 8px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--border); cursor: pointer;
+      background: var(--card); color: var(--t1);
+    }
+    .btn-primary { background: var(--ds-accent-600); color: #fff; border-color: var(--ds-accent-600); }
+    .btn-primary:hover { background: var(--ds-accent-700); }
+    .btn-secondary:hover { background: var(--card2); }
+
+    .faixa-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .faixa-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      position: relative; overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .faixa-card::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 4px; height: 100%; background: var(--faixa-color, var(--ds-ink-muted));
+    }
+    .faixa-label {
+      font-size: var(--ds-text-xs); font-weight: 700;
+      color: var(--t2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+    }
+    .faixa-value {
+      font-size: var(--ds-text-lg); font-weight: 800;
+      color: var(--t1); font-variant-numeric: tabular-nums;
+    }
+    .faixa-count { font-size: 11px; color: var(--t3); margin-top: 2px; }
+    .faixa-help  { font-size: 10px; color: var(--t3); margin-top: 2px; }
+
+    .total-strip {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      margin-bottom: var(--ds-space-4);
+      display: flex; align-items: center; gap: var(--ds-space-5);
+    }
+    .total-big {
+      font-size: var(--ds-text-2xl); font-weight: 800; color: var(--t1);
+      font-variant-numeric: tabular-nums;
+    }
+    .total-label { font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2); text-transform: uppercase; letter-spacing: .04em; }
+
+    .clientes-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .clientes-head {
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .clientes-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .clientes-meta { font-size: var(--ds-text-sm); color: var(--t3); }
+
+    .cliente-row {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background var(--ds-duration-2) var(--ds-ease);
+    }
+    .cliente-row:last-child { border-bottom: none; }
+    .cliente-row:hover { background: var(--card2); }
+    .cliente-main {
+      padding: var(--ds-space-4) var(--ds-space-5);
+      display: grid;
+      grid-template-columns: 1fr 140px 110px 130px 60px;
+      gap: var(--ds-space-4);
+      align-items: center;
+    }
+    .cliente-nome { font-weight: 700; color: var(--t1); }
+    .cliente-sub  { font-size: 11px; color: var(--t3); margin-top: 2px; }
+    .cliente-total { font-size: var(--ds-text-lg); font-weight: 800; color: var(--t1); font-variant-numeric: tabular-nums; text-align: right; }
+    .cliente-contas { font-size: var(--ds-text-sm); color: var(--t2); text-align: center; }
+    .cliente-atraso { font-size: var(--ds-text-sm); color: var(--t2); text-align: center; font-variant-numeric: tabular-nums; }
+    .faixa-tag {
+      font-size: 10px; font-weight: 700;
+      padding: 3px 8px; border-radius: 999px;
+      text-transform: uppercase; letter-spacing: .04em;
+      text-align: center;
+    }
+    .f-aguard  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .f-recente { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+    .f-atraso  { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .f-vencido { background: #fee2e2; color: #7f1d1d; border: 1px solid #fca5a5; font-weight: 800; }
+    .f-critico { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; font-weight: 800; }
+
+    .chevron {
+      font-size: 14px; color: var(--t3);
+      transition: transform var(--ds-duration-2) var(--ds-ease);
+      text-align: right;
+    }
+    .cliente-row.open .chevron { transform: rotate(90deg); }
+
+    .contas-detail {
+      display: none;
+      padding: 0 var(--ds-space-5) var(--ds-space-4);
+      background: var(--card2);
+    }
+    .cliente-row.open .contas-detail { display: block; }
+    table.contas { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    table.contas th {
+      text-align: left; padding: 8px 10px;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--t3); border-bottom: 1px solid var(--border);
+    }
+    table.contas td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--t1); }
+    table.contas tr:last-child td { border-bottom: none; }
+    table.contas td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .empty { padding: 60px 20px; text-align: center; color: var(--t3); font-size: var(--ds-text-base); }
+    .loading { padding: 40px 20px; text-align: center; color: var(--ds-ink-muted); }
+    .hint {
+      background: var(--card); border: 1px solid var(--ds-warning);
+      border-left-width: 4px;
+      padding: 10px 14px; border-radius: var(--ds-radius-md);
+      font-size: var(--ds-text-xs); color: var(--t2); margin-bottom: var(--ds-space-4);
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Cobrança</h1>
+        <p class="app-page-sub">Contas a receber em aberto no Tiny, classificadas por tempo de atraso. Regra: clientes têm 15 dias de tolerância após vencimento antes de entrar na régua.</p>
+      </div>
+
+      <div class="hint">Atualização: clique em "Atualizar" pra buscar a versão mais recente do Tiny. A consulta leva alguns segundos porque paga por unidade.</div>
+
+      <div class="toolbar">
+        <div class="filters">
+          <div class="filter">
+            <label>Unidade</label>
+            <select id="selUnit">
+              <option value="all">Todas</option>
+            </select>
+          </div>
+          <div class="filter">
+            <label>Faixa</label>
+            <select id="selFaixa">
+              <option value="">Todas</option>
+              <option value="aguardando">Aguardando (0–15d)</option>
+              <option value="recente">Recente (16–30d)</option>
+              <option value="em_atraso">Em atraso (31–60d)</option>
+              <option value="vencido">Vencido (61–90d)</option>
+              <option value="critico">Crítico (90+d)</option>
+            </select>
+          </div>
+          <div class="filter">
+            <label>Buscar</label>
+            <input type="text" id="filtroQ" placeholder="cliente ou nº doc" autocomplete="off">
+          </div>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" id="btnAtualizar" class="btn-primary">Atualizar</button>
+          <button type="button" id="btnExport" class="btn-secondary">Exportar CSV</button>
+        </div>
+      </div>
+
+      <div class="total-strip">
+        <div>
+          <div class="total-label">Total em aberto</div>
+          <div class="total-big" id="totalGeral">R$ 0,00</div>
+        </div>
+        <div style="flex:1"></div>
+        <div>
+          <div class="total-label">Clientes devedores</div>
+          <div class="total-big" id="totalClientes">0</div>
+        </div>
+      </div>
+
+      <div class="faixa-grid" id="faixaGrid"></div>
+
+      <div class="clientes-wrap">
+        <div class="clientes-head">
+          <div class="clientes-title">Clientes com contas em aberto</div>
+          <div class="clientes-meta" id="clientesMeta">—</div>
+        </div>
+        <div id="clientesList">
+          <div class="empty">Clique em "Atualizar" pra carregar os devedores do Tiny.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "cobranca",
+    breadcrumbs: [{ label: "Rede" }, { label: "Cobrança", current: true }],
+  });
+
+  const state = { clientes: [], por_faixa: {}, total_geral: 0 };
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const FAIXA_LABELS = {
+    aguardando: { label: "Aguardando", help: "0–15 dias", color: "var(--f-aguard)" },
+    recente:    { label: "Recente",    help: "16–30 dias", color: "var(--f-recente)" },
+    em_atraso:  { label: "Em atraso",  help: "31–60 dias", color: "var(--f-atraso)" },
+    vencido:    { label: "Vencido",    help: "61–90 dias", color: "var(--f-vencido)" },
+    critico:    { label: "Crítico",    help: "90+ dias",   color: "var(--f-critico)" },
+  };
+
+  async function loadUnits() {
+    try {
+      const r = await fetch("/master/api/units");
+      const j = await r.json();
+      const sel = document.getElementById("selUnit");
+      (j.units || []).forEach(u => {
+        const o = document.createElement("option");
+        o.value = u.id; o.textContent = u.nome;
+        sel.appendChild(o);
+      });
+    } catch (e) {}
+  }
+
+  async function atualizar() {
+    const btn = document.getElementById("btnAtualizar");
+    const list = document.getElementById("clientesList");
+    btn.disabled = true;
+    btn.textContent = "Buscando no Tiny…";
+    list.innerHTML = `<div class="loading">Buscando contas em aberto no Tiny. Pode levar alguns segundos…</div>`;
+    try {
+      const unit = document.getElementById("selUnit").value || "all";
+      const r = await fetch(`/master/api/inadimplencia?unit=${encodeURIComponent(unit)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "erro");
+      state.clientes = j.clientes || [];
+      state.por_faixa = j.por_faixa || {};
+      state.total_geral = j.total_geral || 0;
+      renderFaixas();
+      renderLista();
+      document.getElementById("totalGeral").textContent = brl(j.total_geral);
+      document.getElementById("totalClientes").textContent = j.clientes_count || 0;
+    } catch (e) {
+      list.innerHTML = `<div class="empty">Erro ao consultar: ${escHtml(e.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Atualizar";
+    }
+  }
+
+  function renderFaixas() {
+    const grid = document.getElementById("faixaGrid");
+    grid.innerHTML = Object.entries(FAIXA_LABELS).map(([key, meta]) => {
+      const data = state.por_faixa[key] || { total: 0, count: 0 };
+      return `
+        <div class="faixa-card" style="--faixa-color: ${meta.color}">
+          <div class="faixa-label">${meta.label}</div>
+          <div class="faixa-value">${brl(data.total)}</div>
+          <div class="faixa-count">${data.count} conta${data.count === 1 ? "" : "s"}</div>
+          <div class="faixa-help">${meta.help}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderLista() {
+    const list = document.getElementById("clientesList");
+    const meta = document.getElementById("clientesMeta");
+    const faixa = document.getElementById("selFaixa").value;
+    const q = document.getElementById("filtroQ").value.trim().toLowerCase();
+
+    let filtered = state.clientes;
+    if (faixa) {
+      filtered = filtered.filter(c => c.contas.some(conta => conta.faixa === faixa));
+    }
+    if (q) {
+      filtered = filtered.filter(c => {
+        const hay = `${c.cliente_nome} ${c.unit_nome} ${c.contas.map(ct => ct.numero_documento).join(" ")}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    meta.textContent = filtered.length === 0 ? "Nenhum cliente"
+                    : filtered.length === 1 ? "1 cliente"
+                    : `${filtered.length} clientes`;
+
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty">Nenhum cliente nesses critérios. ${state.clientes.length ? "Tente limpar os filtros." : "Clique em Atualizar pra carregar."}</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map((c, idx) => {
+      const faixaMeta = FAIXA_LABELS[c.pior_faixa] || FAIXA_LABELS.aguardando;
+      const contasHtml = c.contas.map(ct => {
+        const fm = FAIXA_LABELS[ct.faixa] || FAIXA_LABELS.aguardando;
+        return `
+          <tr>
+            <td>${escHtml(ct.numero_documento || "-")}</td>
+            <td>${escHtml(ct.data_vencimento)}</td>
+            <td>${ct.dias_atraso}d</td>
+            <td><span class="faixa-tag f-${ct.faixa === 'aguardando' ? 'aguard' : ct.faixa.replace('_','-')}">${fm.label}</span></td>
+            <td class="num">${brl(ct.valor)}</td>
+            <td>${escHtml(ct.historico || "")}</td>
+          </tr>
+        `;
+      }).join("");
+
+      return `
+        <div class="cliente-row" data-idx="${idx}">
+          <div class="cliente-main">
+            <div>
+              <div class="cliente-nome">${escHtml(c.cliente_nome)}</div>
+              <div class="cliente-sub">${escHtml(c.unit_nome)}</div>
+            </div>
+            <div class="cliente-total">${brl(c.total_devido)}</div>
+            <div class="cliente-contas">${c.qtd_contas} conta${c.qtd_contas === 1 ? "" : "s"}</div>
+            <div class="cliente-atraso">${c.max_dias_atraso}d atraso</div>
+            <div><span class="faixa-tag f-${c.pior_faixa === 'aguardando' ? 'aguard' : c.pior_faixa.replace('_','-')}">${faixaMeta.label}</span></div>
+          </div>
+          <div class="contas-detail">
+            <table class="contas">
+              <thead>
+                <tr>
+                  <th>Nº Doc</th>
+                  <th>Vencimento</th>
+                  <th>Atraso</th>
+                  <th>Faixa</th>
+                  <th class="num">Valor</th>
+                  <th>Histórico</th>
+                </tr>
+              </thead>
+              <tbody>${contasHtml}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    list.querySelectorAll(".cliente-row").forEach(row => {
+      row.addEventListener("click", e => {
+        row.classList.toggle("open");
+      });
+    });
+  }
+
+  // Wire
+  document.getElementById("btnAtualizar").addEventListener("click", atualizar);
+  document.getElementById("btnExport").addEventListener("click", () => {
+    const unit = document.getElementById("selUnit").value || "all";
+    window.location.href = `/master/api/inadimplencia.csv?unit=${encodeURIComponent(unit)}`;
+  });
+  document.getElementById("selFaixa").addEventListener("change", renderLista);
+  let deb;
+  document.getElementById("filtroQ").addEventListener("input", () => {
+    clearTimeout(deb); deb = setTimeout(renderLista, 250);
+  });
+
+  loadUnits();
+</script>
+
+</body>
+</html>

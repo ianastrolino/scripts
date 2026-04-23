@@ -1792,6 +1792,198 @@ def _classificar_categoria_receita(servico_norm: str) -> str:
     return ""
 
 
+def _classificar_inadimplencia_faixa(dias_atraso: int) -> str:
+    """Regra de cobranca mensal: cliente tem 15 dias de tolerancia apos vencimento."""
+    if dias_atraso <= 0:       return "a_vencer"
+    if dias_atraso <= 15:      return "aguardando"
+    if dias_atraso <= 30:      return "recente"
+    if dias_atraso <= 60:      return "em_atraso"
+    if dias_atraso <= 90:      return "vencido"
+    return "critico"
+
+
+def _fetch_contas_abertas_tiny(unit: str) -> list[dict]:
+    """Puxa do Tiny todas as contas a receber com situacao != 'pago'.
+    Faz paginacao. Retorna lista crua de contas (placa/modelo/cpf nao vem aqui — so historico).
+    """
+    config = _build_unit_config(unit)
+    state_dir = _unit_state_dir(unit)
+    importer = TinyImporter(config, state_dir)
+    client = importer.client
+    todos: list[dict] = []
+    offset = 0
+    limit = 100
+    # Tiny aceita 'situacao' como filtro. Valores "aberto"/"atrasado"/"recebendo" sao os em cobranca.
+    # Deixamos sem filtro e filtramos localmente pra pegar todos status != pago.
+    while True:
+        try:
+            resp = client.request("GET", "contas-receber", params={"limit": limit, "offset": offset, "situacao": "aberto"})
+        except Exception as exc:
+            app.logger.warning("[inadimplencia] falha unit=%s offset=%s: %s", unit, offset, exc)
+            break
+        page = resp.get("itens", []) or []
+        for item in page:
+            if (item.get("situacao") or "").lower() != "pago":
+                todos.append(item)
+        if len(page) < limit:
+            break
+        offset += limit
+        if offset > 10_000:  # circuit breaker pra nao travar em base gigante
+            break
+    return todos
+
+
+@app.route("/master/api/inadimplencia", methods=["GET"])
+@master_view_required
+def master_api_inadimplencia():
+    """Agrega contas em aberto (nao pagas) do Tiny, classificadas por atraso.
+    Params: unit=<slug>|all (default all).
+    Agrupa por cliente (mesmo cliente com N contas vira 1 entrada com lista)."""
+    try:
+        unit_filter = (request.args.get("unit") or "all").strip()
+        units_iter = list(UNITS.keys()) if unit_filter == "all" else (
+            [unit_filter] if unit_filter in UNITS else []
+        )
+        hoje = dt.date.today()
+        por_cliente: dict[str, dict] = {}
+        por_faixa_total: dict[str, float] = {f: 0.0 for f in ("a_vencer", "aguardando", "recente", "em_atraso", "vencido", "critico")}
+        por_faixa_count: dict[str, int] = {f: 0 for f in por_faixa_total}
+        por_unit: dict[str, dict] = {}
+
+        for uid in units_iter:
+            unit_nome = UNITS.get(uid, {}).get("nome", uid)
+            por_unit[uid] = {"nome": unit_nome, "total": 0.0, "count": 0}
+            try:
+                contas = _fetch_contas_abertas_tiny(uid)
+            except Exception as exc:
+                app.logger.warning("[inadimplencia] falha unit=%s: %s", uid, exc)
+                continue
+            for c in contas:
+                cliente_obj = c.get("cliente") or {}
+                cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
+                cliente_id = cliente_obj.get("id") or 0
+                venc_str = c.get("dataVencimento") or c.get("data") or ""
+                try:
+                    # Tiny devolve "DD/MM/AAAA" ou "AAAA-MM-DD"
+                    if "/" in venc_str:
+                        d, m, y = venc_str.split("/")
+                        venc = dt.date(int(y), int(m), int(d))
+                    else:
+                        venc = dt.date.fromisoformat(venc_str[:10])
+                except Exception:
+                    venc = hoje
+                dias_atraso = (hoje - venc).days
+                faixa = _classificar_inadimplencia_faixa(dias_atraso)
+                valor = float(c.get("saldo") or c.get("valor") or 0)
+                if valor <= 0:
+                    continue
+                # Agrega por cliente (mesmo cliente em unidades diferentes vira chaves separadas,
+                # pra nao misturar empresas que existem nas 2 unidades com CNPJs diferentes)
+                key = f"{uid}::{cliente_id}::{cliente_nome}"
+                bucket = por_cliente.setdefault(key, {
+                    "cliente_nome": cliente_nome,
+                    "cliente_id":   cliente_id,
+                    "unit":         uid,
+                    "unit_nome":    unit_nome,
+                    "total_devido": 0.0,
+                    "qtd_contas":   0,
+                    "max_dias_atraso": 0,
+                    "pior_faixa":   "a_vencer",
+                    "contas":       [],
+                })
+                bucket["total_devido"] += valor
+                bucket["qtd_contas"]   += 1
+                if dias_atraso > bucket["max_dias_atraso"]:
+                    bucket["max_dias_atraso"] = dias_atraso
+                    bucket["pior_faixa"] = faixa
+                bucket["contas"].append({
+                    "id":              c.get("id"),
+                    "numero_documento": c.get("numeroDocumento") or "",
+                    "data_vencimento": venc.isoformat(),
+                    "valor":           round(valor, 2),
+                    "historico":       (c.get("historico") or "")[:200],
+                    "dias_atraso":     dias_atraso,
+                    "faixa":           faixa,
+                    "situacao":        c.get("situacao") or "",
+                })
+                por_faixa_total[faixa] += valor
+                por_faixa_count[faixa] += 1
+                por_unit[uid]["total"] += valor
+                por_unit[uid]["count"] += 1
+
+        lista = []
+        for b in por_cliente.values():
+            b["total_devido"] = round(b["total_devido"], 2)
+            b["contas"].sort(key=lambda x: x["data_vencimento"])
+            lista.append(b)
+        lista.sort(key=lambda x: (-x["max_dias_atraso"], -x["total_devido"]))
+
+        for uid in por_unit:
+            por_unit[uid]["total"] = round(por_unit[uid]["total"], 2)
+
+        return _json({
+            "success":       True,
+            "clientes":      lista,
+            "por_faixa":     {f: {"total": round(por_faixa_total[f], 2), "count": por_faixa_count[f]} for f in por_faixa_total},
+            "por_unit":      por_unit,
+            "total_geral":   round(sum(por_faixa_total.values()), 2),
+            "clientes_count": len(lista),
+            "hoje":          hoje.isoformat(),
+        })
+    except Exception as exc:
+        app.logger.exception("[inadimplencia] falha")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/inadimplencia.csv")
+@master_view_required
+def master_api_inadimplencia_csv():
+    """Export CSV linha por conta em aberto, pra cobranca manual coordenada."""
+    import csv, io
+    unit_filter = (request.args.get("unit") or "all").strip()
+    units_iter = list(UNITS.keys()) if unit_filter == "all" else (
+        [unit_filter] if unit_filter in UNITS else []
+    )
+    hoje = dt.date.today()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["unidade", "cliente", "num_documento", "valor", "dt_vencimento", "dias_atraso", "faixa", "situacao", "historico"])
+    for uid in units_iter:
+        unit_nome = UNITS.get(uid, {}).get("nome", uid)
+        try:
+            contas = _fetch_contas_abertas_tiny(uid)
+        except Exception:
+            continue
+        for c in contas:
+            cliente_obj = c.get("cliente") or {}
+            cliente_nome = (cliente_obj.get("nome") or "").strip().upper()
+            venc_str = c.get("dataVencimento") or c.get("data") or ""
+            try:
+                if "/" in venc_str:
+                    d, m, y = venc_str.split("/")
+                    venc = dt.date(int(y), int(m), int(d))
+                else:
+                    venc = dt.date.fromisoformat(venc_str[:10])
+            except Exception:
+                venc = hoje
+            dias_atraso = (hoje - venc).days
+            faixa = _classificar_inadimplencia_faixa(dias_atraso)
+            valor = float(c.get("saldo") or c.get("valor") or 0)
+            if valor <= 0:
+                continue
+            w.writerow([unit_nome, cliente_nome, c.get("numeroDocumento", ""), f"{valor:.2f}".replace(".", ","),
+                        venc.isoformat(), dias_atraso, faixa, c.get("situacao", ""), (c.get("historico") or "")[:300]])
+    resp = Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = f'attachment; filename="inadimplencia_astro_{dt.date.today().isoformat()}.csv"'
+    return resp
+
+
+@app.route("/master/cobranca")
+@master_view_required
+def master_cobranca_page():
+    return _nocache(send_from_directory(UI_DIR, "cobranca.html"))
+
+
 @app.route("/gerencial/api/bi/historico-emitido", methods=["GET"])
 @master_view_required
 def master_api_bi_historico_emitido():
