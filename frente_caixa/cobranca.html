@@ -165,6 +165,80 @@
 
     .empty { padding: 60px 20px; text-align: center; color: var(--t3); font-size: var(--ds-text-base); }
     .loading { padding: 40px 20px; text-align: center; color: var(--ds-ink-muted); }
+
+    /* Cabecalho so aparece no print */
+    .print-header { display: none; }
+
+    @media print {
+      /* Esconde o que nao interessa no PDF */
+      #app-shell .sb-aside,
+      #app-shell .app-appbar,
+      #app-shell .app-backdrop,
+      .app-page-sub,
+      .app-page-eyebrow,
+      .hint,
+      .toolbar,
+      .clientes-head .clientes-meta,
+      .chevron,
+      body > .toast {
+        display: none !important;
+      }
+      /* Mostra cabecalho proprio do PDF */
+      .print-header {
+        display: block;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #000;
+      }
+      .print-header h1 { font-size: 18pt; margin: 0 0 4px; font-weight: 800; }
+      .print-header .meta { font-size: 10pt; color: #555; }
+
+      /* Layout linear */
+      #app-shell, #app-main, .app-content, .app-content-wrap {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+      body { background: #fff !important; color: #000 !important; font-size: 10pt; }
+      .app-page-header { margin-bottom: 12px; }
+      .app-page-title { font-size: 14pt; }
+
+      /* Cards de faixa: 6 em linha bem compactos */
+      .faixa-grid {
+        grid-template-columns: repeat(6, 1fr) !important;
+        gap: 6px !important;
+        margin-bottom: 10px !important;
+      }
+      .faixa-card {
+        box-shadow: none !important;
+        padding: 8px !important;
+        page-break-inside: avoid;
+      }
+      .faixa-value { font-size: 11pt !important; }
+
+      .total-strip { padding: 10px 14px !important; margin-bottom: 12px !important; }
+      .total-big   { font-size: 16pt !important; }
+
+      /* Clientes: expande tudo */
+      .cliente-row .contas-detail { display: block !important; padding-bottom: 10px !important; }
+      .cliente-row {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border-bottom: 1px solid #999 !important;
+      }
+      .cliente-main { padding: 8px 12px !important; grid-template-columns: 1fr 110px 80px 90px 80px !important; gap: 8px !important; }
+      .cliente-nome { font-weight: 700; }
+
+      table.contas { font-size: 9pt !important; }
+      .clientes-wrap, .faixa-card, .total-strip { border-radius: 4px !important; }
+
+      /* Cores de faixa: forca impressao de cores de fundo */
+      .faixa-tag, .faixa-card {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
     .hint {
       background: var(--card); border: 1px solid var(--ds-warning);
       border-left-width: 4px;
@@ -180,6 +254,11 @@
 <main id="app-main">
   <div class="app-content">
     <div class="app-content-wrap">
+      <div class="print-header">
+        <h1>Astro Vistorias — Relatório de Inadimplência</h1>
+        <div class="meta" id="printMeta">—</div>
+      </div>
+
       <div class="app-page-header">
         <div class="app-page-eyebrow">Rede Astro</div>
         <h1 class="app-page-title">Cobrança</h1>
@@ -225,6 +304,7 @@
         </div>
         <div class="toolbar-actions">
           <button type="button" id="btnAtualizar" class="btn-primary">Atualizar</button>
+          <button type="button" id="btnPdf" class="btn-secondary" title="Abre o diálogo de impressão — escolha 'Salvar como PDF'">Relatório PDF</button>
           <button type="button" id="btnExport" class="btn-secondary">Exportar CSV</button>
         </div>
       </div>
@@ -426,6 +506,24 @@
   document.getElementById("btnExport").addEventListener("click", () => {
     const unit = document.getElementById("selUnit").value || "all";
     window.location.href = `/master/api/inadimplencia.csv?unit=${encodeURIComponent(unit)}`;
+  });
+
+  document.getElementById("btnPdf").addEventListener("click", () => {
+    if (!state.clientes.length) {
+      alert("Clique em 'Atualizar' antes de gerar o relatório.");
+      return;
+    }
+    // Atualiza cabeçalho do PDF com filtros aplicados e data
+    const unit = document.getElementById("selUnit");
+    const unitTxt = unit.options[unit.selectedIndex]?.text || "Todas";
+    const faixa = document.getElementById("selFaixa");
+    const faixaTxt = faixa.options[faixa.selectedIndex]?.text || "Todas";
+    const hoje = new Date().toLocaleString("pt-BR", { dateStyle: "long", timeStyle: "short" });
+    document.getElementById("printMeta").innerHTML =
+      `Gerado em ${escHtml(hoje)} · Unidade: <strong>${escHtml(unitTxt)}</strong> · Faixa: <strong>${escHtml(faixaTxt)}</strong> · Total em aberto: <strong>${brl(state.total_geral)}</strong>`;
+    // Expande todas as linhas pro print
+    document.querySelectorAll(".cliente-row").forEach(r => r.classList.add("open"));
+    setTimeout(() => window.print(), 50);
   });
   document.getElementById("selFaixa").addEventListener("change", renderLista);
   document.getElementById("selOrdem").addEventListener("change", renderLista);
