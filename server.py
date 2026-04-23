@@ -1217,15 +1217,23 @@ def master_api_bi_sync_historico():
         data = request.get_json(force=True, silent=True) or {}
         unit = (data.get("unit") or "").strip()
         mes  = (data.get("mes")  or "").strip()  # "AAAA-MM"
+        dia  = (data.get("dia")  or "").strip()  # "AAAA-MM-DD" — se passado, sincroniza so esse dia (rapido)
         if unit not in UNITS:
             return _json({"success": False, "error": "unit invalida"}, 400)
-        try:
-            ano, mm = mes.split("-")
-            ano, mm = int(ano), int(mm)
-            data_ini = dt.date(ano, mm, 1)
-            data_fim = (data_ini.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
-        except Exception:
-            return _json({"success": False, "error": "mes invalido (use AAAA-MM)"}, 400)
+        if dia:
+            try:
+                data_ini = dt.date.fromisoformat(dia)
+                data_fim = data_ini
+            except Exception:
+                return _json({"success": False, "error": "dia invalido (use AAAA-MM-DD)"}, 400)
+        else:
+            try:
+                ano, mm = mes.split("-")
+                ano, mm = int(ano), int(mm)
+                data_ini = dt.date(ano, mm, 1)
+                data_fim = (data_ini.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+            except Exception:
+                return _json({"success": False, "error": "mes invalido (use AAAA-MM)"}, 400)
 
         config    = _build_unit_config(unit)
         state_dir = _unit_state_dir(unit)
