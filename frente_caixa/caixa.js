@@ -134,11 +134,10 @@ function renderFechamentoTarja() {
   document.body.classList.add("caixa-travado");
   const fech = state.fechamento || {};
   const hora = fech.fechado_em ? new Date(fech.fechado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—";
-  const por = fech.fechado_por ? ` · por ${fech.fechado_por}` : "";
   const titleEl = document.getElementById("fechamentoTarjaTitle");
   const subEl = document.getElementById("fechamentoTarjaSub");
-  if (titleEl) titleEl.textContent = "Caixa conferido e enviado ao Tiny";
-  if (subEl) subEl.textContent = `Fechamento registrado às ${hora}${por}`;
+  if (titleEl) titleEl.textContent = "Caixa fechado";
+  if (subEl) subEl.textContent = `enviado ao Tiny às ${hora} · alterações exigem PIN`;
 }
 
 async function reabrirCaixaComPin() {
