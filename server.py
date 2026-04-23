@@ -2992,6 +2992,41 @@ Se nao souber responder algo especifico sobre precos ou politicas da empresa, or
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/diagnostico-envios-raw")
+@unit_access_required
+def api_diagnostico_envios_raw(unit: str):
+    """Dump bruto do envios_tiny da unidade (zero filtro), pra descobrir por que
+    o diagnostico com filtro de data nao retorna nada."""
+    try:
+        state_dir = _unit_state_dir(unit)
+        with _db_connect(state_dir) as conn:
+            rows = conn.execute(
+                "SELECT unit, data_lancamento, timestamp, placa, servico, valor, fp, status, erro "
+                "FROM envios_tiny WHERE unit=? "
+                "ORDER BY timestamp DESC LIMIT 50",
+                (unit,),
+            ).fetchall()
+            total = conn.execute("SELECT COUNT(*) as c FROM envios_tiny WHERE unit=?", (unit,)).fetchone()
+            datas = conn.execute(
+                "SELECT DISTINCT data_lancamento, COUNT(*) as n FROM envios_tiny WHERE unit=? GROUP BY data_lancamento",
+                (unit,),
+            ).fetchall()
+            statuses = conn.execute(
+                "SELECT DISTINCT status, COUNT(*) as n FROM envios_tiny WHERE unit=? GROUP BY status",
+                (unit,),
+            ).fetchall()
+        return _json({
+            "unit": unit,
+            "total_rows": total["c"] if total else 0,
+            "datas_distintas": [dict(r) for r in datas],
+            "status_distintos": [dict(r) for r in statuses],
+            "ultimos_50": [dict(r) for r in rows],
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/diagnostico-envios")
 @unit_access_required
 def api_diagnostico_envios(unit: str):
