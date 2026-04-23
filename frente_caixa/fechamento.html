@@ -336,8 +336,31 @@
     .conf-ledger tbody tr { transition: background .1s; }
     .conf-ledger tbody tr:hover td { background: var(--sf2); color: var(--t1); }
     .conf-ledger tbody tr:hover td:first-child { border-left: 2px solid var(--red); padding-left: 10px; }
-    .conf-ledger tbody tr.row-pdv-extra td { background: #fffbf0; }
-    .conf-ledger tbody tr.row-pdv-extra:hover td { background: #fff8e8; }
+    .conf-ledger tbody tr.row-pdv-extra td { background: var(--ds-warning-soft); }
+    .conf-ledger tbody tr.row-pdv-extra:hover td { background: var(--ds-warning-soft); filter: brightness(.97); }
+    .conf-ledger tbody tr.row-ignorada td {
+      opacity: .45;
+      text-decoration: line-through;
+      background: var(--sf2) !important;
+    }
+    .conf-ledger tbody tr.row-ignorada:hover td { opacity: .65; }
+    .btn-ignorar {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      font-size: 10px; font-weight: 600;
+      color: var(--ds-danger);
+      background: transparent;
+      border: 1px solid var(--ds-danger);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-ignorar:hover { background: var(--ds-danger-soft); }
+    .btn-ignorar.reverter {
+      color: var(--ds-success);
+      border-color: var(--ds-success);
+    }
+    .btn-ignorar.reverter:hover { background: var(--ds-success-soft); }
 
     /* Cells */
     .placa-tag {

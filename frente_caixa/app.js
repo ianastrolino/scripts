@@ -420,6 +420,7 @@ function recordIssues(record) {
 }
 
 function isTinySendable(record) {
+  if (record.ignorar) return false;
   return recordIssues(record).length === 0;
 }
 
@@ -436,6 +437,13 @@ function renderTable() {
     const tr = document.createElement("tr");
     const issues = recordIssues(record);
     if (record.pdvExtra) tr.classList.add("row-pdv-extra");
+    if (record.ignorar) tr.classList.add("row-ignorada");
+    // Botao "Ignorar" so pra pdvExtra — evita enviar duplicata por engano
+    const ignoreBtn = record.pdvExtra
+      ? (record.ignorar
+          ? `<button type="button" class="btn-ignorar reverter" data-ignorar-toggle="${record.id}" title="Voltar a incluir no envio">↺ Voltar</button>`
+          : `<button type="button" class="btn-ignorar" data-ignorar-toggle="${record.id}" title="Não enviar este lançamento ao Tiny (útil quando é duplicata da planilha)">✕ Ignorar</button>`)
+      : "";
     tr.innerHTML = `
       <td>${formatDateBr(record.data)}</td>
       <td>
@@ -444,7 +452,7 @@ function renderTable() {
       </td>
       <td>
         <strong>${escHtml(record.tipoServico)}</strong>
-        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}</div>
+        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}${ignoreBtn}</div>
       </td>
       <td><span class="placa-tag">${escHtml(record.placa)}</span></td>
       <td>${escHtml(record.servico)}</td>
@@ -454,6 +462,19 @@ function renderTable() {
       <td>${tinyControl(record, issues)}</td>
     `;
     els.recordsBody.appendChild(tr);
+  });
+
+  // Wire botoes Ignorar/Voltar
+  els.recordsBody.querySelectorAll("[data-ignorar-toggle]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.ignorarToggle;
+      const rec = state.records.find((r) => r.id === id);
+      if (rec) {
+        rec.ignorar = !rec.ignorar;
+        render();
+      }
+    });
   });
 
   els.recordsBody.querySelectorAll("select[data-record]").forEach((select) => {
