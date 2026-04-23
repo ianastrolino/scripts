@@ -5319,37 +5319,57 @@ def _norm_fp_tiny(fp: str) -> str:
 
 
 def _load_unit_range_dual(uid: str, unit_dir, date_from: str, date_to: str, today: str) -> tuple[list[dict], str, bool]:
-    """Carrega lançamentos de uma unidade cruzando envios_tiny (dias passados) + PDV (hoje).
+    """Carrega lançamentos de uma unidade combinando envios_tiny + PDV com dedupe.
 
-    Espelha a regra do gerencial por unidade: dias < hoje vêm de envios_tiny (verdade
-    consolidada pós-envio); hoje vem do PDV (ao vivo, ainda não enviado).
-    Retorna (registros, envios_ate, incluir_hoje).
+    Regra:
+      - envios_tiny (verdade pós-envio) e lido pra todo o range — inclui hoje.
+        Abrange tanto planilha quanto PDV ja enviados.
+      - PDV local tambem e lido pra hoje, mas deduplicado: se um lancamento do
+        PDV ja aparece em envios_tiny (mesma placa+servico+valor+fp), pula — e
+        o lancamento ja foi enviado e contabilizado via Tiny. Assim captura
+        lancamentos de hoje que ainda nao foram enviados, sem duplicar.
     """
     incluir_hoje = (date_to >= today >= date_from)
-    envios_ate   = min(date_to, (dt.date.fromisoformat(today) - dt.timedelta(days=1)).isoformat()) if incluir_hoje else date_to
 
     registros: list[dict] = []
-    if envios_ate >= date_from:
-        try:
-            for e in _db_load_envios_range(uid, unit_dir, date_from, envios_ate):
-                registros.append({
-                    "data":      e.get("data_lancamento") or "",
-                    "placa":     e.get("placa", ""),
-                    "cliente":   e.get("cliente", ""),
-                    "servico":   e.get("servico", ""),
-                    "valor":     float(e.get("valor", 0) or 0),
-                    "fp":        _norm_fp_tiny(e.get("fp", "")),
-                    "timestamp": e.get("timestamp", ""),
-                    "fonte":     "tiny",
-                })
-        except Exception:
-            app.logger.warning("[gerencial-master] falha lendo envios_tiny unit=%s", uid)
+    # Chaves dos envios_tiny pra dedupe contra PDV
+    chaves_tiny: set[tuple] = set()
+
+    try:
+        for e in _db_load_envios_range(uid, unit_dir, date_from, date_to):
+            placa = (e.get("placa") or "").upper().strip()
+            servico = (e.get("servico") or "").upper().strip()
+            valor = float(e.get("valor", 0) or 0)
+            fp = _norm_fp_tiny(e.get("fp", ""))
+            registros.append({
+                "data":      e.get("data_lancamento") or "",
+                "placa":     placa,
+                "cliente":   e.get("cliente", ""),
+                "servico":   servico,
+                "valor":     valor,
+                "fp":        fp,
+                "timestamp": e.get("timestamp", ""),
+                "fonte":     "tiny",
+            })
+            chaves_tiny.add((placa, servico, round(valor, 2), fp))
+    except Exception:
+        app.logger.warning("[gerencial-master] falha lendo envios_tiny unit=%s", uid)
+
     if incluir_hoje:
         try:
             for lc in _db_load_range(uid, unit_dir, today, today):
+                placa = (lc.get("placa") or "").upper().strip()
+                servico = (lc.get("servico") or "").upper().strip()
+                valor = float(lc.get("valor", 0) or 0)
+                fp = (lc.get("fp") or "").lower().strip()
+                if (placa, servico, round(valor, 2), fp) in chaves_tiny:
+                    continue  # ja esta em envios_tiny (enviado) — nao duplica
                 registros.append({**lc, "fonte": "pdv"})
         except Exception:
             app.logger.warning("[gerencial-master] falha lendo PDV unit=%s", uid)
+
+    # envios_ate mantido pra compatibilidade de interface
+    envios_ate = date_to
     return registros, envios_ate, incluir_hoje
 
 
