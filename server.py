@@ -3545,8 +3545,27 @@ def api_caixa_conferir(unit: str):
         data    = request.get_json(force=True, silent=True) or {}
         records = data.get("records", [])
         config  = _build_unit_config(unit)
-        caixa   = _load_caixa_dia(unit)
-        lancamentos = caixa.get("lancamentos", [])
+
+        # Data alvo: prioriza data da planilha (se vier no body) ou a data dos
+        # proprios records; fallback eh hoje. Assim fechamentos retroativos
+        # (importar planilha de ontem hoje) conseguem cruzar com o PDV do dia
+        # correto.
+        target_date = (data.get("data") or "").strip()
+        if not target_date and records:
+            for r in records:
+                d = (r.get("data") or "").strip()
+                if d:
+                    target_date = d[:10]
+                    break
+        unit_dir = _unit_state_dir(unit)
+        if target_date:
+            try:
+                lancamentos = _db_load(unit, unit_dir, target_date)
+            except Exception:
+                lancamentos = []
+        else:
+            caixa = _load_caixa_dia(unit)
+            lancamentos = caixa.get("lancamentos", [])
 
         def _norm_placa(value: str) -> str:
             return re.sub(r"[^A-Z0-9]", "", clean_text(value).upper())
