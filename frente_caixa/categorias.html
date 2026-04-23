@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Categorias</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+    }
+
+    .page-actions {
+      display: flex; justify-content: space-between; align-items: center; gap: var(--ds-space-3);
+      flex-wrap: wrap; margin-bottom: var(--ds-space-4);
+    }
+    .unit-selector {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--ds-radius-md); padding: 6px 12px;
+    }
+    .unit-selector label {
+      font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .unit-selector select {
+      border: none; background: transparent; font: inherit;
+      font-size: var(--ds-text-sm); color: var(--t1);
+      outline: none; min-width: 160px; font-weight: 600;
+    }
+    .page-actions-right { display: flex; gap: 10px; }
+
+    .btn, .btn-primary, .btn-secondary, .btn-danger {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 9px 14px; border-radius: var(--ds-radius-md);
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--t1);
+    }
+    .btn-primary { background: var(--ds-accent-600); color: #fff; border-color: var(--ds-accent-600); }
+    .btn-primary:hover { background: var(--ds-accent-700); }
+    .btn-secondary:hover { background: var(--card2); }
+    .btn-danger { background: var(--ds-danger-soft); border-color: var(--ds-danger); color: var(--ds-danger); }
+    .btn-danger:hover { background: #fee2e2; }
+
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden; box-shadow: var(--ds-shadow-xs);
+    }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); }
+    .table-meta  { font-size: var(--ds-text-sm); color: var(--t3); }
+
+    table.cats { width: 100%; border-collapse: collapse; font-size: var(--ds-text-sm); }
+    table.cats th {
+      text-align: left; padding: 10px var(--ds-space-5);
+      font-size: var(--ds-text-xs); font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--t3); background: var(--card2);
+      border-bottom: 1px solid var(--border);
+    }
+    table.cats td {
+      padding: 10px var(--ds-space-5);
+      border-bottom: 1px solid var(--border); color: var(--t1);
+    }
+    table.cats tr:last-child td { border-bottom: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--t2); font-size: 12px; }
+    .actions-cell { text-align: right; white-space: nowrap; }
+    .actions-cell button {
+      font: inherit; font-size: 12px; font-weight: 600;
+      padding: 5px 10px; margin-left: 6px;
+      border-radius: var(--ds-radius-sm); cursor: pointer;
+      border: 1px solid var(--border); background: var(--card); color: var(--t1);
+    }
+    .actions-cell button.danger { border-color: var(--ds-danger); color: var(--ds-danger); }
+    .actions-cell button:hover { background: var(--card2); }
+    .empty { padding: 40px 20px; text-align: center; color: var(--t3); }
+
+    /* Modal overlay */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: none; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .overlay.is-open { display: flex; }
+    .modal {
+      background: var(--card); border-radius: var(--rl);
+      max-width: 520px; width: 100%; padding: 24px;
+      box-shadow: var(--ds-shadow-lg);
+    }
+    .modal.wide { max-width: 720px; }
+    .modal-title { font-size: var(--ds-text-lg); font-weight: 700; color: var(--t1); margin-bottom: 14px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: var(--ds-text-xs); font-weight: 700; color: var(--t2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+    .field input {
+      width: 100%; font: inherit; font-size: var(--ds-text-base);
+      padding: 9px 12px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--t1); outline: none;
+    }
+    .field input:focus { border-color: var(--ds-accent-600); box-shadow: 0 0 0 3px var(--ds-accent-100); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    .import-list { max-height: 55vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--ds-radius-md); }
+    .import-row {
+      display: grid; grid-template-columns: auto 1fr auto;
+      gap: 10px; align-items: center;
+      padding: 8px 12px; border-bottom: 1px solid var(--border);
+    }
+    .import-row:last-child { border-bottom: none; }
+    .import-row.mapped { background: var(--ds-success-soft); }
+    .import-row input[type="text"] {
+      font: inherit; font-size: 13px; padding: 5px 8px;
+      border: 1px solid var(--border); border-radius: var(--ds-radius-sm);
+      background: var(--card); color: var(--t1); width: 100%;
+    }
+    .import-row .tid { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--t3); }
+    .import-row .mapped-tag { font-size: 10px; background: var(--ds-success); color: #fff; padding: 2px 6px; border-radius: 999px; font-weight: 700; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--ds-ink); color: var(--ds-surface);
+      padding: 10px 16px; border-radius: var(--ds-radius-md);
+      font-size: var(--ds-text-sm); box-shadow: var(--ds-shadow-lg);
+      opacity: 0; transition: opacity .2s ease; pointer-events: none;
+      z-index: 2000;
+    }
+    .toast.is-show { opacity: 1; }
+    .toast.is-error { background: var(--ds-danger); color: #fff; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Categorias do Tiny</h1>
+        <p class="app-page-sub">Mapeamento de serviço → ID de categoria no Tiny, por unidade. Os IDs são usados no envio de contas a receber e na listagem de serviços do PDV.</p>
+      </div>
+
+      <div class="page-actions">
+        <div class="unit-selector">
+          <label>Unidade</label>
+          <select id="selUnit"></select>
+        </div>
+        <div class="page-actions-right">
+          <button class="btn-secondary" id="btnImportar">Importar do Tiny</button>
+          <button class="btn-primary" id="btnAdd">+ Adicionar categoria</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">Serviços mapeados</div>
+          <div class="table-meta" id="tableMeta">—</div>
+        </div>
+        <table class="cats">
+          <thead>
+            <tr>
+              <th>Serviço</th>
+              <th style="width:180px">ID no Tiny</th>
+              <th style="width:140px" class="actions-cell">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="catsBody">
+            <tr><td colspan="3" class="empty">Selecione uma unidade.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal adicionar/editar -->
+<div class="overlay" id="mdEdit">
+  <div class="modal">
+    <div class="modal-title" id="mdEditTitle">Nova categoria</div>
+    <div class="field">
+      <label>Nome do serviço</label>
+      <input type="text" id="fNome" placeholder="VISTORIA CAUTELAR" autocomplete="off" style="text-transform:uppercase">
+    </div>
+    <div class="field">
+      <label>ID da categoria no Tiny</label>
+      <input type="number" id="fTinyId" placeholder="897968382" autocomplete="off">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btnCancel">Cancelar</button>
+      <button class="btn-primary" id="btnSave">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal importar do Tiny -->
+<div class="overlay" id="mdImport">
+  <div class="modal wide">
+    <div class="modal-title">Importar categorias do Tiny</div>
+    <p style="color:var(--t2); font-size:13px; margin:-8px 0 14px">Lista as categorias cadastradas no Tiny desta unidade. Marque as que quer mapear e ajuste o nome se precisar.</p>
+    <div id="importList" class="import-list">
+      <div class="empty">Carregando…</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btnImportCancel">Cancelar</button>
+      <button class="btn-primary" id="btnImportConfirm">Importar selecionadas</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "categorias",
+    breadcrumbs: [{ label: "Rede" }, { label: "Categorias", current: true }],
+  });
+
+  const state = { unit: "", cats: [] };
+  let CSRF_TOKEN = "";
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  async function loadCsrf() {
+    try {
+      const r = await fetch("/api/csrf-token", { credentials: "same-origin" });
+      if (r.ok) CSRF_TOKEN = (await r.json()).token || "";
+    } catch (_) {}
+  }
+
+  function toast(msg, isError) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.toggle("is-error", !!isError);
+    el.classList.add("is-show");
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove("is-show"), 2600);
+  }
+
+  async function loadUnits() {
+    const sel = document.getElementById("selUnit");
+    try {
+      const r = await fetch("/master/api/units", { credentials: "same-origin" });
+      const j = await r.json();
+      const units = j.units || [];
+      sel.innerHTML = units.map(u => `<option value="${escHtml(u.id)}">${escHtml(u.nome)}</option>`).join("");
+      if (units.length) { state.unit = units[0].id; loadCats(); }
+    } catch (e) { toast("Erro ao listar unidades", true); }
+  }
+
+  async function loadCats() {
+    const body = document.getElementById("catsBody");
+    body.innerHTML = `<tr><td colspan="3" class="empty">Carregando…</td></tr>`;
+    try {
+      const r = await fetch(`/master/api/categorias/${encodeURIComponent(state.unit)}`, { cache: "no-store" });
+      const j = await r.json();
+      state.cats = j.categorias || [];
+      document.getElementById("tableMeta").textContent =
+        state.cats.length === 0 ? "Nenhuma categoria mapeada"
+        : state.cats.length === 1 ? "1 categoria" : `${state.cats.length} categorias`;
+      if (!state.cats.length) {
+        body.innerHTML = `<tr><td colspan="3" class="empty">Nenhuma categoria ainda. Clique em “+ Adicionar” ou “Importar do Tiny”.</td></tr>`;
+        return;
+      }
+      body.innerHTML = state.cats.map(c => `
+        <tr>
+          <td><strong>${escHtml(c.nome)}</strong></td>
+          <td><span class="mono">${escHtml(String(c.tiny_id))}</span></td>
+          <td class="actions-cell">
+            <button data-act="edit" data-nome="${escHtml(c.nome)}" data-id="${c.tiny_id}">Editar</button>
+            <button class="danger" data-act="del" data-nome="${escHtml(c.nome)}">Excluir</button>
+          </td>
+        </tr>
+      `).join("");
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="3" class="empty">Erro ao carregar: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  function openEdit(nome, tinyId) {
+    document.getElementById("mdEditTitle").textContent = nome ? "Editar categoria" : "Nova categoria";
+    document.getElementById("fNome").value = nome || "";
+    document.getElementById("fTinyId").value = tinyId || "";
+    document.getElementById("fNome").readOnly = !!nome;
+    document.getElementById("mdEdit").classList.add("is-open");
+    setTimeout(() => (nome ? document.getElementById("fTinyId") : document.getElementById("fNome")).focus(), 40);
+  }
+  function closeEdit() { document.getElementById("mdEdit").classList.remove("is-open"); }
+
+  async function saveCat() {
+    const nome = document.getElementById("fNome").value.trim().toUpperCase();
+    const tinyId = parseInt(document.getElementById("fTinyId").value, 10);
+    if (!nome || !tinyId || tinyId <= 0) {
+      toast("Preencha nome e ID válido", true);
+      return;
+    }
+    await loadCsrf();
+    try {
+      const r = await fetch(`/master/api/categorias/${encodeURIComponent(state.unit)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF_TOKEN },
+        body: JSON.stringify({ nome, tiny_id: tinyId }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.success === false) { toast("Erro: " + (j.error || r.status), true); return; }
+      toast("Salvo");
+      closeEdit();
+      loadCats();
+    } catch (e) { toast("Erro: " + e.message, true); }
+  }
+
+  async function delCat(nome) {
+    if (!confirm(`Excluir a categoria “${nome}”?`)) return;
+    await loadCsrf();
+    try {
+      const r = await fetch(`/master/api/categorias/${encodeURIComponent(state.unit)}/${encodeURIComponent(nome)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": CSRF_TOKEN },
+      });
+      const j = await r.json();
+      if (!r.ok || j.success === false) { toast("Erro: " + (j.error || r.status), true); return; }
+      toast("Excluída");
+      loadCats();
+    } catch (e) { toast("Erro: " + e.message, true); }
+  }
+
+  async function openImport() {
+    const md = document.getElementById("mdImport");
+    const list = document.getElementById("importList");
+    md.classList.add("is-open");
+    list.innerHTML = `<div class="empty">Carregando do Tiny…</div>`;
+    try {
+      const r = await fetch(`/master/api/categorias/${encodeURIComponent(state.unit)}/importar-tiny`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) { list.innerHTML = `<div class="empty">Erro: ${escHtml(j.error || "?")}</div>`; return; }
+      const itens = j.categorias_tiny || [];
+      if (!itens.length) { list.innerHTML = `<div class="empty">Nenhuma categoria encontrada no Tiny.</div>`; return; }
+      list.innerHTML = itens.map(c => `
+        <label class="import-row ${c.ja_mapeado ? 'mapped' : ''}">
+          <input type="checkbox" data-id="${c.tiny_id}" ${c.ja_mapeado ? 'disabled' : ''}>
+          <div>
+            <input type="text" value="${escHtml(c.nome_tiny)}" data-nome-id="${c.tiny_id}" ${c.ja_mapeado ? 'disabled' : ''}>
+            <div class="tid">ID ${c.tiny_id}${c.tipo ? ' · ' + escHtml(c.tipo) : ''}</div>
+          </div>
+          ${c.ja_mapeado ? '<span class="mapped-tag">Já mapeado</span>' : ''}
+        </label>
+      `).join("");
+    } catch (e) { list.innerHTML = `<div class="empty">Erro: ${escHtml(e.message)}</div>`; }
+  }
+  function closeImport() { document.getElementById("mdImport").classList.remove("is-open"); }
+
+  async function saveImport() {
+    const checks = document.querySelectorAll("#importList input[type=checkbox]:checked");
+    if (!checks.length) { toast("Marque pelo menos uma categoria", true); return; }
+    const itens = [];
+    checks.forEach(c => {
+      const id = parseInt(c.dataset.id, 10);
+      const nomeEl = document.querySelector(`#importList input[data-nome-id="${id}"]`);
+      const nome = (nomeEl ? nomeEl.value : "").trim().toUpperCase();
+      if (nome && id) itens.push({ nome, tiny_id: id });
+    });
+    if (!itens.length) { toast("Nomes vazios — ajuste antes de importar", true); return; }
+    await loadCsrf();
+    try {
+      const r = await fetch(`/master/api/categorias/${encodeURIComponent(state.unit)}/importar-tiny`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF_TOKEN },
+        body: JSON.stringify({ itens }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.success === false) { toast("Erro: " + (j.error || r.status), true); return; }
+      toast(`${j.importados} importadas`);
+      closeImport();
+      loadCats();
+    } catch (e) { toast("Erro: " + e.message, true); }
+  }
+
+  // Wire
+  document.getElementById("selUnit").addEventListener("change", e => { state.unit = e.target.value; loadCats(); });
+  document.getElementById("btnAdd").addEventListener("click", () => openEdit("", ""));
+  document.getElementById("btnCancel").addEventListener("click", closeEdit);
+  document.getElementById("btnSave").addEventListener("click", saveCat);
+  document.getElementById("mdEdit").addEventListener("click", e => { if (e.target.id === "mdEdit") closeEdit(); });
+  document.getElementById("btnImportar").addEventListener("click", openImport);
+  document.getElementById("btnImportCancel").addEventListener("click", closeImport);
+  document.getElementById("btnImportConfirm").addEventListener("click", saveImport);
+  document.getElementById("mdImport").addEventListener("click", e => { if (e.target.id === "mdImport") closeImport(); });
+  document.getElementById("catsBody").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const nome = btn.dataset.nome;
+    if (btn.dataset.act === "edit") openEdit(nome, btn.dataset.id);
+    else if (btn.dataset.act === "del") delCat(nome);
+  });
+
+  loadUnits();
+  loadCsrf();
+</script>
+
+</body>
+</html>

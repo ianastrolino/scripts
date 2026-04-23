@@ -814,6 +814,33 @@ _CATEGORIAS_POR_UNIDADE: dict[str, dict[str, int]] = {
 }
 
 
+def _categorias_path(unit: str) -> Path:
+    return _unit_state_dir(unit) / "categorias.json"
+
+
+def _load_unit_categorias(unit: str) -> dict[str, int]:
+    """Carrega mapa servico→categoria_id da unidade. Fallback pro hardcoded se nao existe."""
+    p = _categorias_path(unit)
+    if p.exists():
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            # Normaliza: nome upper, id int
+            return {str(k).upper().strip(): int(v) for k, v in (raw or {}).items() if str(k).strip() and v}
+        except Exception:
+            pass
+    return dict(_CATEGORIAS_POR_UNIDADE.get(unit, {}))
+
+
+def _save_unit_categorias(unit: str, mapa: dict[str, int]) -> None:
+    """Escrita atomica do arquivo de categorias da unidade."""
+    p = _categorias_path(unit)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    normalized = {str(k).upper().strip(): int(v) for k, v in mapa.items() if str(k).strip() and v}
+    tmp.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
 def _build_unit_config(unit: str) -> dict[str, Any]:
     """Monta config completo para a unidade a partir de UNITS_CONFIG."""
     ud = UNITS.get(unit, {})
@@ -844,9 +871,11 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
     tiny["aliases"] = merged_aliases
 
     # Sobrescreve categoria_ids com o mapa por unidade (IDs do Tiny de cada unidade).
-    # Tambem sera usado pelo /api/info pra popular o dropdown de servicos no PDV.
-    if unit in _CATEGORIAS_POR_UNIDADE:
-        tiny["categoria_ids"] = dict(_CATEGORIAS_POR_UNIDADE[unit])
+    # Le de /data/<unit>/categorias.json (editavel via UI), com fallback pro hardcoded
+    # _CATEGORIAS_POR_UNIDADE quando o arquivo ainda nao foi criado.
+    unit_cats = _load_unit_categorias(unit)
+    if unit_cats:
+        tiny["categoria_ids"] = unit_cats
 
     # Sobrescreve com IDs salvos via modal de mapeamento
     extra = _load_extra_cliente_ids(unit)
@@ -1022,6 +1051,136 @@ def master_api_units():
         for uid, ud in UNITS.items()
     ]
     return _json({"units": units_info})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Categorias Tiny por unidade (CRUD via UI)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/master/api/categorias/<unit>", methods=["GET"])
+@master_view_required
+def master_api_categorias_list(unit: str):
+    if unit not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    cats = _load_unit_categorias(unit)
+    out = sorted(
+        [{"nome": k, "tiny_id": v} for k, v in cats.items()],
+        key=lambda c: c["nome"],
+    )
+    return _json({"success": True, "unit": unit, "categorias": out})
+
+
+@app.route("/master/api/categorias/<unit>", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_categorias_save(unit: str):
+    """Cria ou atualiza uma categoria. Body: {nome, tiny_id}."""
+    if unit not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    data = request.get_json(force=True, silent=True) or {}
+    nome = str(data.get("nome", "")).strip().upper()
+    try:
+        tiny_id = int(data.get("tiny_id", 0))
+    except Exception:
+        return _json({"success": False, "error": "tiny_id invalido (deve ser numero)"}, 400)
+    if not nome or tiny_id <= 0:
+        return _json({"success": False, "error": "nome e tiny_id sao obrigatorios"}, 400)
+    cats = _load_unit_categorias(unit)
+    cats[nome] = tiny_id
+    _save_unit_categorias(unit, cats)
+    me = _current_user() or {}
+    _write_audit_log(me, "categoria.save", f"{unit}:{nome}", {"unit": unit, "nome": nome, "tiny_id": tiny_id})
+    return _json({"success": True, "categorias": {"nome": nome, "tiny_id": tiny_id}})
+
+
+@app.route("/master/api/categorias/<unit>/<path:nome>", methods=["DELETE"])
+@master_only_required
+@csrf_required
+def master_api_categorias_delete(unit: str, nome: str):
+    if unit not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    cats = _load_unit_categorias(unit)
+    key = nome.strip().upper()
+    if key not in cats:
+        return _json({"success": False, "error": "categoria nao encontrada"}, 404)
+    removed_id = cats.pop(key)
+    _save_unit_categorias(unit, cats)
+    me = _current_user() or {}
+    _write_audit_log(me, "categoria.delete", f"{unit}:{key}", {"unit": unit, "nome": key, "tiny_id": removed_id})
+    return _json({"success": True})
+
+
+@app.route("/master/api/categorias/<unit>/importar-tiny", methods=["GET"])
+@master_view_required
+def master_api_categorias_importar_tiny(unit: str):
+    """Lista as categorias cadastradas no Tiny da unidade, pro usuario ticar quais importar."""
+    if unit not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(unit)
+        state_dir = _unit_state_dir(unit)
+        importer = TinyImporter(config, state_dir)
+        res = importer.client.request("GET", "categorias-receita-despesa", params={"limit": 200})
+        itens = res.get("itens", [])
+        existentes = _load_unit_categorias(unit)
+        ja_mapeados = {v for v in existentes.values()}
+        saida = []
+        for it in itens:
+            try:
+                tid = int(it.get("id", 0))
+            except Exception:
+                continue
+            if tid <= 0:
+                continue
+            nome = (it.get("descricao") or it.get("nome") or "").strip().upper()
+            if not nome:
+                continue
+            saida.append({
+                "tiny_id": tid,
+                "nome_tiny": nome,
+                "ja_mapeado": tid in ja_mapeados,
+                "tipo": it.get("tipo", ""),
+            })
+        saida.sort(key=lambda c: c["nome_tiny"])
+        return _json({"success": True, "categorias_tiny": saida})
+    except Exception as exc:
+        app.logger.exception("[categorias.importar-tiny] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/categorias/<unit>/importar-tiny", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_categorias_importar_tiny_save(unit: str):
+    """Recebe lista [{nome, tiny_id}, ...] e grava em lote (merge no existente)."""
+    if unit not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    data = request.get_json(force=True, silent=True) or {}
+    itens = data.get("itens") or []
+    if not isinstance(itens, list):
+        return _json({"success": False, "error": "itens deve ser lista"}, 400)
+    cats = _load_unit_categorias(unit)
+    count = 0
+    for it in itens:
+        nome = str(it.get("nome", "")).strip().upper()
+        try:
+            tid = int(it.get("tiny_id", 0))
+        except Exception:
+            continue
+        if not nome or tid <= 0:
+            continue
+        cats[nome] = tid
+        count += 1
+    _save_unit_categorias(unit, cats)
+    me = _current_user() or {}
+    _write_audit_log(me, "categoria.importar_tiny", unit, {"unit": unit, "total": count})
+    return _json({"success": True, "importados": count})
+
+
+@app.route("/master/categorias")
+@master_view_required
+def master_categorias_page():
+    return _nocache(send_from_directory(UI_DIR, "categorias.html"))
 
 
 @app.route("/master/api/units/status")
@@ -2071,21 +2230,23 @@ def api_info(unit: str):
     servicos_pdv = ud.get("servicos_pdv")
     if servicos_pdv:
         servicos = servicos_pdv
-    elif unit in _CATEGORIAS_POR_UNIDADE:
-        servicos = list(_CATEGORIAS_POR_UNIDADE[unit].keys())
     else:
-        categoria_ids = ud.get("categoria_ids", {})
-        servicos = list(categoria_ids.keys()) if categoria_ids else [
-            "LAUDO DE TRANSFERENCIA",
-            "LAUDO CAUTELAR",
-            "CAUTELAR COM ANALISE DE PINTURA",
-            "REVISTORIA",
-            "BAIXA PERMANENTE",
-            "CONSULTA GRAVAME",
-            "EMISSAO CRLV",
-            "PESQUISA AVULSA",
-            "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
-        ]
+        unit_cats = _load_unit_categorias(unit)
+        if unit_cats:
+            servicos = list(unit_cats.keys())
+        else:
+            categoria_ids = ud.get("categoria_ids", {})
+            servicos = list(categoria_ids.keys()) if categoria_ids else [
+                "LAUDO DE TRANSFERENCIA",
+                "LAUDO CAUTELAR",
+                "CAUTELAR COM ANALISE DE PINTURA",
+                "REVISTORIA",
+                "BAIXA PERMANENTE",
+                "CONSULTA GRAVAME",
+                "EMISSAO CRLV",
+                "PESQUISA AVULSA",
+                "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
+            ]
     return _json({
         "unidade": ud.get("nome", unit),
         "usuario": session.get("name", ""),
