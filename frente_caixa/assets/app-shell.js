@@ -153,7 +153,7 @@
         { id: "contas-receber",      label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
         { id: "cobranca",            label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
         { id: "categorias",          label: "Categorias",           icon: "categorias", href: "/master/categorias" },
-        { id: "unidades",            label: "Unidades",             icon: "unidades",   disabled: true, badge: "Em breve" },
+        { id: "unidades",            label: "Unidades",             icon: "unidades",   href: "/master/unidades", requires: "master" },
       ],
     },
     {

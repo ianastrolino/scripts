@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Unidades</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .page-actions {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .u-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: var(--ds-space-3);
+    }
+    .u-card {
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: var(--ds-space-4);
+      box-shadow: var(--ds-shadow-xs);
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .u-nome {
+      font-size: 16px; font-weight: 800; color: var(--ds-ink);
+      letter-spacing: -.01em;
+    }
+    .u-slug {
+      font-size: 11px; font-weight: 600; color: var(--ds-ink-muted);
+      font-family: var(--ds-font-mono);
+    }
+    .u-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+    .u-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 10px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .u-chip.tiny   { background: #dbeafe; color: #1e40af; }
+    .u-chip.omie   { background: #ede9fe; color: #6d28d9; }
+    .u-chip.env    { background: var(--ds-surface-alt); color: var(--ds-ink-muted); }
+    .u-chip.custom { background: #fef3c7; color: #92400e; }
+    .u-chip.token-ok { background: #d1fae5; color: #065f46; }
+    .u-chip.token-no { background: #fee2e2; color: #991b1b; }
+    .u-actions {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      padding-top: 10px; border-top: 1px solid var(--ds-line);
+      margin-top: auto;
+    }
+    .u-btn {
+      font: inherit; font-size: 12px; font-weight: 600;
+      padding: 6px 10px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .u-btn:hover { background: var(--ds-surface-alt); }
+    .u-btn.danger { color: var(--ds-danger); }
+    .u-btn.danger:hover { background: var(--ds-danger-soft); }
+
+    .btn-primary {
+      font: inherit; font-size: 14px; font-weight: 700;
+      padding: 9px 16px; border-radius: var(--ds-radius-md);
+      border: none; background: var(--ds-accent-600); color: #fff;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary:hover { background: var(--ds-accent-700); }
+    .btn-secondary {
+      font: inherit; font-size: 14px; font-weight: 600;
+      padding: 9px 16px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn-secondary:hover { background: var(--ds-surface-alt); }
+
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(15,23,42,.5); align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--ds-surface); border-radius: var(--ds-radius-xl);
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      width: 100%; max-width: 520px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header {
+      padding: 18px 22px; border-bottom: 1px solid var(--ds-line);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-title { font-size: 16px; font-weight: 800; color: var(--ds-ink); }
+    .modal-close {
+      background: transparent; border: none; cursor: pointer;
+      color: var(--ds-ink-muted); font-size: 20px; line-height: 1;
+    }
+    .modal-body { padding: 18px 22px; }
+    .modal-footer {
+      padding: 14px 22px; border-top: 1px solid var(--ds-line);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: 11px; font-weight: 800;
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: .04em; margin-bottom: 4px;
+    }
+    .field input, .field select {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--ds-line); border-radius: var(--ds-radius-md);
+      font: inherit; font-size: 14px; color: var(--ds-ink);
+      background: var(--ds-surface); outline: none;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--ds-accent-600);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .field .hint {
+      font-size: 11px; color: var(--ds-ink-muted); margin-top: 4px;
+    }
+    .field .hint code {
+      font-family: var(--ds-font-mono); background: var(--ds-surface-alt);
+      padding: 1px 4px; border-radius: 3px;
+    }
+
+    .next-steps {
+      background: #eff6ff; border: 1px solid #bfdbfe; border-left: 3px solid #2563eb;
+      border-radius: var(--ds-radius-md); padding: 12px 14px;
+      color: #1e3a8a; font-size: 13px; line-height: 1.5;
+      margin-top: 14px;
+    }
+    .next-steps strong { display: block; margin-bottom: 4px; color: #1e3a8a; }
+    .next-steps ol { margin: 4px 0 0; padding-left: 20px; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede — Admin</div>
+        <h1 class="app-page-title">Unidades</h1>
+        <p class="app-page-sub">Gestão de unidades da rede — adicionar, remover, autorizar ERP.</p>
+      </div>
+
+      <div class="page-actions">
+        <div id="infoCount" style="font-size:13px;color:var(--ds-ink-muted)">—</div>
+        <button id="btnNova" class="btn-primary">+ Nova unidade</button>
+      </div>
+
+      <div class="u-grid" id="grid">
+        <div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--ds-ink-muted)">carregando…</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal: Nova unidade -->
+<div class="modal-overlay" id="modalNova">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Nova unidade</div>
+      <button class="modal-close" id="modalClose" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nome da unidade</label>
+        <input type="text" id="fNome" placeholder="Ex: Moema" maxlength="60">
+        <div class="hint">Nome legível, aparece no sidebar e nos dashboards.</div>
+      </div>
+      <div class="field">
+        <label>Slug (URL)</label>
+        <input type="text" id="fSlug" placeholder="moema" maxlength="40" autocomplete="off">
+        <div class="hint">Vai virar <code>/u/moema/...</code>. Só letras, números, hífen e underline.</div>
+      </div>
+      <div class="field">
+        <label>ERP financeiro</label>
+        <select id="fErp">
+          <option value="tiny" selected>Tiny</option>
+          <option value="omie">Omie (integração em desenvolvimento)</option>
+        </select>
+      </div>
+
+      <div id="tinyFields">
+        <div class="field">
+          <label>Client ID (Tiny)</label>
+          <input type="text" id="fClientId" autocomplete="off">
+          <div class="hint">Do painel de desenvolvedor do Tiny, app desta unidade.</div>
+        </div>
+        <div class="field">
+          <label>Client Secret (Tiny)</label>
+          <input type="password" id="fClientSecret" autocomplete="off">
+        </div>
+      </div>
+
+      <div id="omieFields" style="display:none">
+        <div class="field">
+          <label>App Key (Omie)</label>
+          <input type="text" id="fAppKey" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>App Secret (Omie)</label>
+          <input type="password" id="fAppSecret" autocomplete="off">
+        </div>
+        <div class="hint" style="padding:10px;background:var(--ds-surface-alt);border-radius:4px;color:var(--ds-ink-muted)">
+          ⚠ Integração Omie ainda não está completa. A unidade pode ser criada mas o envio do Fechamento só funcionará quando a integração estiver pronta (está no roadmap).
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Redirect URI (opcional)</label>
+        <input type="text" id="fRedirect" placeholder="auto-preenchido a partir do host atual">
+        <div class="hint">Só preencha se o Tiny exigir uma URL específica. Senão deixa vazio.</div>
+      </div>
+
+      <div class="next-steps" id="nextSteps" style="display:none">
+        <strong>✓ Unidade criada!</strong>
+        <ol>
+          <li>Clique em "Autorizar Tiny" pra fazer o OAuth da nova unidade</li>
+          <li>Depois, configure categorias e clientes iniciais nas telas correspondentes</li>
+        </ol>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="modalCancel" type="button">Cancelar</button>
+      <button class="btn-primary" id="modalSalvar" type="button">Criar unidade</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "unidades",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Unidades", current: true }
+    ]
+  });
+
+  function esc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  async function getCsrf() {
+    try {
+      const r = await fetch("/api/csrf-token");
+      const j = await r.json();
+      return j.token || "";
+    } catch { return ""; }
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/master/api/unidades");
+      const j = await r.json();
+      const grid = document.getElementById("grid");
+      document.getElementById("infoCount").textContent =
+        `${j.total} unidade${j.total === 1 ? "" : "s"} ativa${j.total === 1 ? "" : "s"}`;
+      if (!j.unidades.length) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--ds-ink-muted)">Nenhuma unidade ainda. Clique em "+ Nova unidade" pra começar.</div>`;
+        return;
+      }
+      grid.innerHTML = j.unidades.map(u => {
+        const chipErp   = `<span class="u-chip ${u.erp}">${u.erp.toUpperCase()}</span>`;
+        const chipOrig  = `<span class="u-chip ${u.origem}">${u.origem === "custom" ? "UI" : "ENV"}</span>`;
+        const chipToken = u.has_token
+          ? `<span class="u-chip token-ok">✓ Autorizado</span>`
+          : `<span class="u-chip token-no">⚠ Sem token</span>`;
+        const canDelete = u.origem === "custom";
+        return `<div class="u-card" data-slug="${esc(u.slug)}">
+          <div>
+            <div class="u-nome">${esc(u.nome)}</div>
+            <div class="u-slug">/u/${esc(u.slug)}</div>
+          </div>
+          <div class="u-meta">${chipErp} ${chipOrig} ${chipToken}</div>
+          <div class="u-actions">
+            ${u.erp === "tiny" ? `<a href="/u/${esc(u.slug)}/auth" target="_blank" class="u-btn">Autorizar Tiny</a>` : ""}
+            <a href="/u/${esc(u.slug)}/gerencial" class="u-btn">Gerencial</a>
+            ${canDelete ? `<button class="u-btn danger" data-del="${esc(u.slug)}">Remover</button>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+
+      // Bind delete buttons
+      grid.querySelectorAll("[data-del]").forEach(b => {
+        b.addEventListener("click", async () => {
+          const slug = b.dataset.del;
+          if (!confirm(`Remover a unidade "${slug}"?\n\nIsso remove apenas a configuração — se houver dados operacionais, a remoção é bloqueada por segurança.`)) return;
+          const token = await getCsrf();
+          const r = await fetch(`/master/api/unidades/${encodeURIComponent(slug)}`, {
+            method: "DELETE",
+            headers: { "X-CSRF-Token": token }
+          });
+          const j = await r.json();
+          if (!j.success) { alert("Erro: " + (j.error || "falhou")); return; }
+          load();
+        });
+      });
+    } catch (e) {
+      document.getElementById("grid").innerHTML = `<div style="grid-column:1/-1;color:var(--ds-danger);padding:20px">${esc(e.message)}</div>`;
+    }
+  }
+
+  // Modal
+  const modal = document.getElementById("modalNova");
+  document.getElementById("btnNova").addEventListener("click", () => {
+    ["fNome","fSlug","fClientId","fClientSecret","fAppKey","fAppSecret","fRedirect"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("fErp").value = "tiny";
+    document.getElementById("tinyFields").style.display = "";
+    document.getElementById("omieFields").style.display = "none";
+    document.getElementById("nextSteps").style.display = "none";
+    document.getElementById("modalSalvar").disabled = false;
+    document.getElementById("modalSalvar").textContent = "Criar unidade";
+    modal.classList.add("open");
+    setTimeout(() => document.getElementById("fNome").focus(), 50);
+  });
+  document.getElementById("modalClose").addEventListener("click", () => modal.classList.remove("open"));
+  document.getElementById("modalCancel").addEventListener("click", () => modal.classList.remove("open"));
+
+  // Slug auto-gera do nome
+  document.getElementById("fNome").addEventListener("input", (e) => {
+    const slug = e.target.value
+      .toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9-_]/g, "")
+      .slice(0, 40);
+    if (!document.getElementById("fSlug").dataset.touched) {
+      document.getElementById("fSlug").value = slug;
+    }
+  });
+  document.getElementById("fSlug").addEventListener("input", (e) => {
+    e.target.dataset.touched = "1";
+  });
+
+  // Toggle campos por ERP
+  document.getElementById("fErp").addEventListener("change", (e) => {
+    const isOmie = e.target.value === "omie";
+    document.getElementById("tinyFields").style.display = isOmie ? "none" : "";
+    document.getElementById("omieFields").style.display = isOmie ? "" : "none";
+  });
+
+  document.getElementById("modalSalvar").addEventListener("click", async () => {
+    const btn = document.getElementById("modalSalvar");
+    const erp = document.getElementById("fErp").value;
+    const payload = {
+      slug:          document.getElementById("fSlug").value.trim(),
+      nome:          document.getElementById("fNome").value.trim(),
+      erp:           erp,
+      redirect_uri:  document.getElementById("fRedirect").value.trim(),
+    };
+    if (erp === "tiny") {
+      payload.client_id     = document.getElementById("fClientId").value.trim();
+      payload.client_secret = document.getElementById("fClientSecret").value.trim();
+    } else {
+      payload.app_key    = document.getElementById("fAppKey").value.trim();
+      payload.app_secret = document.getElementById("fAppSecret").value.trim();
+    }
+    if (!payload.nome || !payload.slug) { alert("Nome e slug são obrigatórios."); return; }
+    if (erp === "tiny" && (!payload.client_id || !payload.client_secret)) { alert("Client ID e Secret do Tiny são obrigatórios."); return; }
+    if (erp === "omie" && (!payload.app_key || !payload.app_secret)) { alert("App Key e Secret do Omie são obrigatórios."); return; }
+
+    btn.disabled = true;
+    btn.textContent = "Criando…";
+    try {
+      const token = await getCsrf();
+      const r = await fetch("/master/api/unidades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!j.success) { alert("Erro: " + (j.error || "falhou")); btn.disabled = false; btn.textContent = "Criar unidade"; return; }
+      document.getElementById("nextSteps").style.display = "block";
+      btn.textContent = "Criado ✓";
+      load();
+      setTimeout(() => modal.classList.remove("open"), 1800);
+    } catch (e) {
+      alert("Erro: " + e.message);
+      btn.disabled = false;
+      btn.textContent = "Criar unidade";
+    }
+  });
+
+  load();
+</script>
+</body>
+</html>

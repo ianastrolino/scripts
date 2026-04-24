@@ -363,12 +363,42 @@ def _invite_status(invite: dict[str, Any]) -> str:
     return "pendente"
 
 
+# Unidades criadas via UI (tela /master/unidades). Mergeadas com UNITS_CONFIG
+# no load. Custom sobrepoe ambiental em caso de mesmo slug.
+_UNITS_CUSTOM_FILE = DATA_DIR / "units_custom.json"
+
+
+def _load_units_custom() -> dict[str, Any]:
+    if not _UNITS_CUSTOM_FILE.exists():
+        return {}
+    try:
+        return json.loads(_UNITS_CUSTOM_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_units_custom(data: dict[str, Any]) -> None:
+    _UNITS_CUSTOM_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _UNITS_CUSTOM_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_UNITS_CUSTOM_FILE)
+
+
 def _load_units() -> dict[str, Any]:
     raw = os.environ.get("UNITS_CONFIG", "{}")
     try:
-        return json.loads(raw)
+        base = json.loads(raw)
     except json.JSONDecodeError:
-        return {}
+        base = {}
+    # Merge custom por cima (unidades criadas via UI tem precedencia)
+    base.update(_load_units_custom())
+    return base
+
+
+def _reload_units() -> None:
+    """Recarrega UNITS em memoria apos criar/editar/remover via UI."""
+    global UNITS
+    UNITS = _load_units()
 
 
 # Carrega uma vez no startup
@@ -2877,6 +2907,142 @@ def master_api_roadmap():
 @master_view_required
 def master_roadmap_page():
     return send_from_directory(UI_DIR, "roadmap.html")
+
+
+# ── Gestao de unidades via UI ─────────────────────────────────────────────
+@app.route("/master/unidades")
+@master_only_required
+def master_unidades_page():
+    return send_from_directory(UI_DIR, "unidades.html")
+
+
+@app.route("/master/api/unidades")
+@master_only_required
+def master_api_unidades_list():
+    """Lista todas as unidades (ambientais + custom) com marcacao de origem."""
+    custom = _load_units_custom()
+    try:
+        env_raw = json.loads(os.environ.get("UNITS_CONFIG", "{}"))
+    except Exception:
+        env_raw = {}
+    itens = []
+    for slug, cfg in UNITS.items():
+        token_file = _unit_state_dir(slug) / "tiny_tokens.json"
+        itens.append({
+            "slug":         slug,
+            "nome":         cfg.get("nome", slug),
+            "origem":       "custom" if slug in custom else "env",
+            "has_token":    token_file.exists(),
+            "redirect_uri": cfg.get("redirect_uri", ""),
+            "erp":          cfg.get("erp", "tiny"),
+        })
+    itens.sort(key=lambda x: x["nome"].lower())
+    return _json({"unidades": itens, "total": len(itens)})
+
+
+@app.route("/master/api/unidades", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidades_criar():
+    """Cria uma nova unidade via UI. Persiste em units_custom.json.
+
+    Body: {slug, nome, erp, client_id, client_secret, redirect_uri?}
+    Pra ERP=tiny: client_id + client_secret obrigatorios (OAuth).
+    Pra ERP=omie: app_key + app_secret obrigatorios.
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        slug = (data.get("slug") or "").strip().lower()
+        nome = (data.get("nome") or "").strip()
+        erp  = (data.get("erp")  or "tiny").strip().lower()
+
+        if not slug or not nome:
+            return _json({"success": False, "error": "slug e nome sao obrigatorios"}, 400)
+        if not slug.replace("-", "").replace("_", "").isalnum():
+            return _json({"success": False, "error": "slug so pode ter letras, numeros, hifen e underline"}, 400)
+        if slug in UNITS:
+            return _json({"success": False, "error": f"unidade '{slug}' ja existe"}, 400)
+        if erp not in ("tiny", "omie"):
+            return _json({"success": False, "error": "erp deve ser 'tiny' ou 'omie'"}, 400)
+
+        host = request.host_url.rstrip("/")
+        redirect_uri = (data.get("redirect_uri") or "").strip() or f"{host}/u/{slug}/callback"
+
+        cfg: dict[str, Any] = {
+            "nome":         nome,
+            "erp":          erp,
+            "redirect_uri": redirect_uri,
+            "forma_recebimento_ids": {},
+            "cliente_ids":  {},
+            "categoria_ids": {},
+            "aliases":      {"servico": {}, "fp": {}, "cliente": {}},
+            "vencimento_dias": 0,
+            "vencimento_tipo": "ultimo_dia_mes",
+            "include_forma_recebimento": True,
+            "auto_create_contacts": False,
+            "require_payment_mapping": False,
+            "default_tipo_pessoa": "J",
+            "numero_documento_prefix": "PLANILHA",
+        }
+        if erp == "tiny":
+            client_id     = (data.get("client_id") or "").strip()
+            client_secret = (data.get("client_secret") or "").strip()
+            if not client_id or not client_secret:
+                return _json({"success": False, "error": "client_id e client_secret obrigatorios pra ERP tiny"}, 400)
+            cfg["client_id"]     = client_id
+            cfg["client_secret"] = client_secret
+        else:  # omie — placeholder, integracao completa vem depois
+            app_key    = (data.get("app_key") or "").strip()
+            app_secret = (data.get("app_secret") or "").strip()
+            if not app_key or not app_secret:
+                return _json({"success": False, "error": "app_key e app_secret obrigatorios pra ERP omie"}, 400)
+            cfg["app_key"]    = app_key
+            cfg["app_secret"] = app_secret
+
+        custom = _load_units_custom()
+        custom[slug] = cfg
+        _save_units_custom(custom)
+        # Cria diretorio de estado pra unidade
+        (_unit_state_dir(slug)).mkdir(parents=True, exist_ok=True)
+        # Recarrega UNITS em memoria
+        _reload_units()
+
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.create", target=slug, payload={"nome": nome, "erp": erp})
+
+        return _json({
+            "success":      True,
+            "slug":          slug,
+            "redirect_uri": redirect_uri,
+            "next_auth":    f"/u/{slug}/auth" if erp == "tiny" else None,
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/unidades/<slug>", methods=["DELETE"])
+@master_only_required
+@csrf_required
+def master_api_unidades_remover(slug: str):
+    """Remove unidade custom (nao permite remover ambientais)."""
+    try:
+        custom = _load_units_custom()
+        if slug not in custom:
+            return _json({"success": False, "error": "unidade nao e custom (ou nao existe)"}, 404)
+        # Checa se tem dados — se tiver, bloqueia por seguranca
+        d = _unit_state_dir(slug)
+        if (d / "caixa_dia.db").exists() or (d / "imported.json").exists():
+            return _json({"success": False, "error": "unidade tem dados operacionais. Use via admin no servidor pra remover com cautela."}, 400)
+        del custom[slug]
+        _save_units_custom(custom)
+        _reload_units()
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.delete", target=slug)
+        return _json({"success": True})
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/master/api/inadimplencia.csv")
