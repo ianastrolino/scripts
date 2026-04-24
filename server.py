@@ -5902,6 +5902,9 @@ def _b2_bucket():
     """Autentica no B2 e devolve (bucket, bucket_name).
 
     Retorna (None, None) se envs faltando. Raise em caso de credencial invalida.
+    Para keys restritas a um bucket, usa o bucketId do `get_allowed()` — a
+    chamada get_bucket_by_name() faz list_buckets internamente e a key
+    restrita nao tem essa capability.
     """
     key_id      = os.environ.get("B2_KEY_ID", "").strip()
     app_key     = os.environ.get("B2_APPLICATION_KEY", "").strip()
@@ -5916,7 +5919,12 @@ def _b2_bucket():
     info = InMemoryAccountInfo()
     api  = B2Api(info)
     api.authorize_account("production", key_id, app_key)
-    bucket = api.get_bucket_by_name(bucket_name)
+    allowed   = info.get_allowed() or {}
+    bucket_id = allowed.get("bucketId")
+    if bucket_id:
+        bucket = api.get_bucket_by_id(bucket_id)
+    else:
+        bucket = api.get_bucket_by_name(bucket_name)
     return bucket, bucket_name
 
 
