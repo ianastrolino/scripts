@@ -5893,96 +5893,83 @@ def _criar_backup_zip() -> bytes:
     return buf.read()
 
 
-# ── Backup no Google Drive (Service Account) ─────────────────────────────────
+# ── Backup no Backblaze B2 ────────────────────────────────────────────────
 _BACKUP_LOG_PATH = DATA_DIR / "backup_log.jsonl"
-_GDRIVE_MIME_FOLDER = "application/vnd.google-apps.folder"
+_B2_DASHBOARD_URL = "https://secure.backblaze.com/b2_buckets.htm"
 
 
-def _gdrive_service():
-    """Cria um client do Google Drive usando Service Account JSON em env.
+def _b2_bucket():
+    """Autentica no B2 e devolve (bucket, bucket_name).
 
-    Retorna None se nao configurado. Raise em caso de credencial invalida.
+    Retorna (None, None) se envs faltando. Raise em caso de credencial invalida.
     """
-    raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "").strip()
-    folder_id = os.environ.get("GDRIVE_BACKUP_FOLDER_ID", "").strip()
-    if not raw or not folder_id:
+    key_id      = os.environ.get("B2_KEY_ID", "").strip()
+    app_key     = os.environ.get("B2_APPLICATION_KEY", "").strip()
+    bucket_name = os.environ.get("B2_BUCKET_NAME", "").strip()
+    if not all((key_id, app_key, bucket_name)):
         return None, None
     try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
+        from b2sdk.v2 import InMemoryAccountInfo, B2Api
     except ImportError:
-        app.logger.error("[backup] google-api-python-client nao instalado")
+        app.logger.error("[backup] b2sdk nao instalado")
         return None, None
-    info = json.loads(raw)
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=["https://www.googleapis.com/auth/drive.file"]
-    )
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
-    return service, folder_id
+    info = InMemoryAccountInfo()
+    api  = B2Api(info)
+    api.authorize_account("production", key_id, app_key)
+    bucket = api.get_bucket_by_name(bucket_name)
+    return bucket, bucket_name
 
 
-def _upload_backup_to_gdrive(zip_bytes: bytes, fname: str) -> dict:
-    """Sobe o ZIP pro Drive. Retorna {ok, file_id, web_link, error, skipped}."""
-    import io
+def _upload_backup_to_b2(zip_bytes: bytes, fname: str) -> dict:
+    """Sobe o ZIP pro B2. Retorna {ok, file_id, name, size, web_link, error, skipped}."""
     try:
-        service, folder_id = _gdrive_service()
+        bucket, bucket_name = _b2_bucket()
     except Exception as exc:
-        return {"ok": False, "error": f"credencial: {exc}", "skipped": False}
-    if not service:
-        return {"ok": False, "skipped": True, "error": "GCP_SERVICE_ACCOUNT_JSON/GDRIVE_BACKUP_FOLDER_ID nao configurados"}
+        return {"ok": False, "error": f"auth: {exc}", "skipped": False}
+    if not bucket:
+        return {"ok": False, "skipped": True, "error": "B2_KEY_ID/B2_APPLICATION_KEY/B2_BUCKET_NAME nao configurados"}
     try:
-        from googleapiclient.http import MediaIoBaseUpload
-        media = MediaIoBaseUpload(io.BytesIO(zip_bytes), mimetype="application/zip", resumable=False)
-        body = {"name": fname, "parents": [folder_id]}
-        f = service.files().create(body=body, media_body=media, fields="id,name,webViewLink,size").execute()
+        f = bucket.upload_bytes(zip_bytes, fname, content_type="application/zip")
         return {
-            "ok": True,
-            "file_id": f.get("id"),
-            "web_link": f.get("webViewLink"),
-            "name": f.get("name"),
-            "size": int(f.get("size") or 0),
+            "ok":       True,
+            "file_id":  f.id_,
+            "name":     f.file_name,
+            "size":     int(getattr(f, "size", 0) or 0),
+            "web_link": _B2_DASHBOARD_URL,
         }
     except Exception as exc:
-        app.logger.exception("[backup] Falha no upload Drive")
+        app.logger.exception("[backup] Falha no upload B2")
         return {"ok": False, "error": str(exc), "skipped": False}
 
 
-def _gdrive_aplicar_retencao(keep_last: int = 60) -> dict:
-    """Mantem os `keep_last` backups mais recentes na pasta. Apaga o resto.
+def _b2_aplicar_retencao(keep_last: int = 60) -> dict:
+    """Mantem os `keep_last` ZIPs mais recentes no bucket. Apaga o resto.
 
     Retorna {ok, mantidos, apagados, error}.
     """
     try:
-        service, folder_id = _gdrive_service()
+        bucket, _ = _b2_bucket()
     except Exception as exc:
-        return {"ok": False, "error": f"credencial: {exc}"}
-    if not service:
+        return {"ok": False, "error": f"auth: {exc}"}
+    if not bucket:
         return {"ok": False, "skipped": True}
     try:
-        q = f"'{folder_id}' in parents and trashed = false and mimeType = 'application/zip'"
         files = []
-        page_token = None
-        while True:
-            resp = service.files().list(
-                q=q, pageSize=200, pageToken=page_token,
-                fields="nextPageToken, files(id, name, createdTime)",
-                orderBy="createdTime desc",
-            ).execute()
-            files.extend(resp.get("files", []))
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
+        for file_version, _folder in bucket.ls(latest_only=True):
+            if file_version.file_name.endswith(".zip"):
+                files.append(file_version)
+        files.sort(key=lambda f: getattr(f, "upload_timestamp", 0), reverse=True)
         to_delete = files[keep_last:]
         apagados = 0
         for f in to_delete:
             try:
-                service.files().delete(fileId=f["id"]).execute()
+                bucket.delete_file_version(f.id_, f.file_name)
                 apagados += 1
             except Exception as exc:
-                app.logger.warning("[backup] falha ao apagar %s: %s", f.get("name"), exc)
+                app.logger.warning("[backup] falha ao apagar %s: %s", f.file_name, exc)
         return {"ok": True, "mantidos": min(len(files), keep_last), "apagados": apagados}
     except Exception as exc:
-        app.logger.exception("[backup] falha na retencao Drive")
+        app.logger.exception("[backup] falha na retencao B2")
         return {"ok": False, "error": str(exc)}
 
 
@@ -6025,7 +6012,7 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
     app.logger.info("[backup] Iniciando backup %s de %d unidade(s)", tipo, len(UNITS))
     resultado = {
         "ok": False, "tipo": tipo, "ts": now.isoformat(timespec="seconds"),
-        "size_kb": 0, "gdrive": {}, "email": {"ok": False}, "retencao": {},
+        "size_kb": 0, "b2": {}, "email": {"ok": False}, "retencao": {},
         "error": None,
     }
     try:
@@ -6039,21 +6026,20 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
         else:
             fname = f"astro_backup_{today}_{now.strftime('%H%M%S')}_manual.zip"
 
-        # Google Drive
-        resultado["gdrive"] = _upload_backup_to_gdrive(zip_bytes, fname)
-        if resultado["gdrive"].get("ok"):
-            # Retencao: mantem 60 backups mais recentes
-            resultado["retencao"] = _gdrive_aplicar_retencao(keep_last=60)
+        # Backblaze B2
+        resultado["b2"] = _upload_backup_to_b2(zip_bytes, fname)
+        if resultado["b2"].get("ok"):
+            resultado["retencao"] = _b2_aplicar_retencao(keep_last=60)
 
         # Email (se SMTP configurado no _send_email — ele ja trata ausencia)
         try:
-            drive_txt = ""
-            if resultado["gdrive"].get("ok") and resultado["gdrive"].get("web_link"):
-                drive_txt = f'<li><strong>Google Drive:</strong> <a href="{resultado["gdrive"]["web_link"]}">abrir arquivo</a></li>'
-            elif resultado["gdrive"].get("skipped"):
-                drive_txt = '<li style="color:#6b7280"><strong>Google Drive:</strong> nao configurado (env vars ausentes)</li>'
-            elif resultado["gdrive"].get("error"):
-                drive_txt = f'<li style="color:#dc2626"><strong>Google Drive:</strong> falha — {resultado["gdrive"]["error"][:120]}</li>'
+            b2_txt = ""
+            if resultado["b2"].get("ok"):
+                b2_txt = f'<li><strong>Backblaze B2:</strong> <code>{resultado["b2"].get("name","")}</code> (<a href="{_B2_DASHBOARD_URL}">painel</a>)</li>'
+            elif resultado["b2"].get("skipped"):
+                b2_txt = '<li style="color:#6b7280"><strong>Backblaze B2:</strong> nao configurado (env vars ausentes)</li>'
+            elif resultado["b2"].get("error"):
+                b2_txt = f'<li style="color:#dc2626"><strong>Backblaze B2:</strong> falha — {resultado["b2"]["error"][:120]}</li>'
             html = f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;margin:0;padding:0">
@@ -6067,23 +6053,23 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
       <ul>
         <li><strong>Unidades:</strong> {', '.join(UNITS.keys())}</li>
         <li><strong>Tamanho:</strong> {size_kb} KB</li>
-        {drive_txt}
+        {b2_txt}
       </ul>
       <p style="color:#6b7280;font-size:12px">Para restaurar: <code>sqlite3 novo.db &lt; caixa_dia.sql</code></p>
     </div>
   </div>
 </body></html>"""
-            # Anexa o ZIP apenas se Drive falhou (evita emails pesados quando Drive ja guarda)
-            anexo = zip_bytes if not resultado["gdrive"].get("ok") else None
+            # Anexa o ZIP apenas se B2 falhou (evita emails pesados quando o bucket ja tem)
+            anexo = zip_bytes if not resultado["b2"].get("ok") else None
             anexo_nome = fname if anexo else ""
             _send_email(f"[Astrovistorias] Backup {'Manual ' if tipo != 'auto' else ''}{data_fmt}", html, anexo, anexo_nome)
             resultado["email"]["ok"] = True
         except Exception as exc:
             resultado["email"]["error"] = str(exc)
 
-        resultado["ok"] = resultado["gdrive"].get("ok") or resultado["email"].get("ok")
-        app.logger.info("[backup] Concluido tipo=%s size=%dKB gdrive=%s",
-                        tipo, size_kb, resultado["gdrive"].get("ok"))
+        resultado["ok"] = resultado["b2"].get("ok") or resultado["email"].get("ok")
+        app.logger.info("[backup] Concluido tipo=%s size=%dKB b2=%s",
+                        tipo, size_kb, resultado["b2"].get("ok"))
     except Exception as exc:
         app.logger.exception("[backup] Falha geral")
         resultado["error"] = str(exc)
@@ -6094,11 +6080,12 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
         "tipo":    tipo,
         "ator":    ator,
         "size_kb": resultado["size_kb"],
-        "gdrive_ok":   bool(resultado["gdrive"].get("ok")),
-        "gdrive_file": resultado["gdrive"].get("file_id"),
-        "gdrive_link": resultado["gdrive"].get("web_link"),
-        "email_ok":    bool(resultado["email"].get("ok")),
-        "error":       resultado.get("error"),
+        "b2_ok":   bool(resultado["b2"].get("ok")),
+        "b2_file": resultado["b2"].get("file_id"),
+        "b2_name": resultado["b2"].get("name"),
+        "b2_link": resultado["b2"].get("web_link"),
+        "email_ok": bool(resultado["email"].get("ok")),
+        "error":    resultado.get("error"),
     })
     return resultado
 
@@ -6264,8 +6251,8 @@ def api_backup_now():
     res   = _executar_backup(tipo="manual", ator=ator)
     _write_audit_log(user, "backup_manual", target="sistema", payload={
         "size_kb": res.get("size_kb"),
-        "gdrive_ok": bool(res.get("gdrive", {}).get("ok")),
-        "gdrive_file": res.get("gdrive", {}).get("file_id"),
+        "b2_ok": bool(res.get("b2", {}).get("ok")),
+        "b2_file": res.get("b2", {}).get("file_id"),
     })
     status = 200 if res.get("ok") else 500
     return _json(res, status)
@@ -6274,23 +6261,18 @@ def api_backup_now():
 @app.route("/master/api/backup/status")
 @master_only_required
 def api_backup_status():
-    """Retorna historico dos ultimos backups + estado das envs Drive."""
-    raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "").strip()
-    folder_id = os.environ.get("GDRIVE_BACKUP_FOLDER_ID", "").strip()
-    sa_email = ""
-    if raw:
-        try:
-            sa_email = json.loads(raw).get("client_email", "") or ""
-        except Exception:
-            pass
-    folder_url = f"https://drive.google.com/drive/folders/{folder_id}" if folder_id else ""
+    """Retorna historico dos ultimos backups + estado das envs B2."""
+    key_id      = os.environ.get("B2_KEY_ID", "").strip()
+    app_key     = os.environ.get("B2_APPLICATION_KEY", "").strip()
+    bucket_name = os.environ.get("B2_BUCKET_NAME", "").strip()
+    configured  = bool(key_id and app_key and bucket_name)
     return _json({
         "history": _backup_log_read(limit=30),
-        "gdrive": {
-            "configured": bool(raw and folder_id),
-            "sa_email": sa_email,
-            "folder_id": folder_id,
-            "folder_url": folder_url,
+        "b2": {
+            "configured": configured,
+            "bucket":     bucket_name,
+            "dashboard":  _B2_DASHBOARD_URL if configured else "",
+            "key_id_last4": key_id[-4:] if key_id else "",
         },
     })
 

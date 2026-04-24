@@ -219,7 +219,7 @@
           </div>
           <div style="display:flex;gap:var(--ds-space-2);flex-wrap:wrap">
             <a id="backupFolder" class="action-btn" href="#" target="_blank" rel="noopener" style="min-width:160px;display:none">
-              <span class="ab-icon" id="folderIcon"></span>Abrir pasta Drive
+              <span class="ab-icon" id="folderIcon"></span>Abrir painel B2
             </a>
             <button id="backupNow" class="action-btn" style="min-width:200px">
               <span class="ab-icon" id="backupNowIcon"></span>Fazer backup agora
@@ -495,6 +495,10 @@
     }catch{ return iso; }
   }
 
+  // Aceita entradas antigas do log (gdrive_*) ou novas (b2_*)
+  function _entryOk(e){ return e.b2_ok ?? e.gdrive_ok; }
+  function _entryLink(e){ return e.b2_link ?? e.gdrive_link; }
+
   async function loadBackupStatus(){
     const sum  = document.getElementById("backupSummary");
     const hist = document.getElementById("backupHistory");
@@ -502,31 +506,33 @@
     try {
       const r = await fetch("/master/api/backup/status");
       const j = await r.json();
-      const g = j.gdrive || {};
+      const b2 = j.b2 || {};
       const h = j.history || [];
       const last = h[0];
-      if (!g.configured){
-        sum.innerHTML = '<span style="color:var(--ds-warning)">⚠ Google Drive não configurado</span> — definir <code>GCP_SERVICE_ACCOUNT_JSON</code> e <code>GDRIVE_BACKUP_FOLDER_ID</code> no Railway';
+      const dashboard = b2.dashboard || "";
+      if (!b2.configured){
+        sum.innerHTML = '<span style="color:var(--ds-warning)">⚠ Backblaze B2 não configurado</span> — definir <code>B2_KEY_ID</code>, <code>B2_APPLICATION_KEY</code> e <code>B2_BUCKET_NAME</code> no Railway';
         folder.style.display = "none";
-      } else if (last && last.gdrive_ok){
-        sum.innerHTML = `<span style="color:var(--ds-success)">● Último:</span> ${_fmtBr(last.ts)} (${last.size_kb} KB, ${last.tipo})`;
-        folder.href = g.folder_url || "#";
+      } else if (last && _entryOk(last)){
+        sum.innerHTML = `<span style="color:var(--ds-success)">● Último:</span> ${_fmtBr(last.ts)} (${last.size_kb} KB, ${last.tipo}) · bucket <code>${b2.bucket}</code>`;
+        folder.href = dashboard;
         folder.style.display = "inline-flex";
       } else if (last){
         sum.innerHTML = `<span style="color:var(--ds-danger)">✗ Último falhou:</span> ${_fmtBr(last.ts)} — ${last.error || "ver logs"}`;
-        folder.href = g.folder_url || "#";
-        folder.style.display = g.folder_url ? "inline-flex" : "none";
+        folder.href = dashboard;
+        folder.style.display = dashboard ? "inline-flex" : "none";
       } else {
-        sum.innerHTML = '<span style="color:var(--ds-ink-muted)">Nenhum backup registrado ainda — rodar manual para testar</span>';
-        folder.href = g.folder_url || "#";
-        folder.style.display = g.folder_url ? "inline-flex" : "none";
+        sum.innerHTML = `<span style="color:var(--ds-ink-muted)">Nenhum backup registrado ainda — bucket <code>${b2.bucket}</code> configurado, clique em "Fazer backup agora" para testar</span>`;
+        folder.href = dashboard;
+        folder.style.display = dashboard ? "inline-flex" : "none";
       }
       if (h.length){
         const rows = h.slice(0, 8).map(e => {
-          const ok = e.gdrive_ok ? '<span style="color:var(--ds-success)">✓</span>' : '<span style="color:var(--ds-danger)">✗</span>';
-          const link = e.gdrive_link ? ` · <a href="${e.gdrive_link}" target="_blank" rel="noopener" style="color:var(--ds-ink-muted)">arquivo</a>` : '';
+          const ok = _entryOk(e) ? '<span style="color:var(--ds-success)">✓</span>' : '<span style="color:var(--ds-danger)">✗</span>';
+          const link = _entryLink(e) ? ` · <a href="${_entryLink(e)}" target="_blank" rel="noopener" style="color:var(--ds-ink-muted)">painel</a>` : '';
+          const nome = e.b2_name ? ` · <code style="font-size:11px;color:var(--ds-ink-muted)">${e.b2_name}</code>` : '';
           const err = e.error ? ` · <span style="color:var(--ds-danger)">${e.error.slice(0,80)}</span>` : '';
-          return `<div style="padding:3px 0">${ok} ${_fmtBr(e.ts)} · ${e.size_kb} KB · ${e.tipo}${e.ator ? ' por '+e.ator : ''}${link}${err}</div>`;
+          return `<div style="padding:3px 0">${ok} ${_fmtBr(e.ts)} · ${e.size_kb} KB · ${e.tipo}${e.ator ? ' por '+e.ator : ''}${nome}${link}${err}</div>`;
         }).join("");
         hist.innerHTML = `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--ds-line)">${rows}</div>`;
       } else {
@@ -539,7 +545,7 @@
 
   document.getElementById("backupNow").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
-    if (!confirm("Rodar backup agora? Vai gerar o ZIP e subir no Google Drive.")) return;
+    if (!confirm("Rodar backup agora? Vai gerar o ZIP e subir no Backblaze B2.")) return;
     btn.disabled = true;
     const originalHTML = btn.innerHTML;
     btn.innerHTML = `<span class="ab-icon">${AstroShell.icon("save")}</span>Rodando…`;
@@ -550,18 +556,16 @@
         headers: { "X-CSRF-Token": token }
       });
       const j = await r.json();
+      const b2 = j.b2 || {};
       if (!j.ok) {
-        const detalhe = j.gdrive?.error || j.error || "falhou";
+        const detalhe = b2.error || j.error || "falhou";
         alert("Falhou: " + detalhe);
+      } else if (b2.ok) {
+        alert(`Backup concluído (${j.size_kb} KB)\nArquivo no B2: ${b2.name}`);
+      } else if (b2.skipped) {
+        alert(`Backup gerado (${j.size_kb} KB) — B2 não configurado, só email.`);
       } else {
-        const g = j.gdrive || {};
-        if (g.ok) {
-          alert(`Backup concluído (${j.size_kb} KB)\nDrive: ${g.web_link || 'ok'}`);
-        } else if (g.skipped) {
-          alert(`Backup gerado (${j.size_kb} KB) — Drive não configurado, só email.`);
-        } else {
-          alert(`Backup gerado (${j.size_kb} KB) — Drive falhou: ${g.error || '?'}`);
-        }
+        alert(`Backup gerado (${j.size_kb} KB) — B2 falhou: ${b2.error || '?'}`);
       }
     } catch (err) {
       alert("Erro: " + err.message);
