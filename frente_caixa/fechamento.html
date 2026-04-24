@@ -1229,6 +1229,28 @@
     </div>
   </div>
 
+  <!-- ═══ MODAL RESTAURAR RASCUNHO LOCAL ═══════════════════════════════════════ -->
+  <div id="draftRestoreModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="draftRestoreTitle">
+    <div class="modal-card" style="max-width:440px">
+      <div class="modal-header">
+        <div>
+          <h2 id="draftRestoreTitle">Rascunho encontrado</h2>
+          <div class="modal-subtitle" id="draftRestoreSub">Um fechamento salvo localmente neste dispositivo.</div>
+        </div>
+      </div>
+      <div class="modal-body" style="padding-top:8px">
+        <div id="draftRestoreInfo" style="display:flex;flex-direction:column;gap:8px;padding:14px;background:var(--ds-surface-alt);border:1px solid var(--ds-line);border-radius:var(--ds-radius-md);font-size:13.5px"></div>
+        <p style="margin:14px 0 0;font-size:13px;color:var(--ds-ink-muted)">
+          Se você começou o fechamento em outra aba/sessão, pode continuar daqui. Caso contrário, descartar é seguro (os lançamentos do PDV estão preservados no servidor).
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button id="draftRestoreDiscard" class="btn-secondary" type="button">Descartar rascunho</button>
+        <button id="draftRestoreConfirm" type="button">Restaurar</button>
+      </div>
+    </div>
+  </div>
+
   </main>
 
   <script src="/assets/app-shell.js"></script>
@@ -1292,18 +1314,29 @@
         } else if (typeof loadLocalDraft === 'function') {
           const draft = loadLocalDraft();
           if (draft && Array.isArray(draft.records) && draft.records.length) {
-            const when = draft.saved_at ? new Date(draft.saved_at).toLocaleString('pt-BR') : 'anterior';
-            const ok = confirm(
-              `Existe um fechamento salvo localmente de ${when}\n\n` +
-              `${draft.records.length} lançamento(s), ${(draft.arquivos || []).length} arquivo(s).\n\n` +
-              `Deseja restaurar este rascunho?`
-            );
-            if (ok) {
-              hydrateFromPayload(draft);
-              if (typeof render === 'function') render();
-            } else if (typeof clearLocalDraft === 'function') {
-              clearLocalDraft();
-            }
+            const when  = draft.saved_at ? new Date(draft.saved_at).toLocaleString('pt-BR') : 'anterior';
+            const nRec  = draft.records.length;
+            const nArq  = (draft.arquivos || []).length;
+            const modal = document.getElementById('draftRestoreModal');
+            const info  = document.getElementById('draftRestoreInfo');
+            const btnOk = document.getElementById('draftRestoreConfirm');
+            const btnNo = document.getElementById('draftRestoreDiscard');
+            info.innerHTML =
+              `<div><strong>Salvo em:</strong> ${when}</div>` +
+              `<div><strong>Lançamentos:</strong> ${nRec}</div>` +
+              `<div><strong>Arquivos importados:</strong> ${nArq}</div>`;
+            modal.classList.remove('hidden');
+            const finish = (restore) => {
+              modal.classList.add('hidden');
+              if (restore) {
+                hydrateFromPayload(draft);
+                if (typeof render === 'function') render();
+              } else if (typeof clearLocalDraft === 'function') {
+                clearLocalDraft();
+              }
+            };
+            btnOk.onclick = () => finish(true);
+            btnNo.onclick = () => finish(false);
           }
         }
       } catch (e) { console.warn('[restore]', e); }
