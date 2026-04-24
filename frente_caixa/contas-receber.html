@@ -289,17 +289,27 @@
     } catch { return "—"; }
   }
 
+  const LS_UNIT_KEY = "astro.contasreceber.unit";
+
   async function loadUnits() {
     try {
       const r = await fetch("/master/api/units");
       const j = await r.json();
       const sel = document.getElementById("selUnit");
-      (j.units || []).forEach(u => {
+      const units = j.units || [];
+      units.forEach(u => {
         const opt = document.createElement("option");
         opt.value = u.id;
         opt.textContent = u.nome || u.id;
         sel.appendChild(opt);
       });
+      // Default: ultima escolha salva, ou primeira unidade (evita "all" que e lento)
+      const saved = localStorage.getItem(LS_UNIT_KEY);
+      if (saved && (saved === "all" || units.some(u => u.id === saved))) {
+        sel.value = saved;
+      } else if (units.length > 0) {
+        sel.value = units[0].id;
+      }
     } catch {}
   }
 
@@ -420,7 +430,10 @@
     </tr>`).join("");
   }
 
-  document.getElementById("selUnit").addEventListener("change", loadDashboard);
+  document.getElementById("selUnit").addEventListener("change", (e) => {
+    localStorage.setItem(LS_UNIT_KEY, e.target.value);
+    loadDashboard();
+  });
   document.getElementById("selMes").addEventListener("change", loadDashboard);
   document.getElementById("btnRefresh").addEventListener("click", loadDashboard);
 
