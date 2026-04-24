@@ -428,11 +428,12 @@
         <button class="btn-exportar" id="btnExportar">⬇ Export CSV</button>
       </div>
 
-      <!-- FP de hoje (card fixo, nao depende do filtro) -->
+      <!-- FP do periodo filtrado -->
       <div class="g-section">
         <div class="g-section-title" style="display:flex;align-items:center;gap:10px">
-          <span>Forma de pagamento — hoje</span>
-          <span id="fpHojeTotal" style="font-size:12px;font-weight:500;color:var(--ds-ink-muted)">—</span>
+          <span>Forma de pagamento</span>
+          <span id="fpHojePeriodo" style="font-size:12px;font-weight:500;color:var(--ds-ink-muted)"></span>
+          <span id="fpHojeTotal" style="font-size:12px;font-weight:500;color:var(--ds-ink-muted);margin-left:auto">—</span>
         </div>
         <div id="fpHojeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
           <div class="g-loading" style="grid-column:1/-1">Carregando…</div>
@@ -614,6 +615,7 @@
       if (!data.success) throw new Error(data.error || "Erro ao carregar.");
       lastData = data;
       if (data.unidade) document.getElementById("hdrUnidade").textContent = data.unidade;
+      renderFpPeriodo(data.resumo, data.periodo);
       renderResumo(data.resumo, data.fonte);
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
@@ -784,40 +786,36 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  async function carregarFpHoje() {
-    const today = new Date();
-    const iso = today.toISOString().slice(0, 10);
+  function renderFpPeriodo(resumo, periodo) {
     const grid = document.getElementById("fpHojeGrid");
     const tot  = document.getElementById("fpHojeTotal");
-    try {
-      const res  = await fetch(`${apiBase}/api/gerencial/historico?from=${iso}&to=${iso}`);
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || "erro");
-      const r = data.resumo || {};
-      const fps = [
-        { key: "dinheiro", label: "Dinheiro", cor: "var(--din)", ico: "dinheiro" },
-        { key: "pix",      label: "PIX",      cor: "var(--pix)", ico: "pix" },
-        { key: "debito",   label: "Débito",   cor: "var(--deb)", ico: "debito" },
-        { key: "credito",  label: "Crédito",  cor: "var(--crd)", ico: "credito" },
-        { key: "faturado", label: "Faturado", cor: "var(--fat)", ico: "faturado" },
-        { key: "detran",   label: "DETRAN",   cor: "var(--det)", ico: "detran" },
-      ];
-      const totalHoje = fps.reduce((s, f) => s + (r[f.key] || 0), 0);
-      tot.textContent = totalHoje > 0
-        ? `Total ${brl(totalHoje)} · ${r.count || 0} lançamento${r.count === 1 ? "" : "s"}`
-        : "sem lançamentos hoje";
-      grid.innerHTML = fps.map(f => {
-        const v = r[f.key] || 0;
-        const pct = totalHoje > 0 ? Math.round(v / totalHoje * 100) : 0;
-        return `<div class="fp-hoje-card" style="--fp-color:${f.cor}">
-          <div class="fp-hoje-label">${fpLabel(f.ico)}</div>
-          <div class="fp-hoje-valor">${brl(v)}</div>
-          <div class="fp-hoje-sub">${pct > 0 ? pct + "%" : "—"}</div>
-        </div>`;
-      }).join("");
-    } catch (e) {
-      grid.innerHTML = `<div class="g-error" style="grid-column:1/-1">${e.message}</div>`;
+    const lblP = document.getElementById("fpHojePeriodo");
+    if (periodo && lblP) {
+      const fmt = (iso) => { const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
+      lblP.textContent = periodo.from === periodo.to ? fmt(periodo.from) : `${fmt(periodo.from)} — ${fmt(periodo.to)}`;
     }
+    const r = resumo || {};
+    const fps = [
+      { key: "dinheiro", cor: "var(--din)", ico: "dinheiro" },
+      { key: "pix",      cor: "var(--pix)", ico: "pix" },
+      { key: "debito",   cor: "var(--deb)", ico: "debito" },
+      { key: "credito",  cor: "var(--crd)", ico: "credito" },
+      { key: "faturado", cor: "var(--fat)", ico: "faturado" },
+      { key: "detran",   cor: "var(--det)", ico: "detran" },
+    ];
+    const totalPeriodo = fps.reduce((s, f) => s + (r[f.key] || 0), 0);
+    tot.textContent = totalPeriodo > 0
+      ? `Total ${brl(totalPeriodo)} · ${r.count || 0} lançamento${r.count === 1 ? "" : "s"}`
+      : "sem lançamentos";
+    grid.innerHTML = fps.map(f => {
+      const v = r[f.key] || 0;
+      const pct = totalPeriodo > 0 ? Math.round(v / totalPeriodo * 100) : 0;
+      return `<div class="fp-hoje-card" style="--fp-color:${f.cor}">
+        <div class="fp-hoje-label">${fpLabel(f.ico)}</div>
+        <div class="fp-hoje-valor">${brl(v)}</div>
+        <div class="fp-hoje-sub">${pct > 0 ? pct + "%" : "—"}</div>
+      </div>`;
+    }).join("");
   }
 
   function renderTopClientes(lista, periodo) {
@@ -845,7 +843,6 @@
   }
 
   carregar();
-  carregarFpHoje();
 
   async function carregarDivergencias() {
     const { from, to } = getRange();
