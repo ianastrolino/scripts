@@ -1471,6 +1471,87 @@
     }
     .page-action-btn:active { transform: translateY(0); }
 
+    /* ─── Step wizard do ciclo do dia ──────────────────── */
+    .caixa-wizard {
+      display: flex; align-items: center; gap: 8px;
+      margin: 0 0 var(--ds-space-4);
+      padding: 14px 18px;
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      flex-wrap: wrap;
+    }
+    .wiz-step {
+      display: flex; align-items: center; gap: 10px;
+      flex: 1 1 0; min-width: 140px;
+      opacity: .45; transition: opacity .2s var(--ds-ease);
+    }
+    .wiz-dot {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--ds-line); color: var(--ds-ink-muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px; flex-shrink: 0;
+      transition: background .2s var(--ds-ease), color .2s var(--ds-ease);
+      position: relative;
+    }
+    .wiz-num, .wiz-check { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    .wiz-check { opacity: 0; transition: opacity .2s; }
+    .wiz-meta { display: flex; flex-direction: column; line-height: 1.15; }
+    .wiz-label { font-size: 13px; font-weight: 700; color: var(--ds-ink); }
+    .wiz-hint { font-size: 11px; color: var(--ds-ink-muted); margin-top: 1px; }
+    .wiz-conn {
+      flex: 0 0 24px; height: 2px; background: var(--ds-line); margin: 0 2px;
+      transition: background .2s var(--ds-ease);
+    }
+
+    /* Etapa 1 ativa */
+    .caixa-wizard[data-etapa="1"] .wiz-step[data-step="1"] { opacity: 1; }
+    .caixa-wizard[data-etapa="1"] .wiz-step[data-step="1"] .wiz-dot { background: #0f172a; color: #fff; box-shadow: 0 0 0 3px rgba(15,23,42,.12); }
+
+    /* Etapa 2 ativa, 1 feita */
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="1"] { opacity: 1; }
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="1"] .wiz-dot { background: var(--ds-success); color: #fff; }
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="1"] .wiz-num { opacity: 0; }
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="1"] .wiz-check { opacity: 1; }
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="2"] { opacity: 1; }
+    .caixa-wizard[data-etapa="2"] .wiz-step[data-step="2"] .wiz-dot { background: #d97706; color: #fff; box-shadow: 0 0 0 3px rgba(217,119,6,.18); animation: wizPulse 2s ease-in-out infinite; }
+    .caixa-wizard[data-etapa="2"] .wiz-conn:first-of-type { background: var(--ds-success); }
+
+    /* Etapa 3 — tudo feito */
+    .caixa-wizard[data-etapa="3"] .wiz-step { opacity: 1; }
+    .caixa-wizard[data-etapa="3"] .wiz-step .wiz-dot { background: var(--ds-success); color: #fff; }
+    .caixa-wizard[data-etapa="3"] .wiz-step .wiz-num { opacity: 0; }
+    .caixa-wizard[data-etapa="3"] .wiz-step .wiz-check { opacity: 1; }
+    .caixa-wizard[data-etapa="3"] .wiz-conn { background: var(--ds-success); }
+
+    @keyframes wizPulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(217,119,6,.18); }
+      50%      { box-shadow: 0 0 0 6px rgba(217,119,6,.08); }
+    }
+
+    /* Callout etapa 2 */
+    .caixa-etapa2-callout {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin: 0 0 var(--ds-space-4);
+      padding: 12px 16px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 3px solid #d97706;
+      border-radius: var(--ds-radius-md);
+      color: #78350f;
+      font-size: 13px; line-height: 1.5;
+    }
+    .caixa-etapa2-callout svg { flex-shrink: 0; margin-top: 2px; color: #d97706; }
+    .caixa-etapa2-callout strong { display: block; margin-bottom: 2px; color: #78350f; }
+    .caixa-etapa2-callout a { color: #92400e; font-weight: 700; text-decoration: underline; }
+
+    @media (max-width: 720px) {
+      .caixa-wizard { padding: 10px 12px; gap: 4px; }
+      .wiz-step { min-width: 0; flex-basis: 100%; }
+      .wiz-conn { display: none; }
+      .wiz-hint { display: none; }
+    }
+
     /* ─── Caixa fechado (tarja + estado travado) ─────────── */
     .fech-tarja {
       display: flex;
@@ -1583,6 +1664,52 @@
           <div class="app-page-eyebrow">Operação</div>
           <h1 class="app-page-title">Caixa do Dia<span class="app-page-unit" id="pageUnit">—</span></h1>
           <p class="app-page-sub">Lançamentos do dia, fechamento parcial e envio ao Tiny</p>
+        </div>
+      </div>
+
+      <!-- Step wizard do ciclo do dia: lancar → conferir → fechar -->
+      <div class="caixa-wizard" id="caixaWizard" data-etapa="1">
+        <div class="wiz-step" data-step="1">
+          <div class="wiz-dot">
+            <span class="wiz-num">1</span>
+            <svg class="wiz-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div class="wiz-meta">
+            <div class="wiz-label">Lançamentos</div>
+            <div class="wiz-hint">Operação normal do PDV</div>
+          </div>
+        </div>
+        <div class="wiz-conn"></div>
+        <div class="wiz-step" data-step="2">
+          <div class="wiz-dot">
+            <span class="wiz-num">2</span>
+            <svg class="wiz-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div class="wiz-meta">
+            <div class="wiz-label">Conferência</div>
+            <div class="wiz-hint">Planilha × PDV</div>
+          </div>
+        </div>
+        <div class="wiz-conn"></div>
+        <div class="wiz-step" data-step="3">
+          <div class="wiz-dot">
+            <span class="wiz-num">3</span>
+            <svg class="wiz-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div class="wiz-meta">
+            <div class="wiz-label">Dia fechado</div>
+            <div class="wiz-hint">Enviado ao Tiny</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Callout quando etapa 2 — ela ja comecou a conferir, voltou aqui pra lancar algo -->
+      <div class="caixa-etapa2-callout" id="etapa2Callout" style="display:none">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>
+        <div>
+          <strong>Momento de fechamento de caixa.</strong>
+          Você já iniciou a conferência entre planilha e PDV. Se esqueceu algum lançamento,
+          adicione abaixo. Quando estiver tudo certo, <a href="fechamento">volte ao fechamento</a> para enviar ao Tiny.
         </div>
       </div>
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════ -->

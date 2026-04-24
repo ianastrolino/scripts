@@ -115,11 +115,21 @@ async function carregarEstado() {
       state.totais = res.totais || {};
       state.fechado = !!res.fechado;
       state.fechamento = res.fechamento || null;
-      setTimeout(() => { renderTabela(); renderTotais(); renderFechamentoTarja(); }, 0);
+      state.etapa = res.etapa || 1;
+      setTimeout(() => { renderTabela(); renderTotais(); renderFechamentoTarja(); renderEtapaWizard(); }, 0);
     }
   } catch (e) {
     if (e.message !== "session_expired") console.error("Erro ao carregar estado:", e);
   }
+}
+
+function renderEtapaWizard() {
+  const wiz = document.getElementById("caixaWizard");
+  const callout = document.getElementById("etapa2Callout");
+  if (!wiz) return;
+  const etapa = state.etapa || 1;
+  wiz.setAttribute("data-etapa", String(etapa));
+  if (callout) callout.style.display = etapa === 2 ? "flex" : "none";
 }
 
 function renderFechamentoTarja() {

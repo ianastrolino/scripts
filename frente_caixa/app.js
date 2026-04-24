@@ -914,7 +914,7 @@ els.fileInput.addEventListener("change", async (event) => {
   state.conferencia = {};
   state.conferido = new Set();
   render();
-  conferirComPDV();
+  conferirComPDV().then(() => refreshWizardEtapa());
   if (imported.length) {
     saveSnapshotAsync("import").catch(() => {});
   }
@@ -1014,6 +1014,7 @@ els.confirmSendBtn.addEventListener("click", async () => {
 
     closeConfirmModal();
     _pendingToSend = [];
+    refreshWizardEtapa();
 
     let msg = `Enviados com sucesso: ${total.enviados.length}`;
     if (total.pulados.length) msg += `\nPulados (ja existiam): ${total.pulados.length}`;
@@ -1349,8 +1350,24 @@ fetch(`${apiBase}/api/info`)
   })
   .catch(() => {});
 
+// Wizard do ciclo do dia (lancar → conferir → fechar). Atualiza data-etapa
+// do card a partir do estado do servidor.
+async function refreshWizardEtapa() {
+  if (!apiBase) return;
+  try {
+    const res = await apiFetch(`${apiBase}/api/caixa/estado`);
+    if (res && res.success) {
+      const wiz = document.getElementById("caixaWizard");
+      if (wiz) wiz.setAttribute("data-etapa", String(res.etapa || 1));
+    }
+  } catch (e) { /* silencia */ }
+}
+
 // Carrega faturados do PDV na abertura da página (mesmo sem planilha importada)
-if (apiBase) conferirComPDV();
+if (apiBase) {
+  conferirComPDV().then(() => refreshWizardEtapa());
+  refreshWizardEtapa();
+}
 
 // Em modo local (sem Railway) carrega exemplo para facilitar testes
 if (!apiBase) loadSample();

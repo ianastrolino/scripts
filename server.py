@@ -3700,27 +3700,54 @@ def _dia_fechado(unit: str, data_iso: str) -> dict | None:
 
 
 def _fechar_dia(unit: str, data_iso: str, user_email: str, motivo: str = "envio_tiny") -> dict:
-    """Marca o dia como fechado. Idempotente — nao sobrescreve se ja fechado."""
+    """Marca o dia como fechado. Idempotente se ja fechado — apenas preenche
+    fechado_em. Preserva conferencia_iniciada_em (da etapa 2) se existir."""
     fechs = _load_fechamentos(unit)
-    if data_iso in fechs:
-        return fechs[data_iso]
-    entry = {
-        "fechado_em":  dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
-        "fechado_por": user_email,
-        "motivo":      motivo,
-    }
+    entry = fechs.get(data_iso) or {}
+    if entry.get("fechado_em"):
+        return entry
+    entry["fechado_em"]  = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    entry["fechado_por"] = user_email
+    entry["motivo"]      = motivo
     fechs[data_iso] = entry
     _save_fechamentos(unit, fechs)
     return entry
 
 
-def _reabrir_dia(unit: str, data_iso: str, user_email: str) -> bool:
-    """Remove a marcacao de fechado. Retorna True se reabriu, False se nao estava fechado."""
+def _iniciar_conferencia(unit: str, data_iso: str, user_email: str) -> dict:
+    """Marca que a conferencia iniciou neste dia (etapa 2). Idempotente.
+    Se dia ja esta fechado, nao faz nada (retorna a entry como esta)."""
     fechs = _load_fechamentos(unit)
-    if data_iso not in fechs:
+    entry = fechs.get(data_iso) or {}
+    if entry.get("fechado_em"):
+        return entry
+    if entry.get("conferencia_iniciada_em"):
+        return entry
+    entry["conferencia_iniciada_em"]  = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+    entry["conferencia_iniciada_por"] = user_email
+    fechs[data_iso] = entry
+    _save_fechamentos(unit, fechs)
+    return entry
+
+
+def _dia_etapa(unit: str, data_iso: str) -> int:
+    """Retorna 1 (lancando), 2 (conferencia iniciada), 3 (fechado)."""
+    entry = _load_fechamentos(unit).get(data_iso) or {}
+    if entry.get("fechado_em"):
+        return 3
+    if entry.get("conferencia_iniciada_em"):
+        return 2
+    return 1
+
+
+def _reabrir_dia(unit: str, data_iso: str, user_email: str) -> bool:
+    """Remove a marcacao de fechado. Retorna True se reabriu, False se nao estava fechado.
+    Preserva conferencia_iniciada_em — reabrir so tira o envio ao Tiny, nao apaga
+    o fato de ela ja ter conferido no passado."""
+    fechs = _load_fechamentos(unit)
+    entry = fechs.get(data_iso)
+    if not entry or not entry.get("fechado_em"):
         return False
-    entry = fechs.pop(data_iso)
-    # Guarda historico de reaberturas como chave especial (nao afeta lookup do dia)
     hist = fechs.setdefault("_reaberturas", [])
     hist.append({
         **entry,
@@ -3728,6 +3755,14 @@ def _reabrir_dia(unit: str, data_iso: str, user_email: str) -> bool:
         "reaberto_por": user_email,
         "data_original": data_iso,
     })
+    # Remove so os campos de fechamento; mantem conferencia_iniciada_em se existia
+    entry.pop("fechado_em", None)
+    entry.pop("fechado_por", None)
+    entry.pop("motivo", None)
+    if entry.get("conferencia_iniciada_em"):
+        fechs[data_iso] = entry  # etapa 2
+    else:
+        fechs.pop(data_iso, None)  # etapa 1
     _save_fechamentos(unit, fechs)
     return True
 
@@ -4053,13 +4088,15 @@ def api_caixa_estado(unit: str):
     try:
         state = _load_caixa_dia(unit)
         fech = _dia_fechado(unit, state["data"])
+        etapa = _dia_etapa(unit, state["data"])
         return _json({
             "success": True,
             "data": state["data"],
             "lancamentos": state["lancamentos"],
             "totais": _caixa_totals(state["lancamentos"]),
-            "fechado": bool(fech),
+            "fechado": bool(fech and fech.get("fechado_em")),
             "fechamento": fech,
+            "etapa": etapa,
         })
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
@@ -4421,6 +4458,12 @@ def api_caixa_conferir(unit: str):
                 "cpf":      lc.get("cpf", ""),
                 "timestamp": lc.get("timestamp"),
             })
+
+        # Marca etapa 2 do ciclo do dia (conferencia iniciada) — idempotente.
+        # Se ja fechado, _iniciar_conferencia nao faz nada.
+        if target_date and records:
+            user = _current_user() or {}
+            _iniciar_conferencia(unit, target_date, session.get("email", "") or user.get("email", ""))
 
         return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
     except Exception as exc:
