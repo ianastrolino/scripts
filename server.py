@@ -185,11 +185,20 @@ def _maintenance_gate():
     return None
 
 
-# ── Rate limiting para login (5 tentativas / 60s por IP) ──────────────────────
+# ── Rate limiting para login (por IP e por email) ────────────────────────────
 _LOGIN_WINDOW  = 60
 _LOGIN_MAX     = 5
 _login_attempts: dict[str, list[float]] = collections.defaultdict(list)
 _login_lock = threading.Lock()
+
+# Por-email: 5 falhas em 15 min bloqueia aquele email por 30 min
+# (defende contra atacante com IPs rotativos atacando conta especifica)
+_EMAIL_FAIL_WINDOW = 15 * 60   # 15 min
+_EMAIL_FAIL_MAX    = 5
+_EMAIL_BLOCK_SECS  = 30 * 60   # 30 min
+_email_fail_log: dict[str, list[float]] = collections.defaultdict(list)
+_email_block_until: dict[str, float] = {}
+_email_lock = threading.Lock()
 
 def _login_rate_check(ip: str) -> bool:
     """Retorna True se o IP pode tentar login, False se bloqueado."""
@@ -200,6 +209,43 @@ def _login_rate_check(ip: str) -> bool:
             return False
         _login_attempts[ip].append(now)
         return True
+
+def _email_is_blocked(email: str) -> float:
+    """Retorna segundos restantes de bloqueio pro email, 0 se liberado."""
+    if not email:
+        return 0.0
+    now = time.monotonic()
+    with _email_lock:
+        until = _email_block_until.get(email, 0.0)
+        if until and now < until:
+            return until - now
+        # Bloqueio expirou, limpa
+        if until:
+            _email_block_until.pop(email, None)
+        return 0.0
+
+def _email_register_fail(email: str) -> bool:
+    """Registra uma falha no email. Retorna True se acabou de ser bloqueado."""
+    if not email:
+        return False
+    now = time.monotonic()
+    with _email_lock:
+        tries = [t for t in _email_fail_log[email] if now - t < _EMAIL_FAIL_WINDOW]
+        tries.append(now)
+        _email_fail_log[email] = tries
+        if len(tries) >= _EMAIL_FAIL_MAX:
+            _email_block_until[email] = now + _EMAIL_BLOCK_SECS
+            _email_fail_log[email] = []  # reseta janela; bloqueio vale sozinho
+            return True
+    return False
+
+def _email_clear_fails(email: str) -> None:
+    """Chamado apos login bem-sucedido pra zerar contador de falhas do email."""
+    if not email:
+        return
+    with _email_lock:
+        _email_fail_log.pop(email, None)
+        _email_block_until.pop(email, None)
 
 # ── Rate limiting para PIN (10 tentativas / 60s por IP+unidade) ───────────────
 _PIN_WINDOW  = 60
@@ -981,8 +1027,18 @@ def login_page():
         attempted = {"email": email, "name": "", "master": False}
 
         if not _login_rate_check(ip):
-            _write_audit_log(attempted, "login_fail", payload={"reason": "rate_limited", "user_agent": ua}, result="fail")
+            _write_audit_log(attempted, "login_fail", payload={"reason": "rate_limited_ip", "user_agent": ua}, result="fail")
             return redirect(url_for("login_page") + "?erro=bloqueado")
+
+        # Bloqueio por email (mesmo antes de olhar senha) — blinda conta especifica
+        blocked_secs = _email_is_blocked(email)
+        if blocked_secs > 0:
+            _write_audit_log(attempted, "login_fail", payload={
+                "reason": "rate_limited_email",
+                "user_agent": ua,
+                "unblock_in_secs": int(blocked_secs),
+            }, result="fail")
+            return redirect(url_for("login_page") + "?erro=bloqueado_email")
 
         if not email.endswith("@astrovistorias.com.br"):
             _write_audit_log(attempted, "login_fail", payload={"reason": "domain", "user_agent": ua}, result="fail")
@@ -998,11 +1054,19 @@ def login_page():
             session.permanent = True
             session["email"] = email
             session["name"]  = user.get("name", email)
+            _email_clear_fails(email)
             _write_audit_log(attempted, "login_success", payload={"user_agent": ua})
             return redirect(url_for("index"))
 
         reason = "wrong_password" if user else "user_not_found"
-        _write_audit_log(attempted, "login_fail", payload={"reason": reason, "user_agent": ua}, result="fail")
+        just_blocked = _email_register_fail(email)
+        _write_audit_log(attempted, "login_fail", payload={
+            "reason": reason,
+            "user_agent": ua,
+            "email_just_blocked": just_blocked,
+        }, result="fail")
+        if just_blocked:
+            return redirect(url_for("login_page") + "?erro=bloqueado_email")
         return redirect(url_for("login_page") + "?erro=credenciais")
 
     return send_from_directory(UI_DIR, "login.html")

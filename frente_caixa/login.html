@@ -331,9 +331,10 @@
     const txt    = document.getElementById("errorText");
 
     const mensagens = {
-      dominio:     "Acesso permitido apenas para e-mails @astrovistorias.com.br.",
-      credenciais: "E-mail ou senha inválidos. Verifique e tente novamente.",
-      bloqueado:   "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+      dominio:         "Acesso permitido apenas para e-mails @astrovistorias.com.br.",
+      credenciais:     "E-mail ou senha inválidos. Verifique e tente novamente.",
+      bloqueado:       "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+      bloqueado_email: "Esta conta foi bloqueada por 30 min após várias tentativas de senha falhas. Se for você, aguarde.",
     };
     if (mensagens[erro]) {
       txt.textContent = mensagens[erro];
