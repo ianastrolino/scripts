@@ -20,7 +20,7 @@
 
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: var(--ds-space-3);
       margin-bottom: var(--ds-space-5);
     }
@@ -31,10 +31,11 @@
       padding: var(--ds-space-4) var(--ds-space-5);
       box-shadow: var(--ds-shadow-xs);
     }
-    .kpi.k-a-receber { border-left-color: #2563eb; }
-    .kpi.k-7d        { border-left-color: #10b981; }
-    .kpi.k-30d       { border-left-color: #f59e0b; }
-    .kpi.k-atraso    { border-left-color: #dc2626; }
+    .kpi.k-emitidas   { border-left-color: #0f172a; }
+    .kpi.k-recebidas  { border-left-color: #10b981; }
+    .kpi.k-em-aberto  { border-left-color: #2563eb; }
+    .kpi.k-atrasadas  { border-left-color: #dc2626; }
+    .kpi.k-canceladas { border-left-color: #6b7280; }
 
     .kpi-label {
       font-size: 11px; font-weight: 800;
@@ -152,6 +153,7 @@
 
       <div class="toolbar">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="selMes" class="filter-sel"></select>
           <select id="selUnit" class="filter-sel">
             <option value="all">Todas as unidades</option>
           </select>
@@ -161,25 +163,30 @@
       </div>
 
       <div class="kpi-grid" id="kpiGrid">
-        <div class="kpi k-a-receber">
-          <div class="kpi-label">A Receber</div>
-          <div class="kpi-val" id="kpiAReceber">—</div>
-          <div class="kpi-sub" id="kpiAReceberSub">carregando…</div>
+        <div class="kpi k-emitidas">
+          <div class="kpi-label">Emitidas</div>
+          <div class="kpi-val" id="kpiEmitidas">—</div>
+          <div class="kpi-sub" id="kpiEmitidasSub">carregando…</div>
         </div>
-        <div class="kpi k-7d">
-          <div class="kpi-label">Vence em 7 dias</div>
-          <div class="kpi-val" id="kpi7d">—</div>
-          <div class="kpi-sub" id="kpi7dSub">—</div>
+        <div class="kpi k-recebidas">
+          <div class="kpi-label">Recebidas</div>
+          <div class="kpi-val" id="kpiRecebidas">—</div>
+          <div class="kpi-sub" id="kpiRecebidasSub">—</div>
         </div>
-        <div class="kpi k-30d">
-          <div class="kpi-label">Vence em 30 dias</div>
-          <div class="kpi-val" id="kpi30d">—</div>
-          <div class="kpi-sub" id="kpi30dSub">—</div>
+        <div class="kpi k-em-aberto">
+          <div class="kpi-label">Em aberto</div>
+          <div class="kpi-val" id="kpiEmAberto">—</div>
+          <div class="kpi-sub" id="kpiEmAbertoSub">—</div>
         </div>
-        <div class="kpi k-atraso">
-          <div class="kpi-label">Atrasado</div>
-          <div class="kpi-val" id="kpiAtraso">—</div>
-          <div class="kpi-sub" id="kpiAtrasoSub">—</div>
+        <div class="kpi k-atrasadas">
+          <div class="kpi-label">Atrasadas</div>
+          <div class="kpi-val" id="kpiAtrasadas">—</div>
+          <div class="kpi-sub" id="kpiAtrasadasSub">—</div>
+        </div>
+        <div class="kpi k-canceladas">
+          <div class="kpi-label">Canceladas</div>
+          <div class="kpi-val" id="kpiCanceladas">—</div>
+          <div class="kpi-sub" id="kpiCanceladasSub">—</div>
         </div>
       </div>
 
@@ -192,13 +199,14 @@
           <thead>
             <tr>
               <th>Unidade</th>
-              <th class="num">A receber</th>
-              <th class="num">Títulos</th>
-              <th class="num">Atrasado</th>
+              <th class="num">Emitidas</th>
+              <th class="num">Recebidas</th>
+              <th class="num">Em aberto</th>
+              <th class="num">Atrasadas</th>
             </tr>
           </thead>
           <tbody id="tbodyUnidades">
-            <tr><td colspan="4" class="empty">carregando…</td></tr>
+            <tr><td colspan="5" class="empty">carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -295,13 +303,33 @@
     } catch {}
   }
 
+  function popularMeses() {
+    const sel = document.getElementById("selMes");
+    const hoje = new Date();
+    const nomes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    // 12 meses pra tras + mes corrente
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const value = `${y}-${String(m).padStart(2,"0")}`;
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = `${nomes[d.getMonth()]} ${y}${i === 0 ? " (atual)" : ""}`;
+      sel.appendChild(opt);
+    }
+    sel.value = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`;
+  }
+
   async function loadDashboard() {
     const root = document.querySelector(".app-content-wrap");
     root.classList.add("loading");
     const unit = document.getElementById("selUnit").value;
+    const mes  = document.getElementById("selMes").value;
     try {
       const qs = new URLSearchParams();
       if (unit && unit !== "all") qs.set("unit", unit);
+      if (mes) qs.set("mes", mes);
       const r = await fetch(`/master/api/contas-receber?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || "falha");
@@ -310,7 +338,7 @@
       renderAtraso(j.em_atraso);
       renderVence7d(j.vencendo_7d);
       document.getElementById("infoAtualizado").textContent =
-        `atualizado ${fmtRel(j.atualizado_em)} · ${brDate(j.hoje)}`;
+        `atualizado ${fmtRel(j.atualizado_em)} · hoje ${brDate(j.hoje)}`;
     } catch (e) {
       alert("Falha ao carregar: " + e.message);
     } finally {
@@ -319,36 +347,36 @@
   }
 
   function renderKPIs(t) {
-    document.getElementById("kpiAReceber").textContent    = brl(t.a_receber);
-    document.getElementById("kpiAReceberSub").textContent = `${t.a_receber_count} título${t.a_receber_count === 1 ? "" : "s"}`;
-
-    document.getElementById("kpi7d").textContent          = brl(t.vence_7d);
-    document.getElementById("kpi7dSub").textContent       = `${t.vence_7d_count} título${t.vence_7d_count === 1 ? "" : "s"}`;
-
-    document.getElementById("kpi30d").textContent         = brl(t.vence_30d);
-    document.getElementById("kpi30dSub").textContent      = `${t.vence_30d_count} título${t.vence_30d_count === 1 ? "" : "s"}`;
-
-    document.getElementById("kpiAtraso").textContent      = brl(t.atrasado);
-    document.getElementById("kpiAtrasoSub").textContent   = t.atrasado_count
-      ? `${t.atrasado_count} título${t.atrasado_count === 1 ? "" : "s"} vencido${t.atrasado_count === 1 ? "" : "s"}`
-      : "tudo em dia";
+    const setK = (valId, subId, valor, count, subSuffix = "") => {
+      document.getElementById(valId).textContent = brl(valor);
+      const label = `${count} título${count === 1 ? "" : "s"}${subSuffix}`;
+      document.getElementById(subId).textContent = count > 0 ? label : "—";
+    };
+    setK("kpiEmitidas",   "kpiEmitidasSub",   t.emitidas,   t.emitidas_count);
+    setK("kpiRecebidas",  "kpiRecebidasSub",  t.recebidas,  t.recebidas_count);
+    setK("kpiEmAberto",   "kpiEmAbertoSub",   t.em_aberto,  t.em_aberto_count);
+    setK("kpiAtrasadas",  "kpiAtrasadasSub",  t.atrasadas,  t.atrasadas_count);
+    setK("kpiCanceladas", "kpiCanceladasSub", t.canceladas, t.canceladas_count);
+    // Casos especiais: atrasadas=0 mostra "tudo em dia", canceladas=0 mostra "—"
+    if (t.atrasadas_count === 0) document.getElementById("kpiAtrasadasSub").textContent = "tudo em dia";
   }
 
   function renderUnidades(lista) {
     const tb = document.getElementById("tbodyUnidades");
     document.getElementById("porUnitMeta").textContent = `${lista.length} unidade${lista.length === 1 ? "" : "s"}`;
     if (!lista.length) {
-      tb.innerHTML = `<tr><td colspan="4" class="empty">sem dados</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="5" class="empty">sem dados</td></tr>`;
       return;
     }
     tb.innerHTML = lista.map(u => {
-      const atrasoTxt = u.atrasado > 0
-        ? `<span style="color:#dc2626;font-weight:700">${brl(u.atrasado)}</span> <span class="muted">(${u.atrasado_count})</span>`
-        : `<span class="muted">0</span>`;
+      const atrasoTxt = u.atrasadas > 0
+        ? `<span style="color:#dc2626;font-weight:700">${brl(u.atrasadas)}</span> <span class="muted">(${u.atrasadas_count})</span>`
+        : `<span class="muted">—</span>`;
       return `<tr>
         <td><strong>${esc(u.nome)}</strong></td>
-        <td class="num">${brl(u.a_receber)}</td>
-        <td class="num muted">${u.qtd}</td>
+        <td class="num">${brl(u.emitidas)} <span class="muted">(${u.emitidas_count})</span></td>
+        <td class="num">${brl(u.recebidas)} <span class="muted">(${u.recebidas_count})</span></td>
+        <td class="num">${brl(u.em_aberto)} <span class="muted">(${u.em_aberto_count})</span></td>
         <td class="num">${atrasoTxt}</td>
       </tr>`;
     }).join("");
@@ -393,9 +421,11 @@
   }
 
   document.getElementById("selUnit").addEventListener("change", loadDashboard);
+  document.getElementById("selMes").addEventListener("change", loadDashboard);
   document.getElementById("btnRefresh").addEventListener("click", loadDashboard);
 
   (async () => {
+    popularMeses();
     await loadUnits();
     await loadDashboard();
   })();

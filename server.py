@@ -2384,30 +2384,100 @@ def master_api_inadimplencia():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+def _fetch_contas_mes_tiny(unit: str, ano: int, mes: int) -> list[dict]:
+    """Busca todas as contas (pagas + abertas) com dataEmissao no mes/ano.
+
+    Usa filtros dataEmissaoInicial/Final do Tiny v3. Se o Tiny ignorar os
+    filtros de data, filtra local (fallback seguro).
+    """
+    primeiro = dt.date(ano, mes, 1)
+    if mes == 12:
+        ultimo = dt.date(ano + 1, 1, 1) - dt.timedelta(days=1)
+    else:
+        ultimo = dt.date(ano, mes + 1, 1) - dt.timedelta(days=1)
+
+    config = _build_unit_config(unit)
+    state_dir = _unit_state_dir(unit)
+    importer = TinyImporter(config, state_dir)
+    client = importer.client
+    todos: list[dict] = []
+    offset = 0
+    limit = 100
+    while True:
+        params = {
+            "limit":               limit,
+            "offset":              offset,
+            "dataEmissaoInicial":  primeiro.isoformat(),
+            "dataEmissaoFinal":    ultimo.isoformat(),
+        }
+        try:
+            resp = client.request("GET", "contas-receber", params=params)
+        except Exception as exc:
+            app.logger.warning("[contas-mes] falha unit=%s offset=%s: %s", unit, offset, exc)
+            break
+        page = resp.get("itens", []) or []
+        # Fallback: se o Tiny ignorou o filtro de data, filtra local
+        for item in page:
+            emi_str = item.get("data") or item.get("dataEmissao") or ""
+            try:
+                if "/" in emi_str:
+                    d, m, y = emi_str.split("/")
+                    emi = dt.date(int(y), int(m), int(d))
+                else:
+                    emi = dt.date.fromisoformat(emi_str[:10])
+            except Exception:
+                continue
+            if primeiro <= emi <= ultimo:
+                todos.append(item)
+        if len(page) < limit:
+            break
+        offset += limit
+        if offset > 10_000:
+            break
+    return todos
+
+
 @app.route("/master/api/contas-receber")
 @master_view_required
 def master_api_contas_receber():
-    """Dashboard simplificado de contas a receber.
+    """Dashboard de contas a receber por mes de emissao (Tiny-like).
 
-    Retorna 4 totais (a_receber / vence_7d / vence_30d / atrasado),
-    agregado por unidade, lista de em atraso e lista de vencendo em 7 dias.
+    Retorna 3 totais principais (emitidos / recebidos / em_aberto) igual ao
+    Tiny mostra, agregado por unidade, lista de em atraso e vencendo em 7 dias.
 
-    Params: unit=<slug>|all (default all)
+    Params:
+      unit=<slug>|all (default all)
+      mes=YYYY-MM     (default mes corrente)
     """
     try:
         unit_filter = (request.args.get("unit") or "all").strip()
         units_iter = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
-        hoje = dt.date.today()
-        hoje_mais_7  = hoje + dt.timedelta(days=7)
-        hoje_mais_30 = hoje + dt.timedelta(days=30)
 
+        # Mes alvo
+        hoje = dt.date.today()
+        mes_param = (request.args.get("mes") or "").strip()
+        try:
+            if mes_param:
+                ano_m, mes_m = mes_param.split("-")
+                ano, mes = int(ano_m), int(mes_m)
+            else:
+                ano, mes = hoje.year, hoje.month
+        except Exception:
+            ano, mes = hoje.year, hoje.month
+        mes_iso = f"{ano:04d}-{mes:02d}"
+
+        hoje_mais_7  = hoje + dt.timedelta(days=7)
+
+        # Nomes alinhados com a visao do Tiny (em_aberto / emitidas / recebidas /
+        # atrasadas / canceladas). Atrasadas e subset de em_aberto.
         totais = {
-            "a_receber": 0.0, "a_receber_count": 0,
-            "vence_7d":  0.0, "vence_7d_count":  0,
-            "vence_30d": 0.0, "vence_30d_count": 0,
-            "atrasado":  0.0, "atrasado_count":  0,
+            "emitidas":   0.0, "emitidas_count":   0,
+            "recebidas":  0.0, "recebidas_count":  0,
+            "em_aberto":  0.0, "em_aberto_count":  0,
+            "atrasadas":  0.0, "atrasadas_count":  0,
+            "canceladas": 0.0, "canceladas_count": 0,
         }
         por_unidade: dict[str, dict] = {}
         em_atraso: list[dict] = []
@@ -2417,11 +2487,13 @@ def master_api_contas_receber():
             unit_nome = UNITS.get(uid, {}).get("nome", uid)
             por_unidade[uid] = {
                 "unit": uid, "nome": unit_nome,
-                "a_receber": 0.0, "qtd": 0,
-                "atrasado": 0.0, "atrasado_count": 0,
+                "emitidas":  0.0, "emitidas_count":  0,
+                "recebidas": 0.0, "recebidas_count": 0,
+                "em_aberto": 0.0, "em_aberto_count": 0,
+                "atrasadas": 0.0, "atrasadas_count": 0,
             }
             try:
-                contas = _fetch_contas_abertas_tiny(uid)
+                contas = _fetch_contas_mes_tiny(uid, ano, mes)
             except Exception as exc:
                 app.logger.warning("[contas-receber] falha unit=%s: %s", uid, exc)
                 continue
@@ -2438,65 +2510,92 @@ def master_api_contas_receber():
                         venc = dt.date.fromisoformat(venc_str[:10])
                 except Exception:
                     venc = hoje
-                valor = float(c.get("saldo") or c.get("valor") or 0)
+
+                valor = float(c.get("valor") or 0)
+                saldo = float(c.get("saldo") or 0)  # quanto ainda falta pagar
+                situacao = (c.get("situacao") or "").strip().lower()
                 if valor <= 0:
                     continue
 
-                dias_atraso = (hoje - venc).days
-                num_doc = c.get("numeroDocumento") or ""
+                # Canceladas — nao contam em emitidas/recebidas/aberto
+                if situacao in ("cancelado", "cancelada"):
+                    totais["canceladas"]       += valor
+                    totais["canceladas_count"] += 1
+                    continue
 
-                totais["a_receber"]       += valor
-                totais["a_receber_count"] += 1
-                por_unidade[uid]["a_receber"] += valor
-                por_unidade[uid]["qtd"]       += 1
+                # Emitidas — valor total
+                totais["emitidas"]       += valor
+                totais["emitidas_count"] += 1
+                por_unidade[uid]["emitidas"]       += valor
+                por_unidade[uid]["emitidas_count"] += 1
 
-                if dias_atraso > 0:
-                    totais["atrasado"]       += valor
-                    totais["atrasado_count"] += 1
-                    por_unidade[uid]["atrasado"]       += valor
-                    por_unidade[uid]["atrasado_count"] += 1
-                    em_atraso.append({
-                        "cliente": cliente_nome,
-                        "unit": uid, "unit_nome": unit_nome,
-                        "valor": round(valor, 2),
-                        "dias_atraso": dias_atraso,
-                        "data_vencimento": venc.isoformat(),
-                        "numero_documento": num_doc,
-                    })
-                elif hoje <= venc <= hoje_mais_7:
-                    totais["vence_7d"]       += valor
-                    totais["vence_7d_count"] += 1
-                    totais["vence_30d"]       += valor
-                    totais["vence_30d_count"] += 1
-                    vencendo_7d.append({
-                        "cliente": cliente_nome,
-                        "unit": uid, "unit_nome": unit_nome,
-                        "valor": round(valor, 2),
-                        "data_vencimento": venc.isoformat(),
-                        "numero_documento": num_doc,
-                    })
-                elif hoje < venc <= hoje_mais_30:
-                    totais["vence_30d"]       += valor
-                    totais["vence_30d_count"] += 1
+                # Recebido — valor - saldo (parcial) ou tudo (pago)
+                recebido = max(0.0, valor - saldo)
+                if situacao in ("pago", "recebido", "quitado"):
+                    recebido = valor
+                if recebido > 0:
+                    totais["recebidas"] += recebido
+                    por_unidade[uid]["recebidas"] += recebido
+                    if saldo <= 0 or situacao in ("pago", "recebido", "quitado"):
+                        totais["recebidas_count"] += 1
+                        por_unidade[uid]["recebidas_count"] += 1
 
-        # Arredonda totais
-        for k in ("a_receber", "vence_7d", "vence_30d", "atrasado"):
+                # Em aberto — saldo que ainda falta
+                em_aberto = saldo
+                if situacao in ("pago", "recebido", "quitado"):
+                    em_aberto = 0.0
+                if em_aberto > 0:
+                    totais["em_aberto"]       += em_aberto
+                    totais["em_aberto_count"] += 1
+                    por_unidade[uid]["em_aberto"]       += em_aberto
+                    por_unidade[uid]["em_aberto_count"] += 1
+
+                    dias_atraso = (hoje - venc).days
+                    num_doc = c.get("numeroDocumento") or ""
+                    if dias_atraso > 0:
+                        # Atrasadas = subset de em_aberto com vencimento passado
+                        totais["atrasadas"]       += em_aberto
+                        totais["atrasadas_count"] += 1
+                        por_unidade[uid]["atrasadas"]       += em_aberto
+                        por_unidade[uid]["atrasadas_count"] += 1
+                        em_atraso.append({
+                            "cliente":         cliente_nome,
+                            "unit":            uid, "unit_nome": unit_nome,
+                            "valor":           round(em_aberto, 2),
+                            "dias_atraso":     dias_atraso,
+                            "data_vencimento": venc.isoformat(),
+                            "numero_documento": num_doc,
+                        })
+                    elif hoje <= venc <= hoje_mais_7:
+                        vencendo_7d.append({
+                            "cliente":         cliente_nome,
+                            "unit":            uid, "unit_nome": unit_nome,
+                            "valor":           round(em_aberto, 2),
+                            "data_vencimento": venc.isoformat(),
+                            "numero_documento": num_doc,
+                        })
+
+        # Arredonda
+        for k in ("emitidas", "recebidas", "em_aberto", "atrasadas", "canceladas"):
             totais[k] = round(totais[k], 2)
         for u in por_unidade.values():
-            u["a_receber"] = round(u["a_receber"], 2)
-            u["atrasado"]  = round(u["atrasado"], 2)
+            u["emitidas"]  = round(u["emitidas"], 2)
+            u["recebidas"] = round(u["recebidas"], 2)
+            u["em_aberto"] = round(u["em_aberto"], 2)
+            u["atrasadas"] = round(u["atrasadas"], 2)
 
         em_atraso.sort(key=lambda x: (-x["dias_atraso"], -x["valor"]))
         vencendo_7d.sort(key=lambda x: (x["data_vencimento"], -x["valor"]))
 
         return _json({
-            "success":      True,
+            "success":       True,
             "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
-            "hoje":         hoje.isoformat(),
-            "totais":       totais,
-            "por_unidade":  list(por_unidade.values()),
-            "em_atraso":    em_atraso,
-            "vencendo_7d":  vencendo_7d,
+            "hoje":          hoje.isoformat(),
+            "mes":           mes_iso,
+            "totais":        totais,
+            "por_unidade":   list(por_unidade.values()),
+            "em_atraso":     em_atraso,
+            "vencendo_7d":   vencendo_7d,
         })
     except Exception as exc:
         app.logger.exception("[server] %s", request.path)
