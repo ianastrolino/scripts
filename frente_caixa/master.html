@@ -143,7 +143,7 @@
     .unit-card.tiny-alert { border-color: var(--ds-danger); }
 
     .unit-last {
-      padding: 6px var(--ds-space-5) 8px;
+      padding: 8px var(--ds-space-5) 10px;
       font-size: var(--ds-text-xs);
       color: var(--ds-ink-muted);
       border-bottom: 1px solid var(--ds-line);
@@ -151,7 +151,33 @@
     .unit-last-top {
       display: flex; justify-content: space-between; align-items: center;
     }
-    .unit-last.fresh .unit-last-top { color: var(--ds-success); font-weight: var(--ds-weight-semi); }
+    .unit-last-label { display: inline-flex; align-items: center; gap: 6px; }
+    .unit-last-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--ds-line-strong);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .unit-last-time {
+      font-size: var(--ds-text-sm);
+      font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.01em;
+    }
+    .unit-last.fresh .unit-last-dot {
+      background: var(--ds-success);
+      box-shadow: 0 0 0 0 rgba(22, 163, 74, .55);
+      animation: lastPulse 1.8s ease-out infinite;
+    }
+    .unit-last.fresh .unit-last-time { color: var(--ds-success); }
+    .unit-last.fresh .unit-last-label { color: var(--ds-success); }
+    @keyframes lastPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); }
+      70%  { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
     .unit-last-extra {
       margin-top: 2px;
       font-size: 10px;
@@ -281,8 +307,11 @@
           </div>
           <div class="unit-last" id="last-${u.id}">
             <div class="unit-last-top">
-              <span>Última atividade</span>
-              <span id="last-text-${u.id}">—</span>
+              <span class="unit-last-label">
+                <span class="unit-last-dot"></span>
+                Última atividade
+              </span>
+              <span class="unit-last-time" id="last-text-${u.id}">—</span>
             </div>
             <div class="unit-last-extra" id="last-extra-${u.id}"></div>
           </div>
