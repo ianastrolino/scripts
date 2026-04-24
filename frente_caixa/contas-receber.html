@@ -144,12 +144,19 @@
     }
     .btn:hover { background: var(--ds-surface-alt); }
 
-    select.filter-sel {
+    select.filter-sel, input.filter-sel {
       font: inherit; font-size: var(--ds-text-sm);
       padding: 7px 12px; border-radius: var(--ds-radius-md);
       border: 1px solid var(--ds-line); background: var(--ds-surface);
       color: var(--ds-ink);
     }
+    .modo-btn {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 7px 14px; border: none; background: transparent;
+      color: var(--ds-ink-muted); cursor: pointer;
+    }
+    .modo-btn + .modo-btn { border-left: 1px solid var(--ds-line); }
+    .modo-btn.active { background: var(--ds-ink); color: #fff; }
   </style>
 </head>
 <body>
@@ -171,7 +178,12 @@
 
       <div class="toolbar">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <select id="selMes" class="filter-sel"></select>
+          <div id="modoToggle" style="display:inline-flex;border:1px solid var(--ds-line);border-radius:var(--ds-radius-md);overflow:hidden;background:var(--ds-surface)">
+            <button type="button" class="modo-btn active" data-modo="dia">Dia</button>
+            <button type="button" class="modo-btn" data-modo="mes">Mês</button>
+          </div>
+          <input type="date" id="inpData" class="filter-sel" style="min-width:140px">
+          <select id="selMes" class="filter-sel" style="display:none"></select>
           <select id="selUnit" class="filter-sel">
             <option value="all">Todas as unidades</option>
           </select>
@@ -363,16 +375,32 @@
     document.querySelectorAll(".kpi-val.skel, .kpi-sub.skel").forEach(el => el.classList.remove("skel"));
   }
 
+  let currentModo = "dia";
+
+  function setModo(modo) {
+    currentModo = modo;
+    document.querySelectorAll(".modo-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.modo === modo);
+    });
+    document.getElementById("inpData").style.display = (modo === "dia") ? "" : "none";
+    document.getElementById("selMes").style.display  = (modo === "mes") ? "" : "none";
+  }
+
   async function loadDashboard(force = false) {
     const root = document.querySelector(".app-content-wrap");
     root.classList.add("loading");
     setSkeletonKPIs();
     const unit = document.getElementById("selUnit").value;
-    const mes  = document.getElementById("selMes").value;
     try {
       const qs = new URLSearchParams();
       if (unit && unit !== "all") qs.set("unit", unit);
-      if (mes) qs.set("mes", mes);
+      if (currentModo === "dia") {
+        const data = document.getElementById("inpData").value;
+        if (data) qs.set("data", data);
+      } else {
+        const mes = document.getElementById("selMes").value;
+        if (mes) qs.set("mes", mes);
+      }
       if (force) qs.set("force", "1");
       const r = await fetch(`/master/api/contas-receber?${qs}`, { cache: "no-store" });
       const j = await r.json();
@@ -383,8 +411,9 @@
       renderAtraso(j.em_atraso);
       renderVence7d(j.vencendo_7d);
       const cachedTxt = j.cached ? ` <span class="cached-badge">cache ${j.cached_age}s</span>` : "";
+      const periodoTxt = j.modo === "dia" ? brDate(j.data) : `mês ${j.mes}`;
       document.getElementById("infoAtualizado").innerHTML =
-        `atualizado ${fmtRel(j.atualizado_em)} · hoje ${brDate(j.hoje)}${cachedTxt}`;
+        `${periodoTxt} · atualizado ${fmtRel(j.atualizado_em)}${cachedTxt}`;
     } catch (e) {
       clearSkeletonKPIs();
       alert("Falha ao carregar: " + e.message);
@@ -472,10 +501,22 @@
     loadDashboard(false);
   });
   document.getElementById("selMes").addEventListener("change", () => loadDashboard(false));
+  document.getElementById("inpData").addEventListener("change", () => loadDashboard(false));
+  document.querySelectorAll(".modo-btn").forEach(b => {
+    b.addEventListener("click", () => {
+      setModo(b.dataset.modo);
+      loadDashboard(false);
+    });
+  });
   // Botao "Atualizar" forca bust do cache
   document.getElementById("btnRefresh").addEventListener("click", () => loadDashboard(true));
 
   (async () => {
+    // Default: modo dia + hoje
+    const hoje = new Date();
+    const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+    document.getElementById("inpData").value = hojeIso;
+    setModo("dia");
     popularMeses();
     await loadUnits();
     await loadDashboard();

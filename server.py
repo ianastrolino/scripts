@@ -2462,21 +2462,36 @@ def master_api_contas_receber():
         )
         force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
 
-        # Mes alvo
+        # Dois modos de periodo: dia (?data=YYYY-MM-DD) ou mes (?mes=YYYY-MM).
+        # data tem prioridade. Default = dia=hoje.
         hoje = dt.date.today()
-        mes_param = (request.args.get("mes") or "").strip()
-        try:
-            if mes_param:
+        data_param = (request.args.get("data") or "").strip()
+        mes_param  = (request.args.get("mes") or "").strip()
+
+        dia_alvo: dt.date | None = None
+        if data_param:
+            try:
+                dia_alvo = dt.date.fromisoformat(data_param[:10])
+                ano, mes = dia_alvo.year, dia_alvo.month
+            except Exception:
+                dia_alvo = hoje
+                ano, mes = hoje.year, hoje.month
+        elif mes_param:
+            try:
                 ano_m, mes_m = mes_param.split("-")
                 ano, mes = int(ano_m), int(mes_m)
-            else:
+            except Exception:
                 ano, mes = hoje.year, hoje.month
-        except Exception:
+        else:
+            dia_alvo = hoje
             ano, mes = hoje.year, hoje.month
+
         mes_iso = f"{ano:04d}-{mes:02d}"
+        modo = "dia" if dia_alvo else "mes"
+        periodo_label = dia_alvo.isoformat() if dia_alvo else mes_iso
 
         # Consulta cache antes de chamar Tiny
-        cache_key = f"{unit_filter}:{mes_iso}"
+        cache_key = f"{unit_filter}:{modo}:{periodo_label}"
         now_ts = time.time()
         cached = _CONTAS_RECEBER_CACHE.get(cache_key)
         if cached and not force and (now_ts - cached["cached_at"]) < _CONTAS_RECEBER_TTL:
@@ -2518,7 +2533,19 @@ def master_api_contas_receber():
             for c in contas:
                 cliente_obj = c.get("cliente") or {}
                 cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
+                emi_str  = c.get("data") or c.get("dataEmissao") or ""
                 venc_str = c.get("dataVencimento") or c.get("data") or ""
+                try:
+                    if "/" in emi_str:
+                        d, m, y = emi_str.split("/")
+                        emi = dt.date(int(y), int(m), int(d))
+                    else:
+                        emi = dt.date.fromisoformat(emi_str[:10])
+                except Exception:
+                    emi = hoje
+                # Filtro por dia, se modo=dia
+                if dia_alvo and emi != dia_alvo:
+                    continue
                 try:
                     if "/" in venc_str:
                         d, m, y = venc_str.split("/")
@@ -2608,7 +2635,9 @@ def master_api_contas_receber():
             "success":       True,
             "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
             "hoje":          hoje.isoformat(),
+            "modo":          modo,
             "mes":           mes_iso,
+            "data":          dia_alvo.isoformat() if dia_alvo else None,
             "totais":        totais,
             "por_unidade":   list(por_unidade.values()),
             "em_atraso":     em_atraso,
