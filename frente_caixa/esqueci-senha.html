@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astro Vistorias — Redefinir senha</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <style>
+    html, body { height: 100%; }
+    body {
+      margin: 0; display: flex; align-items: center; justify-content: center;
+      padding: var(--ds-space-5);
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+      font-family: var(--ds-font-sans); color: var(--ds-ink);
+      position: relative; overflow: hidden;
+    }
+    body::before, body::after { content: ""; position: absolute; pointer-events: none; border-radius: 50%; filter: blur(80px); opacity: .4; }
+    body::before { width: 520px; height: 520px; background: #d32f2f; top: -120px; right: -120px; opacity: .18; }
+    body::after  { width: 420px; height: 420px; background: #2563eb; bottom: -120px; left: -120px; opacity: .22; }
+    .shell { position: relative; width: 100%; max-width: 420px; z-index: 1; }
+    .brand-hero { text-align: center; margin-bottom: var(--ds-space-6); }
+    .brand-a { display: inline-flex; width: 88px; height: 88px; background: #fff; border-radius: var(--ds-radius-xl);
+               align-items: center; justify-content: center; margin-bottom: var(--ds-space-4);
+               box-shadow: 0 10px 30px rgba(15,23,42,.35), inset 0 0 0 1px rgba(255,255,255,.2); }
+    .brand-a img { width: 60px; height: 60px; }
+    .brand-title { font-size: var(--ds-text-3xl); font-weight: var(--ds-weight-black); color: #fff; letter-spacing: var(--ds-tracking-tight); line-height: 1.1; }
+    .brand-sub { font-size: var(--ds-text-sm); color: rgba(255,255,255,.65); margin-top: var(--ds-space-2); font-weight: var(--ds-weight-medium); }
+    .card { background: rgba(255,255,255,.98); border-radius: var(--ds-radius-xl);
+            padding: var(--ds-space-6) var(--ds-space-6) var(--ds-space-5);
+            box-shadow: 0 20px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.05); }
+    .card-head { text-align: center; margin-bottom: var(--ds-space-5); }
+    .card-eyebrow { font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold); letter-spacing: var(--ds-tracking-wide); text-transform: uppercase; color: var(--ds-ink-muted); margin-bottom: var(--ds-space-2); }
+    .card-title { font-size: var(--ds-text-xl); font-weight: var(--ds-weight-black); color: var(--ds-ink); letter-spacing: var(--ds-tracking-tight); }
+    .card-desc { font-size: var(--ds-text-sm); color: var(--ds-ink-muted); margin-top: var(--ds-space-3); line-height: 1.5; }
+    .msg-box { display: none; align-items: flex-start; gap: var(--ds-space-2); padding: var(--ds-space-3) var(--ds-space-4);
+               border-radius: var(--ds-radius-md); font-size: var(--ds-text-sm); font-weight: var(--ds-weight-semi); margin-bottom: var(--ds-space-4); }
+    .msg-box.is-visible { display: flex; }
+    .msg-box.is-error { background: var(--ds-danger-soft); border: 1px solid #fecaca; color: var(--ds-danger); }
+    .msg-box.is-success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .field { margin-bottom: var(--ds-space-4); }
+    .field label { display: block; font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold); color: var(--ds-ink-muted);
+                   letter-spacing: var(--ds-tracking-wide); text-transform: uppercase; margin-bottom: 6px; }
+    .input-wrap { position: relative; }
+    .input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--ds-ink-subtle);
+                  pointer-events: none; display: inline-flex; align-items: center; justify-content: center; }
+    .input-wrap input { width: 100%; height: 46px; padding: 0 var(--ds-space-4) 0 44px; background: var(--ds-surface-alt);
+                        border: 1px solid var(--ds-line); border-radius: var(--ds-radius-md); font: inherit;
+                        font-size: var(--ds-text-base); color: var(--ds-ink); outline: none; }
+    .input-wrap input:focus { background: #fff; border-color: #334155; box-shadow: 0 0 0 3px rgba(15,23,42,.08); }
+    .input-wrap .input-ico-svg { width: 18px; height: 18px; display: block; }
+    .btn-primary { width: 100%; height: 48px; margin-top: var(--ds-space-2); border: none; border-radius: var(--ds-radius-md);
+                   background: linear-gradient(135deg, #0f172a, #1e293b); color: #fff; font: inherit;
+                   font-weight: var(--ds-weight-bold); font-size: var(--ds-text-base); cursor: pointer;
+                   display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary:hover { background: linear-gradient(135deg, #1e293b, var(--ds-brand)); box-shadow: 0 12px 26px rgba(15,23,42,.4); }
+    .card-hint { text-align: center; font-size: var(--ds-text-xs); color: var(--ds-ink-muted); margin-top: var(--ds-space-4); line-height: 1.5; }
+    .card-hint a { color: var(--ds-accent-600); text-decoration: none; font-weight: var(--ds-weight-semi); }
+    .card-hint a:hover { text-decoration: underline; }
+    .shell-foot { text-align: center; margin-top: var(--ds-space-5); font-size: 11px; color: rgba(255,255,255,.45);
+                  letter-spacing: var(--ds-tracking-wide); text-transform: uppercase; font-weight: var(--ds-weight-bold); }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand-hero">
+      <div class="brand-a"><img src="/assets/img/astro-a.png" alt="Astro Vistorias"></div>
+      <div class="brand-title">Astro Vistorias</div>
+      <div class="brand-sub">Recuperar acesso</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-eyebrow">Esqueci minha senha</div>
+        <div class="card-title">Redefinir senha</div>
+        <div class="card-desc">Digite o e-mail da sua conta. Enviaremos um link para criar uma nova senha.</div>
+      </div>
+
+      <div class="msg-box" id="msgBox"><span id="msgText"></span></div>
+
+      <form method="post" action="/esqueci-senha" autocomplete="on" id="resetForm">
+        <div class="field">
+          <label for="email">E-mail corporativo</label>
+          <div class="input-wrap">
+            <span class="input-icon" aria-hidden="true">
+              <svg class="input-ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            </span>
+            <input type="email" id="email" name="email" placeholder="voce@astrovistorias.com.br" required autocomplete="username" autofocus>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Enviar link de redefinição</button>
+      </form>
+
+      <p class="card-hint"><a href="/login">← Voltar para o login</a></p>
+    </div>
+
+    <div class="shell-foot">Astro Vistorias · v2.1</div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const box    = document.getElementById("msgBox");
+    const txt    = document.getElementById("msgText");
+    if (params.get("ok") === "1") {
+      box.classList.add("is-visible", "is-success");
+      txt.textContent = "Se existir uma conta com este e-mail, o link de redefinição foi enviado. Verifique sua caixa de entrada e spam.";
+    } else if (params.get("erro") === "bloqueado") {
+      box.classList.add("is-visible", "is-error");
+      txt.textContent = "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+    } else if (params.get("erro") === "limite") {
+      box.classList.add("is-visible", "is-error");
+      txt.textContent = "Muitos pedidos de reset para esta conta. Aguarde 1 hora.";
+    } else if (params.get("erro") === "token_invalido") {
+      box.classList.add("is-visible", "is-error");
+      txt.textContent = "Link inválido ou expirado. Peça um novo aqui.";
+    }
+  </script>
+</body>
+</html>

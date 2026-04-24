@@ -158,7 +158,7 @@ def _maintenance_gate():
     if not _is_maintenance():
         return None
     path = request.path or ""
-    if path.startswith(("/master", "/gerencial", "/login", "/logout", "/health", "/api/me", "/api/csrf-token")):
+    if path.startswith(("/master", "/gerencial", "/login", "/logout", "/esqueci-senha", "/reset-senha", "/health", "/api/me", "/api/csrf-token")):
         return None
     if path.startswith("/u/"):
         parts = path.split("/", 3)  # ["", "u", "<unit>", "<resto>"]
@@ -376,6 +376,112 @@ USERS: dict[str, Any] = _load_users()
 UNITS: dict[str, Any] = _load_units()
 
 # ── Auth helpers ───────────────────────────────────────────────────────────────
+# ── Reset de senha self-service ────────────────────────────────────────────
+_RESET_TOKENS_FILE = DATA_DIR / "reset_tokens.json"
+_RESET_TOKEN_TTL_SECS = 3600   # 1 hora
+_RESET_MAX_PER_HOUR   = 3       # max pedidos por email por hora
+_reset_requests: dict[str, list[float]] = collections.defaultdict(list)
+_reset_lock = threading.Lock()
+
+
+def _load_reset_tokens() -> dict[str, dict]:
+    if not _RESET_TOKENS_FILE.exists():
+        return {}
+    try:
+        return json.loads(_RESET_TOKENS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_reset_tokens(data: dict[str, dict]) -> None:
+    _RESET_TOKENS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _RESET_TOKENS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_RESET_TOKENS_FILE)
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _reset_rate_check(email: str) -> bool:
+    """True se pode pedir reset agora, False se atingiu 3 pedidos em 1h."""
+    if not email:
+        return False
+    now = time.monotonic()
+    with _reset_lock:
+        tries = [t for t in _reset_requests[email] if now - t < 3600]
+        if len(tries) >= _RESET_MAX_PER_HOUR:
+            return False
+        tries.append(now)
+        _reset_requests[email] = tries
+        return True
+
+
+def _create_reset_token(email: str) -> str:
+    """Gera token plaintext (enviado por email), armazena so o hash."""
+    token = secrets.token_urlsafe(32)
+    tz = ZoneInfo("America/Sao_Paulo")
+    now = dt.datetime.now(tz)
+    tokens = _load_reset_tokens()
+    # Invalida tokens antigos do mesmo email (so um ativo por vez)
+    for h, info in list(tokens.items()):
+        if info.get("email") == email and not info.get("used_at"):
+            info["used_at"] = now.isoformat(timespec="seconds")
+            info["invalidated_by"] = "new_request"
+    tokens[_token_hash(token)] = {
+        "email":      email,
+        "created_at": now.isoformat(timespec="seconds"),
+        "expires_at": (now + dt.timedelta(seconds=_RESET_TOKEN_TTL_SECS)).isoformat(timespec="seconds"),
+        "used_at":    None,
+    }
+    _save_reset_tokens(tokens)
+    return token
+
+
+def _consume_reset_token(token: str) -> tuple[str | None, str | None]:
+    """Valida e marca token como usado. Retorna (email, erro). Se email, success.
+
+    Nao consome em caso de erro — apenas valida.
+    """
+    if not token:
+        return None, "Token ausente."
+    tokens = _load_reset_tokens()
+    info   = tokens.get(_token_hash(token))
+    if not info:
+        return None, "Link invalido ou expirado."
+    if info.get("used_at"):
+        return None, "Este link ja foi usado."
+    try:
+        expires = dt.datetime.fromisoformat(info["expires_at"])
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+    except Exception:
+        return None, "Link invalido."
+    if dt.datetime.now(ZoneInfo("America/Sao_Paulo")) > expires:
+        return None, "Link expirado (valido por 1 hora)."
+    return info["email"], None
+
+
+def _mark_reset_token_used(token: str) -> None:
+    tokens = _load_reset_tokens()
+    h = _token_hash(token)
+    if h in tokens:
+        tokens[h]["used_at"] = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+        _save_reset_tokens(tokens)
+
+
+def _validate_password_strength(pw: str) -> str | None:
+    """Retorna None se ok, ou a mensagem de erro."""
+    if len(pw) < 8:
+        return "Senha precisa ter pelo menos 8 caracteres."
+    if not any(c.isalpha() for c in pw):
+        return "Senha precisa ter pelo menos 1 letra."
+    if not any(c.isdigit() for c in pw):
+        return "Senha precisa ter pelo menos 1 numero."
+    return None
+
+
 def _hash_password(password: str) -> str:
     """Gera hash com salt. Use criar_usuario.py para gerar hashes."""
     salt = secrets.token_hex(16)
@@ -1078,6 +1184,128 @@ def logout():
     _end_session_on_logout(email)
     session.clear()
     return redirect(url_for("login_page"))
+
+
+@app.route("/esqueci-senha", methods=["GET", "POST"])
+def esqueci_senha_page():
+    if request.method == "POST":
+        ip    = request.remote_addr or "unknown"
+        ua    = (request.headers.get("User-Agent") or "")[:200]
+        email = (request.form.get("email") or "").strip().lower()
+        attempted = {"email": email, "name": "", "master": False}
+
+        # Rate limit por IP (reusa o mesmo do login pra nao abrir brecha nova)
+        if not _login_rate_check(ip):
+            _write_audit_log(attempted, "password.reset_request", payload={
+                "reason": "rate_limited_ip", "user_agent": ua,
+            }, result="fail")
+            return redirect(url_for("esqueci_senha_page") + "?erro=bloqueado")
+
+        # Validacoes discretas — nunca revela se o email existe
+        # (resposta unica independente do caso pra nao virar oraculo de usuarios)
+        gen_ok = True
+        if not email or not email.endswith("@astrovistorias.com.br"):
+            gen_ok = False
+        elif not _reset_rate_check(email):
+            _write_audit_log(attempted, "password.reset_request", payload={
+                "reason": "rate_limited_email", "user_agent": ua,
+            }, result="fail")
+            return redirect(url_for("esqueci_senha_page") + "?erro=limite")
+        elif email not in USERS:
+            # Email nao cadastrado — loga, nao envia, mas resposta parece igual
+            _write_audit_log(attempted, "password.reset_request", payload={
+                "reason": "email_not_found", "user_agent": ua,
+            }, result="fail")
+            gen_ok = False
+
+        if gen_ok:
+            try:
+                token = _create_reset_token(email)
+                base  = request.url_root.rstrip("/")
+                link  = f"{base}/reset-senha?token={token}"
+                html = f"""<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+    <div style="background:#0f1117;padding:24px 28px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Seguranca</div>
+      <div style="font-size:20px;font-weight:800;color:#fff">Redefinir senha</div>
+    </div>
+    <div style="padding:20px 28px;font-size:14px;color:#374151;line-height:1.55">
+      <p>Recebemos um pedido de redefinicao de senha para <strong>{email}</strong>.</p>
+      <p>Clique no botao abaixo para escolher uma nova senha. O link e valido por <strong>1 hora</strong>.</p>
+    </div>
+    <div style="padding:0 28px 16px">
+      <a href="{link}" style="display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700">Redefinir senha</a>
+    </div>
+    <div style="padding:0 28px 24px;font-size:12px;color:#6b7280">
+      Se voce nao pediu isso, ignore este email — sua senha continua a mesma.<br>
+      Link direto: <span style="word-break:break-all">{link}</span>
+    </div>
+  </div>
+</body></html>"""
+                _send_email_to([email], "Astrovistorias — Redefinir senha", html)
+                _write_audit_log({"email": email, "name": USERS[email].get("name", ""), "master": bool(USERS[email].get("master"))},
+                                 "password.reset_request",
+                                 payload={"user_agent": ua}, result="ok")
+            except Exception as exc:
+                app.logger.exception("[reset] falha ao enviar email")
+                _write_audit_log(attempted, "password.reset_request", payload={
+                    "reason": "email_send_error", "error": str(exc)[:200], "user_agent": ua,
+                }, result="fail")
+
+        # Resposta generica sempre (nao revela se existiu ou nao)
+        return redirect(url_for("esqueci_senha_page") + "?ok=1")
+
+    return send_from_directory(UI_DIR, "esqueci-senha.html")
+
+
+@app.route("/reset-senha", methods=["GET", "POST"])
+def reset_senha_page():
+    if request.method == "POST":
+        ip    = request.remote_addr or "unknown"
+        ua    = (request.headers.get("User-Agent") or "")[:200]
+        token = (request.form.get("token") or "").strip()
+        pw1   = request.form.get("password") or ""
+        pw2   = request.form.get("password_confirm") or ""
+
+        email, erro_tok = _consume_reset_token(token)
+        if erro_tok:
+            _write_audit_log({"email": "", "name": "", "master": False},
+                             "password.reset_complete",
+                             payload={"reason": "invalid_token", "user_agent": ua}, result="fail")
+            return redirect(url_for("reset_senha_page") + "?erro=token_invalido")
+
+        if pw1 != pw2:
+            return redirect(url_for("reset_senha_page") + f"?token={token}&erro=nao_confere")
+
+        erro_pw = _validate_password_strength(pw1)
+        if erro_pw:
+            return redirect(url_for("reset_senha_page") + f"?token={token}&erro=fraca")
+
+        # Tudo ok — atualiza senha
+        user = USERS.get(email)
+        if not user:
+            _write_audit_log({"email": email, "name": "", "master": False},
+                             "password.reset_complete",
+                             payload={"reason": "user_disappeared", "user_agent": ua}, result="fail")
+            return redirect(url_for("reset_senha_page") + "?erro=token_invalido")
+        user["password_hash"] = _hash_password(pw1)
+        _save_users(USERS)
+        _mark_reset_token_used(token)
+        _email_clear_fails(email)
+
+        _write_audit_log({"email": email, "name": user.get("name", ""), "master": bool(user.get("master"))},
+                         "password.reset_complete",
+                         payload={"user_agent": ua}, result="ok")
+        return redirect(url_for("login_page") + "?ok=senha_redefinida")
+
+    # GET — valida token antes de mostrar o form
+    token = (request.args.get("token") or "").strip()
+    email, erro_tok = _consume_reset_token(token)
+    if erro_tok:
+        return redirect(url_for("esqueci_senha_page") + f"?erro=token_invalido")
+    return send_from_directory(UI_DIR, "reset-senha.html")
 
 
 @app.route("/<path:filename>")

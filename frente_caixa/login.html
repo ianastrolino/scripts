@@ -271,6 +271,11 @@
         <span id="errorText"></span>
       </div>
 
+      <div id="successBox" style="display:none;align-items:center;gap:var(--ds-space-2);padding:var(--ds-space-3) var(--ds-space-4);border-radius:var(--ds-radius-md);background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;font-size:var(--ds-text-sm);font-weight:var(--ds-weight-semi);margin-bottom:var(--ds-space-4)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        <span id="successText"></span>
+      </div>
+
       <form method="post" action="/login" autocomplete="on" id="loginForm">
         <div class="field">
           <label for="email">E-mail corporativo</label>
@@ -310,6 +315,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
           </span>
         </button>
+
+        <p style="text-align:center;margin:var(--ds-space-3) 0 0;font-size:var(--ds-text-sm)">
+          <a href="/esqueci-senha" style="color:var(--ds-accent-600);text-decoration:none;font-weight:var(--ds-weight-semi)">Esqueci minha senha</a>
+        </p>
       </form>
 
       <p class="card-hint">
@@ -339,6 +348,13 @@
     if (mensagens[erro]) {
       txt.textContent = mensagens[erro];
       box.classList.add("is-visible");
+    }
+
+    const ok = params.get("ok");
+    if (ok === "senha_redefinida") {
+      const okBox = document.getElementById("successBox");
+      document.getElementById("successText").textContent = "Senha redefinida com sucesso. Entre com a nova senha.";
+      okBox.style.display = "flex";
     }
 
     // Foca no primeiro campo vazio
