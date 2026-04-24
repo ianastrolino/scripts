@@ -439,14 +439,11 @@
         </div>
       </div>
 
-      <!-- Top 10 clientes por valor (toggle Dia/Mes) -->
+      <!-- Top 10 clientes por valor (segue o filtro do topo) -->
       <div class="g-section">
-        <div class="g-section-title" style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+        <div class="g-section-title" style="display:flex;align-items:center;gap:10px">
           <span>Top 10 clientes por valor</span>
-          <div id="topCliToggle" style="display:inline-flex;border:1px solid var(--ds-line);border-radius:var(--ds-radius-md);overflow:hidden;background:var(--ds-surface)">
-            <button type="button" class="topcli-btn active" data-modo="dia">Dia</button>
-            <button type="button" class="topcli-btn" data-modo="mes">Mês</button>
-          </div>
+          <span id="topCliPeriodo" style="font-size:12px;font-weight:500;color:var(--ds-ink-muted)"></span>
         </div>
         <div id="topCliList">
           <div class="g-loading">Carregando…</div>
@@ -621,6 +618,7 @@
       renderChart(data.por_dia);
       renderServicos(data.servicos, data.resumo.count);
       renderHistorico(data.por_dia);
+      renderTopClientes(data.clientes, data.periodo);
     } catch (e) {
       const msg = `<div class="g-error">${e.message}</div>`;
       document.getElementById("resumoStrip").innerHTML = msg;
@@ -822,40 +820,18 @@
     }
   }
 
-  let _topCliDia = null;
-  let _topCliMes = null;
-
-  async function carregarTopClientes() {
-    const today = new Date();
-    const isoDia = today.toISOString().slice(0, 10);
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, "0");
-    const isoMesFrom = `${y}-${m}-01`;
-    // Fim do mes: ultimo dia
-    const fimMes = new Date(y, today.getMonth() + 1, 0);
-    const isoMesTo = fimMes.toISOString().slice(0, 10);
-
+  function renderTopClientes(lista, periodo) {
     const list = document.getElementById("topCliList");
-    list.innerHTML = '<div class="g-loading">Carregando…</div>';
-    // allSettled pra nao quebrar a tela se um dos 2 fetches falhar
-    const [rDia, rMes] = await Promise.allSettled([
-      fetch(`${apiBase}/api/gerencial/historico?from=${isoDia}&to=${isoDia}`).then(r => r.json()),
-      fetch(`${apiBase}/api/gerencial/historico?from=${isoMesFrom}&to=${isoMesTo}`).then(r => r.json()),
-    ]);
-    const dDia = rDia.status === "fulfilled" ? rDia.value : null;
-    const dMes = rMes.status === "fulfilled" ? rMes.value : null;
-    _topCliDia = (dDia && dDia.success) ? (dDia.clientes || []) : [];
-    _topCliMes = (dMes && dMes.success) ? (dMes.clientes || []) : [];
-    renderTopClientes("dia");
-  }
-
-  function renderTopClientes(modo) {
-    const lista = (modo === "dia" ? _topCliDia : _topCliMes) || [];
-    const list = document.getElementById("topCliList");
+    const lbl  = document.getElementById("topCliPeriodo");
+    if (periodo && lbl) {
+      const fmt = (iso) => { const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
+      lbl.textContent = periodo.from === periodo.to
+        ? fmt(periodo.from)
+        : `${fmt(periodo.from)} — ${fmt(periodo.to)}`;
+    }
+    lista = lista || [];
     if (!lista.length) {
-      list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--ds-ink-muted);font-size:13px">${
-        modo === "dia" ? "Nenhum cliente lançado hoje ainda" : "Nenhum cliente no mês"
-      }</div>`;
+      list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--ds-ink-muted);font-size:13px">Nenhum cliente no período</div>`;
       return;
     }
     list.innerHTML = lista.map((c, i) => `
@@ -868,16 +844,8 @@
     `).join("");
   }
 
-  document.querySelectorAll(".topcli-btn").forEach(b => {
-    b.addEventListener("click", () => {
-      document.querySelectorAll(".topcli-btn").forEach(x => x.classList.toggle("active", x === b));
-      renderTopClientes(b.dataset.modo);
-    });
-  });
-
   carregar();
   carregarFpHoje();
-  carregarTopClientes();
 
   async function carregarDivergencias() {
     const { from, to } = getRange();
