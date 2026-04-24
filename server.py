@@ -973,23 +973,36 @@ def health():
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     if request.method == "POST":
-        ip = request.remote_addr or "unknown"
-        if not _login_rate_check(ip):
-            return redirect(url_for("login_page") + "?erro=bloqueado")
-
+        ip    = request.remote_addr or "unknown"
+        ua    = (request.headers.get("User-Agent") or "")[:200]
         email = (request.form.get("email") or "").strip().lower()
         pw    = request.form.get("password") or ""
+        # Pseudo-user pra audit_log quando a tentativa falha antes de identificar o usuario
+        attempted = {"email": email, "name": "", "master": False}
+
+        if not _login_rate_check(ip):
+            _write_audit_log(attempted, "login_fail", payload={"reason": "rate_limited", "user_agent": ua}, result="fail")
+            return redirect(url_for("login_page") + "?erro=bloqueado")
 
         if not email.endswith("@astrovistorias.com.br"):
+            _write_audit_log(attempted, "login_fail", payload={"reason": "domain", "user_agent": ua}, result="fail")
             return redirect(url_for("login_page") + "?erro=dominio")
 
         user = USERS.get(email)
         if user and _verify_password(pw, user["password_hash"]):
+            attempted.update({
+                "name":   user.get("name", email),
+                "master": bool(user.get("master")),
+                "matriz": bool(user.get("matriz")),
+            })
             session.permanent = True
             session["email"] = email
             session["name"]  = user.get("name", email)
+            _write_audit_log(attempted, "login_success", payload={"user_agent": ua})
             return redirect(url_for("index"))
 
+        reason = "wrong_password" if user else "user_not_found"
+        _write_audit_log(attempted, "login_fail", payload={"reason": reason, "user_agent": ua}, result="fail")
         return redirect(url_for("login_page") + "?erro=credenciais")
 
     return send_from_directory(UI_DIR, "login.html")
