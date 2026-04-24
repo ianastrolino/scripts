@@ -2628,8 +2628,8 @@ def master_api_contas_receber():
             u["em_aberto"] = round(u["em_aberto"], 2)
             u["atrasadas"] = round(u["atrasadas"], 2)
 
-        em_atraso.sort(key=lambda x: (-x["dias_atraso"], -x["valor"]))
-        vencendo_7d.sort(key=lambda x: (x["data_vencimento"], -x["valor"]))
+        em_atraso.sort(key=lambda x: (-x["valor"], -x["dias_atraso"]))
+        vencendo_7d.sort(key=lambda x: (-x["valor"], x["data_vencimento"]))
 
         payload = {
             "success":       True,
