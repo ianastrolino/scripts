@@ -277,6 +277,33 @@
     .day-table tr:last-child td { border-bottom: none; }
     .day-table td.val { font-weight: var(--ds-weight-bold); font-variant-numeric: tabular-nums; }
 
+    /* Top 10 clientes */
+    .topcli-btn {
+      font: inherit; font-size: 11px; font-weight: 700;
+      padding: 5px 12px; border: none; background: transparent;
+      color: var(--ds-ink-muted); cursor: pointer;
+    }
+    .topcli-btn + .topcli-btn { border-left: 1px solid var(--ds-line); }
+    .topcli-btn.active { background: var(--ds-ink); color: #fff; }
+    .topcli-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; border-bottom: 1px solid var(--ds-line);
+      font-size: 13px;
+    }
+    .topcli-row:last-child { border-bottom: none; }
+    .topcli-row:hover { background: var(--ds-surface-alt); }
+    .topcli-rank {
+      width: 22px; text-align: center; flex-shrink: 0;
+      font-size: 11px; font-weight: 800; color: var(--ds-ink-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .topcli-row:nth-child(1) .topcli-rank { color: #f59e0b; font-size: 13px; }
+    .topcli-row:nth-child(2) .topcli-rank { color: #6b7280; }
+    .topcli-row:nth-child(3) .topcli-rank { color: #c2410c; }
+    .topcli-nome { flex: 1; font-weight: 600; color: var(--ds-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .topcli-count { font-size: 11px; color: var(--ds-ink-muted); flex-shrink: 0; }
+    .topcli-valor { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ds-ink); flex-shrink: 0; }
+
     /* FP de hoje - cards por forma de pagamento */
     .fp-hoje-card {
       background: var(--ds-surface);
@@ -409,6 +436,20 @@
         </div>
         <div id="fpHojeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
           <div class="g-loading" style="grid-column:1/-1">Carregando…</div>
+        </div>
+      </div>
+
+      <!-- Top 10 clientes por valor (toggle Dia/Mes) -->
+      <div class="g-section">
+        <div class="g-section-title" style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+          <span>Top 10 clientes por valor</span>
+          <div id="topCliToggle" style="display:inline-flex;border:1px solid var(--ds-line);border-radius:var(--ds-radius-md);overflow:hidden;background:var(--ds-surface)">
+            <button type="button" class="topcli-btn active" data-modo="dia">Dia</button>
+            <button type="button" class="topcli-btn" data-modo="mes">Mês</button>
+          </div>
+        </div>
+        <div id="topCliList">
+          <div class="g-loading">Carregando…</div>
         </div>
       </div>
 
@@ -770,8 +811,63 @@
     }
   }
 
+  let _topCliDia = null;
+  let _topCliMes = null;
+
+  async function carregarTopClientes() {
+    const today = new Date();
+    const isoDia = today.toISOString().slice(0, 10);
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const isoMesFrom = `${y}-${m}-01`;
+    // Fim do mes: ultimo dia
+    const fimMes = new Date(y, today.getMonth() + 1, 0);
+    const isoMesTo = fimMes.toISOString().slice(0, 10);
+
+    const list = document.getElementById("topCliList");
+    list.innerHTML = '<div class="g-loading">Carregando…</div>';
+    try {
+      const [rDia, rMes] = await Promise.all([
+        fetch(`${apiBase}/api/gerencial/historico?from=${isoDia}&to=${isoDia}`).then(r => r.json()),
+        fetch(`${apiBase}/api/gerencial/historico?from=${isoMesFrom}&to=${isoMesTo}`).then(r => r.json()),
+      ]);
+      _topCliDia = rDia.success ? (rDia.clientes || []) : [];
+      _topCliMes = rMes.success ? (rMes.clientes || []) : [];
+      renderTopClientes("dia");
+    } catch (e) {
+      list.innerHTML = `<div class="g-error">${e.message}</div>`;
+    }
+  }
+
+  function renderTopClientes(modo) {
+    const lista = (modo === "dia" ? _topCliDia : _topCliMes) || [];
+    const list = document.getElementById("topCliList");
+    if (!lista.length) {
+      list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--ds-ink-muted);font-size:13px">${
+        modo === "dia" ? "Nenhum cliente lançado hoje ainda" : "Nenhum cliente no mês"
+      }</div>`;
+      return;
+    }
+    list.innerHTML = lista.map((c, i) => `
+      <div class="topcli-row">
+        <span class="topcli-rank">${i + 1}${i < 3 ? "°" : ""}</span>
+        <span class="topcli-nome">${escHtml(c.cliente)}</span>
+        <span class="topcli-count">${c.count} lanç.</span>
+        <span class="topcli-valor">${brl(c.total)}</span>
+      </div>
+    `).join("");
+  }
+
+  document.querySelectorAll(".topcli-btn").forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".topcli-btn").forEach(x => x.classList.toggle("active", x === b));
+      renderTopClientes(b.dataset.modo);
+    });
+  });
+
   carregar();
   carregarFpHoje();
+  carregarTopClientes();
 
   async function carregarDivergencias() {
     const { from, to } = getRange();

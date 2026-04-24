@@ -5078,16 +5078,27 @@ def api_gerencial_historico(unit: str):
 
         svc_count: dict[str, int]   = {}
         svc_total: dict[str, float] = {}
+        cli_count: dict[str, int]   = {}
+        cli_total: dict[str, float] = {}
         for lc in registros:
             s = (lc.get("servico", "") or "").strip()
             if s:
                 svc_count[s] = svc_count.get(s, 0) + 1
                 svc_total[s] = svc_total.get(s, 0.0) + float(lc.get("valor", 0))
+            c = (lc.get("cliente", "") or "").strip().upper()
+            if c:
+                cli_count[c] = cli_count.get(c, 0) + 1
+                cli_total[c] = cli_total.get(c, 0.0) + float(lc.get("valor", 0))
         servicos = sorted(
             [{"servico": s, "count": svc_count[s], "total": round(svc_total[s], 2)}
              for s in svc_count],
             key=lambda x: x["count"], reverse=True,
         )
+        clientes = sorted(
+            [{"cliente": c, "count": cli_count[c], "total": round(cli_total[c], 2)}
+             for c in cli_count],
+            key=lambda x: x["total"], reverse=True,
+        )[:10]
 
         ud = UNITS.get(unit, {})
         return _json({
@@ -5109,6 +5120,7 @@ def api_gerencial_historico(unit: str):
             },
             "por_dia":  por_dia,
             "servicos": servicos,
+            "clientes": clientes,
         })
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
