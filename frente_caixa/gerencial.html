@@ -630,7 +630,18 @@
     }
   }
 
-  document.getElementById("btnAplicar").addEventListener("click", carregar);
+  document.getElementById("btnAplicar").addEventListener("click", async () => {
+    const btn = document.getElementById("btnAplicar");
+    const txt = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Carregando…";
+    try {
+      await carregar();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = txt;
+    }
+  });
 
   document.getElementById("btnExportar").addEventListener("click", () => {
     const { from, to } = getRange();
@@ -826,17 +837,16 @@
 
     const list = document.getElementById("topCliList");
     list.innerHTML = '<div class="g-loading">Carregando…</div>';
-    try {
-      const [rDia, rMes] = await Promise.all([
-        fetch(`${apiBase}/api/gerencial/historico?from=${isoDia}&to=${isoDia}`).then(r => r.json()),
-        fetch(`${apiBase}/api/gerencial/historico?from=${isoMesFrom}&to=${isoMesTo}`).then(r => r.json()),
-      ]);
-      _topCliDia = rDia.success ? (rDia.clientes || []) : [];
-      _topCliMes = rMes.success ? (rMes.clientes || []) : [];
-      renderTopClientes("dia");
-    } catch (e) {
-      list.innerHTML = `<div class="g-error">${e.message}</div>`;
-    }
+    // allSettled pra nao quebrar a tela se um dos 2 fetches falhar
+    const [rDia, rMes] = await Promise.allSettled([
+      fetch(`${apiBase}/api/gerencial/historico?from=${isoDia}&to=${isoDia}`).then(r => r.json()),
+      fetch(`${apiBase}/api/gerencial/historico?from=${isoMesFrom}&to=${isoMesTo}`).then(r => r.json()),
+    ]);
+    const dDia = rDia.status === "fulfilled" ? rDia.value : null;
+    const dMes = rMes.status === "fulfilled" ? rMes.value : null;
+    _topCliDia = (dDia && dDia.success) ? (dDia.clientes || []) : [];
+    _topCliMes = (dMes && dMes.success) ? (dMes.clientes || []) : [];
+    renderTopClientes("dia");
   }
 
   function renderTopClientes(modo) {
