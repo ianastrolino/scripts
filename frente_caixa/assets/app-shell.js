@@ -150,6 +150,7 @@
         { id: "usuarios",            label: "Usuários",             icon: "usuariosCog", href: "/master/usuarios" },
         { id: "auditoria",           label: "Auditoria",            icon: "auditoria",  href: "/master/auditoria" },
         { id: "aprovacoes",          label: "Aprovações",           icon: "aprovacoes", href: "/master/aprovacoes", requires: "master", dynamicBadge: "pendingApprovals" },
+        { id: "contas-receber",      label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
         { id: "cobranca",            label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
         { id: "categorias",          label: "Categorias",           icon: "categorias", href: "/master/categorias" },
         { id: "unidades",            label: "Unidades",             icon: "unidades",   disabled: true, badge: "Em breve" },

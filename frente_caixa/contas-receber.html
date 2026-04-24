@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Contas a Receber</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .toolbar-info { font-size: var(--ds-text-xs); color: var(--ds-ink-muted); }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-left: 4px solid var(--ds-ink-muted);
+      border-radius: var(--ds-radius-lg);
+      padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi.k-a-receber { border-left-color: #2563eb; }
+    .kpi.k-7d        { border-left-color: #10b981; }
+    .kpi.k-30d       { border-left-color: #f59e0b; }
+    .kpi.k-atraso    { border-left-color: #dc2626; }
+
+    .kpi-label {
+      font-size: 11px; font-weight: 800;
+      color: var(--ds-ink-muted); text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: 6px;
+    }
+    .kpi-val {
+      font-size: 28px; font-weight: 800; color: var(--ds-ink);
+      font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+      line-height: 1.1;
+    }
+    .kpi-sub {
+      margin-top: 4px; font-size: 12px; color: var(--ds-ink-muted);
+      font-weight: 500;
+    }
+
+    .section {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      margin-bottom: var(--ds-space-4);
+      overflow: hidden;
+    }
+    .section-head {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--ds-line);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 800; color: var(--ds-ink);
+      letter-spacing: -.01em;
+    }
+    .section-meta { font-size: 12px; color: var(--ds-ink-muted); }
+
+    table.tbl {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px; font-variant-numeric: tabular-nums;
+    }
+    .tbl thead th {
+      text-align: left;
+      font-size: 11px; font-weight: 700;
+      color: var(--ds-ink-muted); text-transform: uppercase; letter-spacing: .04em;
+      padding: 10px 20px; background: var(--ds-surface-alt);
+      border-bottom: 1px solid var(--ds-line);
+      white-space: nowrap;
+    }
+    .tbl tbody td {
+      padding: 11px 20px;
+      border-bottom: 1px solid var(--ds-line);
+      color: var(--ds-ink);
+    }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr:hover td { background: var(--ds-surface-alt); }
+    .tbl .num { text-align: right; font-weight: 700; }
+    .tbl .muted { color: var(--ds-ink-muted); }
+    .tbl .atraso-dias { color: #dc2626; font-weight: 700; }
+    .tbl .atraso-dias.soft { color: #f59e0b; }
+
+    .empty {
+      padding: 30px 20px;
+      text-align: center;
+      color: var(--ds-ink-muted);
+      font-size: 13px;
+    }
+    .empty strong { color: var(--ds-success); display: block; font-size: 14px; margin-bottom: 4px; }
+
+    .unit-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 11px; font-weight: 700;
+      background: var(--ds-surface-alt); color: var(--ds-ink-muted);
+      letter-spacing: .02em;
+    }
+
+    .loading { opacity: .5; pointer-events: none; }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--ds-line); border-top-color: var(--ds-accent-600);
+      border-radius: 50%; animation: spin 1s linear infinite;
+      vertical-align: -2px; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 7px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-surface-alt); }
+
+    select.filter-sel {
+      font: inherit; font-size: var(--ds-text-sm);
+      padding: 7px 12px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink);
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-layout">
+  <aside id="app-sidebar"></aside>
+  <header id="app-header"></header>
+
+  <main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-header-text">
+          <div class="app-page-eyebrow">Rede — Relatórios</div>
+          <h1 class="app-page-title">Contas a Receber</h1>
+          <p class="app-page-sub">Dinheiro a entrar por unidade, prazo e atraso.</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="selUnit" class="filter-sel">
+            <option value="all">Todas as unidades</option>
+          </select>
+          <button id="btnRefresh" class="btn" type="button">Atualizar</button>
+        </div>
+        <div class="toolbar-info" id="infoAtualizado">—</div>
+      </div>
+
+      <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi k-a-receber">
+          <div class="kpi-label">A Receber</div>
+          <div class="kpi-val" id="kpiAReceber">—</div>
+          <div class="kpi-sub" id="kpiAReceberSub">carregando…</div>
+        </div>
+        <div class="kpi k-7d">
+          <div class="kpi-label">Vence em 7 dias</div>
+          <div class="kpi-val" id="kpi7d">—</div>
+          <div class="kpi-sub" id="kpi7dSub">—</div>
+        </div>
+        <div class="kpi k-30d">
+          <div class="kpi-label">Vence em 30 dias</div>
+          <div class="kpi-val" id="kpi30d">—</div>
+          <div class="kpi-sub" id="kpi30dSub">—</div>
+        </div>
+        <div class="kpi k-atraso">
+          <div class="kpi-label">Atrasado</div>
+          <div class="kpi-val" id="kpiAtraso">—</div>
+          <div class="kpi-sub" id="kpiAtrasoSub">—</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Por unidade</div>
+          <div class="section-meta" id="porUnitMeta"></div>
+        </div>
+        <table class="tbl" id="tblUnidades">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th class="num">A receber</th>
+              <th class="num">Títulos</th>
+              <th class="num">Atrasado</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyUnidades">
+            <tr><td colspan="4" class="empty">carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Em atraso</div>
+          <div class="section-meta" id="atrasoMeta"></div>
+        </div>
+        <table class="tbl" id="tblAtraso">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Unidade</th>
+              <th>Vencimento</th>
+              <th class="num">Dias</th>
+              <th class="num">Valor</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAtraso">
+            <tr><td colspan="5" class="empty">carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Vencendo nos próximos 7 dias</div>
+          <div class="section-meta" id="vence7Meta"></div>
+        </div>
+        <table class="tbl" id="tbl7d">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Unidade</th>
+              <th>Vencimento</th>
+              <th class="num">Valor</th>
+            </tr>
+          </thead>
+          <tbody id="tbody7d">
+            <tr><td colspan="4" class="empty">carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+  </main>
+</div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "contas-receber",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Contas a Receber", current: true }
+    ]
+  });
+
+  function brl(n) {
+    return "R$ " + Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function brDate(iso) {
+    if (!iso) return "—";
+    const [y, m, d] = iso.slice(0, 10).split("-");
+    return `${d}/${m}/${y}`;
+  }
+  function esc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function fmtRel(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+      if (diff < 60)    return `há ${Math.floor(diff)}s`;
+      if (diff < 3600)  return `há ${Math.floor(diff/60)} min`;
+      return `às ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    } catch { return "—"; }
+  }
+
+  async function loadUnits() {
+    try {
+      const r = await fetch("/master/api/units");
+      const j = await r.json();
+      const sel = document.getElementById("selUnit");
+      (j.units || []).forEach(u => {
+        const opt = document.createElement("option");
+        opt.value = u.id;
+        opt.textContent = u.nome || u.id;
+        sel.appendChild(opt);
+      });
+    } catch {}
+  }
+
+  async function loadDashboard() {
+    const root = document.querySelector(".app-content-wrap");
+    root.classList.add("loading");
+    const unit = document.getElementById("selUnit").value;
+    try {
+      const qs = new URLSearchParams();
+      if (unit && unit !== "all") qs.set("unit", unit);
+      const r = await fetch(`/master/api/contas-receber?${qs}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      renderKPIs(j.totais);
+      renderUnidades(j.por_unidade);
+      renderAtraso(j.em_atraso);
+      renderVence7d(j.vencendo_7d);
+      document.getElementById("infoAtualizado").textContent =
+        `atualizado ${fmtRel(j.atualizado_em)} · ${brDate(j.hoje)}`;
+    } catch (e) {
+      alert("Falha ao carregar: " + e.message);
+    } finally {
+      root.classList.remove("loading");
+    }
+  }
+
+  function renderKPIs(t) {
+    document.getElementById("kpiAReceber").textContent    = brl(t.a_receber);
+    document.getElementById("kpiAReceberSub").textContent = `${t.a_receber_count} título${t.a_receber_count === 1 ? "" : "s"}`;
+
+    document.getElementById("kpi7d").textContent          = brl(t.vence_7d);
+    document.getElementById("kpi7dSub").textContent       = `${t.vence_7d_count} título${t.vence_7d_count === 1 ? "" : "s"}`;
+
+    document.getElementById("kpi30d").textContent         = brl(t.vence_30d);
+    document.getElementById("kpi30dSub").textContent      = `${t.vence_30d_count} título${t.vence_30d_count === 1 ? "" : "s"}`;
+
+    document.getElementById("kpiAtraso").textContent      = brl(t.atrasado);
+    document.getElementById("kpiAtrasoSub").textContent   = t.atrasado_count
+      ? `${t.atrasado_count} título${t.atrasado_count === 1 ? "" : "s"} vencido${t.atrasado_count === 1 ? "" : "s"}`
+      : "tudo em dia";
+  }
+
+  function renderUnidades(lista) {
+    const tb = document.getElementById("tbodyUnidades");
+    document.getElementById("porUnitMeta").textContent = `${lista.length} unidade${lista.length === 1 ? "" : "s"}`;
+    if (!lista.length) {
+      tb.innerHTML = `<tr><td colspan="4" class="empty">sem dados</td></tr>`;
+      return;
+    }
+    tb.innerHTML = lista.map(u => {
+      const atrasoTxt = u.atrasado > 0
+        ? `<span style="color:#dc2626;font-weight:700">${brl(u.atrasado)}</span> <span class="muted">(${u.atrasado_count})</span>`
+        : `<span class="muted">0</span>`;
+      return `<tr>
+        <td><strong>${esc(u.nome)}</strong></td>
+        <td class="num">${brl(u.a_receber)}</td>
+        <td class="num muted">${u.qtd}</td>
+        <td class="num">${atrasoTxt}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderAtraso(lista) {
+    const tb = document.getElementById("tbodyAtraso");
+    document.getElementById("atrasoMeta").textContent = lista.length
+      ? `${lista.length} título${lista.length === 1 ? "" : "s"}`
+      : "";
+    if (!lista.length) {
+      tb.innerHTML = `<tr><td colspan="5" class="empty"><strong>🎉 Nada em atraso</strong>todos os títulos estão em dia</td></tr>`;
+      return;
+    }
+    tb.innerHTML = lista.map(c => {
+      const severity = c.dias_atraso > 30 ? "" : "soft";
+      return `<tr>
+        <td><strong>${esc(c.cliente)}</strong></td>
+        <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
+        <td class="muted">${brDate(c.data_vencimento)}</td>
+        <td class="num"><span class="atraso-dias ${severity}">${c.dias_atraso}d</span></td>
+        <td class="num">${brl(c.valor)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderVence7d(lista) {
+    const tb = document.getElementById("tbody7d");
+    document.getElementById("vence7Meta").textContent = lista.length
+      ? `${lista.length} título${lista.length === 1 ? "" : "s"}`
+      : "";
+    if (!lista.length) {
+      tb.innerHTML = `<tr><td colspan="4" class="empty">nenhum título vencendo nos próximos 7 dias</td></tr>`;
+      return;
+    }
+    tb.innerHTML = lista.map(c => `<tr>
+      <td><strong>${esc(c.cliente)}</strong></td>
+      <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
+      <td class="muted">${brDate(c.data_vencimento)}</td>
+      <td class="num">${brl(c.valor)}</td>
+    </tr>`).join("");
+  }
+
+  document.getElementById("selUnit").addEventListener("change", loadDashboard);
+  document.getElementById("btnRefresh").addEventListener("click", loadDashboard);
+
+  (async () => {
+    await loadUnits();
+    await loadDashboard();
+  })();
+</script>
+</body>
+</html>

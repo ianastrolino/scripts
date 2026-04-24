@@ -2384,6 +2384,131 @@ def master_api_inadimplencia():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/contas-receber")
+@master_view_required
+def master_api_contas_receber():
+    """Dashboard simplificado de contas a receber.
+
+    Retorna 4 totais (a_receber / vence_7d / vence_30d / atrasado),
+    agregado por unidade, lista de em atraso e lista de vencendo em 7 dias.
+
+    Params: unit=<slug>|all (default all)
+    """
+    try:
+        unit_filter = (request.args.get("unit") or "all").strip()
+        units_iter = list(UNITS.keys()) if unit_filter == "all" else (
+            [unit_filter] if unit_filter in UNITS else []
+        )
+        hoje = dt.date.today()
+        hoje_mais_7  = hoje + dt.timedelta(days=7)
+        hoje_mais_30 = hoje + dt.timedelta(days=30)
+
+        totais = {
+            "a_receber": 0.0, "a_receber_count": 0,
+            "vence_7d":  0.0, "vence_7d_count":  0,
+            "vence_30d": 0.0, "vence_30d_count": 0,
+            "atrasado":  0.0, "atrasado_count":  0,
+        }
+        por_unidade: dict[str, dict] = {}
+        em_atraso: list[dict] = []
+        vencendo_7d: list[dict] = []
+
+        for uid in units_iter:
+            unit_nome = UNITS.get(uid, {}).get("nome", uid)
+            por_unidade[uid] = {
+                "unit": uid, "nome": unit_nome,
+                "a_receber": 0.0, "qtd": 0,
+                "atrasado": 0.0, "atrasado_count": 0,
+            }
+            try:
+                contas = _fetch_contas_abertas_tiny(uid)
+            except Exception as exc:
+                app.logger.warning("[contas-receber] falha unit=%s: %s", uid, exc)
+                continue
+
+            for c in contas:
+                cliente_obj = c.get("cliente") or {}
+                cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
+                venc_str = c.get("dataVencimento") or c.get("data") or ""
+                try:
+                    if "/" in venc_str:
+                        d, m, y = venc_str.split("/")
+                        venc = dt.date(int(y), int(m), int(d))
+                    else:
+                        venc = dt.date.fromisoformat(venc_str[:10])
+                except Exception:
+                    venc = hoje
+                valor = float(c.get("saldo") or c.get("valor") or 0)
+                if valor <= 0:
+                    continue
+
+                dias_atraso = (hoje - venc).days
+                num_doc = c.get("numeroDocumento") or ""
+
+                totais["a_receber"]       += valor
+                totais["a_receber_count"] += 1
+                por_unidade[uid]["a_receber"] += valor
+                por_unidade[uid]["qtd"]       += 1
+
+                if dias_atraso > 0:
+                    totais["atrasado"]       += valor
+                    totais["atrasado_count"] += 1
+                    por_unidade[uid]["atrasado"]       += valor
+                    por_unidade[uid]["atrasado_count"] += 1
+                    em_atraso.append({
+                        "cliente": cliente_nome,
+                        "unit": uid, "unit_nome": unit_nome,
+                        "valor": round(valor, 2),
+                        "dias_atraso": dias_atraso,
+                        "data_vencimento": venc.isoformat(),
+                        "numero_documento": num_doc,
+                    })
+                elif hoje <= venc <= hoje_mais_7:
+                    totais["vence_7d"]       += valor
+                    totais["vence_7d_count"] += 1
+                    totais["vence_30d"]       += valor
+                    totais["vence_30d_count"] += 1
+                    vencendo_7d.append({
+                        "cliente": cliente_nome,
+                        "unit": uid, "unit_nome": unit_nome,
+                        "valor": round(valor, 2),
+                        "data_vencimento": venc.isoformat(),
+                        "numero_documento": num_doc,
+                    })
+                elif hoje < venc <= hoje_mais_30:
+                    totais["vence_30d"]       += valor
+                    totais["vence_30d_count"] += 1
+
+        # Arredonda totais
+        for k in ("a_receber", "vence_7d", "vence_30d", "atrasado"):
+            totais[k] = round(totais[k], 2)
+        for u in por_unidade.values():
+            u["a_receber"] = round(u["a_receber"], 2)
+            u["atrasado"]  = round(u["atrasado"], 2)
+
+        em_atraso.sort(key=lambda x: (-x["dias_atraso"], -x["valor"]))
+        vencendo_7d.sort(key=lambda x: (x["data_vencimento"], -x["valor"]))
+
+        return _json({
+            "success":      True,
+            "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "hoje":         hoje.isoformat(),
+            "totais":       totais,
+            "por_unidade":  list(por_unidade.values()),
+            "em_atraso":    em_atraso,
+            "vencendo_7d":  vencendo_7d,
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/contas-receber")
+@master_view_required
+def master_contas_receber_page():
+    return send_from_directory(UI_DIR, "contas-receber.html")
+
+
 @app.route("/master/api/inadimplencia.csv")
 @master_view_required
 def master_api_inadimplencia_csv():
