@@ -5843,10 +5843,16 @@ def _enviar_alerta_fechamento(today: str) -> None:
 
 
 def _criar_backup_zip() -> bytes:
-    """Gera um ZIP em memória com dump SQL de todos os bancos + JSONs de config."""
+    """Gera um ZIP em memoria com dump SQL de cada unidade + JSONs/JSONLs globais.
+
+    Inclui tudo que vive em DATA_DIR e nao pode ser reconstruido do Tiny:
+    - Por unidade: dump SQL do caixa_dia.db + arquivos de config/estado
+    - Globais: users, convites, logs, aprovacoes, pins
+    """
     import io, zipfile, sqlite3
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Por unidade — SQLite + JSONs
         for uid in UNITS:
             unit_dir = DATA_DIR / uid
             db_path  = unit_dir / "caixa_dia.db"
@@ -5858,46 +5864,243 @@ def _criar_backup_zip() -> bytes:
                     zf.writestr(f"{uid}/caixa_dia.sql", sql.encode("utf-8"))
                 except Exception as exc:
                     app.logger.error("[backup] Falha ao dumpar %s: %s", uid, exc)
-            for fname in ("imported.json", "cliente_ids.json"):
+            for fname in ("imported.json", "cliente_ids.json", "categorias.json",
+                          "tiny_tokens.json", "caixa_fechamento.json"):
                 p = unit_dir / fname
                 if p.exists():
-                    zf.writestr(f"{uid}/{fname}", p.read_bytes())
+                    try:
+                        zf.writestr(f"{uid}/{fname}", p.read_bytes())
+                    except Exception as exc:
+                        app.logger.error("[backup] Falha ao incluir %s/%s: %s", uid, fname, exc)
+        # Globais
+        for fname in ("users.json", "convites.json", "pins.json",
+                      "session_log.jsonl", "audit_log.jsonl",
+                      "pending_approvals.jsonl", "backup_log.jsonl"):
+            p = DATA_DIR / fname
+            if p.exists():
+                try:
+                    zf.writestr(fname, p.read_bytes())
+                except Exception as exc:
+                    app.logger.error("[backup] Falha ao incluir %s: %s", fname, exc)
+        # Manifest pra facilitar restore
+        manifest = {
+            "gerado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "unidades": list(UNITS.keys()),
+            "versao": "2",
+        }
+        zf.writestr("MANIFEST.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
     buf.seek(0)
     return buf.read()
 
 
-def _executar_backup() -> None:
-    tz      = ZoneInfo("America/Sao_Paulo")
-    today   = dt.datetime.now(tz).date().isoformat()
+# ── Backup no Google Drive (Service Account) ─────────────────────────────────
+_BACKUP_LOG_PATH = DATA_DIR / "backup_log.jsonl"
+_GDRIVE_MIME_FOLDER = "application/vnd.google-apps.folder"
+
+
+def _gdrive_service():
+    """Cria um client do Google Drive usando Service Account JSON em env.
+
+    Retorna None se nao configurado. Raise em caso de credencial invalida.
+    """
+    raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "").strip()
+    folder_id = os.environ.get("GDRIVE_BACKUP_FOLDER_ID", "").strip()
+    if not raw or not folder_id:
+        return None, None
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        app.logger.error("[backup] google-api-python-client nao instalado")
+        return None, None
+    info = json.loads(raw)
+    creds = service_account.Credentials.from_service_account_info(
+        info, scopes=["https://www.googleapis.com/auth/drive.file"]
+    )
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return service, folder_id
+
+
+def _upload_backup_to_gdrive(zip_bytes: bytes, fname: str) -> dict:
+    """Sobe o ZIP pro Drive. Retorna {ok, file_id, web_link, error, skipped}."""
+    import io
+    try:
+        service, folder_id = _gdrive_service()
+    except Exception as exc:
+        return {"ok": False, "error": f"credencial: {exc}", "skipped": False}
+    if not service:
+        return {"ok": False, "skipped": True, "error": "GCP_SERVICE_ACCOUNT_JSON/GDRIVE_BACKUP_FOLDER_ID nao configurados"}
+    try:
+        from googleapiclient.http import MediaIoBaseUpload
+        media = MediaIoBaseUpload(io.BytesIO(zip_bytes), mimetype="application/zip", resumable=False)
+        body = {"name": fname, "parents": [folder_id]}
+        f = service.files().create(body=body, media_body=media, fields="id,name,webViewLink,size").execute()
+        return {
+            "ok": True,
+            "file_id": f.get("id"),
+            "web_link": f.get("webViewLink"),
+            "name": f.get("name"),
+            "size": int(f.get("size") or 0),
+        }
+    except Exception as exc:
+        app.logger.exception("[backup] Falha no upload Drive")
+        return {"ok": False, "error": str(exc), "skipped": False}
+
+
+def _gdrive_aplicar_retencao(keep_last: int = 60) -> dict:
+    """Mantem os `keep_last` backups mais recentes na pasta. Apaga o resto.
+
+    Retorna {ok, mantidos, apagados, error}.
+    """
+    try:
+        service, folder_id = _gdrive_service()
+    except Exception as exc:
+        return {"ok": False, "error": f"credencial: {exc}"}
+    if not service:
+        return {"ok": False, "skipped": True}
+    try:
+        q = f"'{folder_id}' in parents and trashed = false and mimeType = 'application/zip'"
+        files = []
+        page_token = None
+        while True:
+            resp = service.files().list(
+                q=q, pageSize=200, pageToken=page_token,
+                fields="nextPageToken, files(id, name, createdTime)",
+                orderBy="createdTime desc",
+            ).execute()
+            files.extend(resp.get("files", []))
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+        to_delete = files[keep_last:]
+        apagados = 0
+        for f in to_delete:
+            try:
+                service.files().delete(fileId=f["id"]).execute()
+                apagados += 1
+            except Exception as exc:
+                app.logger.warning("[backup] falha ao apagar %s: %s", f.get("name"), exc)
+        return {"ok": True, "mantidos": min(len(files), keep_last), "apagados": apagados}
+    except Exception as exc:
+        app.logger.exception("[backup] falha na retencao Drive")
+        return {"ok": False, "error": str(exc)}
+
+
+def _backup_log_append(info: dict) -> None:
+    try:
+        _BACKUP_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _BACKUP_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(info, ensure_ascii=False) + "\n")
+    except Exception:
+        app.logger.exception("[backup] falha ao gravar backup_log")
+
+
+def _backup_log_read(limit: int = 30) -> list[dict]:
+    if not _BACKUP_LOG_PATH.exists():
+        return []
+    try:
+        with _BACKUP_LOG_PATH.open("r", encoding="utf-8") as f:
+            lines = f.readlines()
+        out = []
+        for line in lines[-limit:]:
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                continue
+        return list(reversed(out))
+    except Exception:
+        app.logger.exception("[backup] falha ao ler backup_log")
+        return []
+
+
+def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
+    """Roda o backup completo: cria ZIP, sobe no Drive, aplica retencao, loga e (opcional) emaila.
+
+    Retorna dict com status de cada etapa pra UI/API consumir.
+    """
+    tz       = ZoneInfo("America/Sao_Paulo")
+    now      = dt.datetime.now(tz)
+    today    = now.date().isoformat()
     data_fmt = today[8:] + "/" + today[5:7] + "/" + today[:4]
-    app.logger.info("[backup] Iniciando backup de %d unidade(s)", len(UNITS))
+    app.logger.info("[backup] Iniciando backup %s de %d unidade(s)", tipo, len(UNITS))
+    resultado = {
+        "ok": False, "tipo": tipo, "ts": now.isoformat(timespec="seconds"),
+        "size_kb": 0, "gdrive": {}, "email": {"ok": False}, "retencao": {},
+        "error": None,
+    }
     try:
         zip_bytes = _criar_backup_zip()
         size_kb   = len(zip_bytes) // 1024
-        html = f"""<!DOCTYPE html>
+        resultado["size_kb"] = size_kb
+
+        # Nome do arquivo — auto usa so data (1 por dia), manual inclui hora
+        if tipo == "auto":
+            fname = f"astro_backup_{today}.zip"
+        else:
+            fname = f"astro_backup_{today}_{now.strftime('%H%M%S')}_manual.zip"
+
+        # Google Drive
+        resultado["gdrive"] = _upload_backup_to_gdrive(zip_bytes, fname)
+        if resultado["gdrive"].get("ok"):
+            # Retencao: mantem 60 backups mais recentes
+            resultado["retencao"] = _gdrive_aplicar_retencao(keep_last=60)
+
+        # Email (se SMTP configurado no _send_email — ele ja trata ausencia)
+        try:
+            drive_txt = ""
+            if resultado["gdrive"].get("ok") and resultado["gdrive"].get("web_link"):
+                drive_txt = f'<li><strong>Google Drive:</strong> <a href="{resultado["gdrive"]["web_link"]}">abrir arquivo</a></li>'
+            elif resultado["gdrive"].get("skipped"):
+                drive_txt = '<li style="color:#6b7280"><strong>Google Drive:</strong> nao configurado (env vars ausentes)</li>'
+            elif resultado["gdrive"].get("error"):
+                drive_txt = f'<li style="color:#dc2626"><strong>Google Drive:</strong> falha — {resultado["gdrive"]["error"][:120]}</li>'
+            html = f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;margin:0;padding:0">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#0f1117;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Backup Automático</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Backup {'Automatico' if tipo == 'auto' else 'Manual'}</div>
       <div style="font-size:20px;font-weight:800;color:#fff">Backup do Sistema — {data_fmt}</div>
     </div>
     <div style="padding:24px 28px;font-size:14px;color:#374151">
-      <p>Backup diário concluído com sucesso.</p>
+      <p>Backup {'diario' if tipo == 'auto' else 'manual'} concluido.</p>
       <ul>
         <li><strong>Unidades:</strong> {', '.join(UNITS.keys())}</li>
         <li><strong>Tamanho:</strong> {size_kb} KB</li>
-        <li><strong>Conteúdo:</strong> dump SQL de cada banco + arquivos de configuração</li>
+        {drive_txt}
       </ul>
       <p style="color:#6b7280;font-size:12px">Para restaurar: <code>sqlite3 novo.db &lt; caixa_dia.sql</code></p>
     </div>
   </div>
 </body></html>"""
-        fname = f"backup_astro_{today}.zip"
-        _send_email(f"[Astrovistorias] Backup {data_fmt}", html, zip_bytes, fname)
-        app.logger.info("[backup] Concluido — %d KB enviados", size_kb)
+            # Anexa o ZIP apenas se Drive falhou (evita emails pesados quando Drive ja guarda)
+            anexo = zip_bytes if not resultado["gdrive"].get("ok") else None
+            anexo_nome = fname if anexo else ""
+            _send_email(f"[Astrovistorias] Backup {'Manual ' if tipo != 'auto' else ''}{data_fmt}", html, anexo, anexo_nome)
+            resultado["email"]["ok"] = True
+        except Exception as exc:
+            resultado["email"]["error"] = str(exc)
+
+        resultado["ok"] = resultado["gdrive"].get("ok") or resultado["email"].get("ok")
+        app.logger.info("[backup] Concluido tipo=%s size=%dKB gdrive=%s",
+                        tipo, size_kb, resultado["gdrive"].get("ok"))
     except Exception as exc:
-        app.logger.error("[backup] Falha: %s", exc)
+        app.logger.exception("[backup] Falha geral")
+        resultado["error"] = str(exc)
+
+    # Log persistente pra UI
+    _backup_log_append({
+        "ts":      resultado["ts"],
+        "tipo":    tipo,
+        "ator":    ator,
+        "size_kb": resultado["size_kb"],
+        "gdrive_ok":   bool(resultado["gdrive"].get("ok")),
+        "gdrive_file": resultado["gdrive"].get("file_id"),
+        "gdrive_link": resultado["gdrive"].get("web_link"),
+        "email_ok":    bool(resultado["email"].get("ok")),
+        "error":       resultado.get("error"),
+    })
+    return resultado
 
 
 def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
@@ -6051,24 +6254,60 @@ threading.Thread(target=_cron_loop, daemon=True, name="cron").start()
 # Rota: backup manual (master only)
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/master/api/backup/now", methods=["POST"])
+@master_only_required
+@csrf_required
+def api_backup_now():
+    """Dispara backup imediato: ZIP + Drive + email. Retorna status de cada etapa."""
+    user  = _current_user() or {}
+    ator  = user.get("email", "?")
+    res   = _executar_backup(tipo="manual", ator=ator)
+    _write_audit_log(user, "backup_manual", target="sistema", payload={
+        "size_kb": res.get("size_kb"),
+        "gdrive_ok": bool(res.get("gdrive", {}).get("ok")),
+        "gdrive_file": res.get("gdrive", {}).get("file_id"),
+    })
+    status = 200 if res.get("ok") else 500
+    return _json(res, status)
+
+
+@app.route("/master/api/backup/status")
+@master_only_required
+def api_backup_status():
+    """Retorna historico dos ultimos backups + estado das envs Drive."""
+    raw = os.environ.get("GCP_SERVICE_ACCOUNT_JSON", "").strip()
+    folder_id = os.environ.get("GDRIVE_BACKUP_FOLDER_ID", "").strip()
+    sa_email = ""
+    if raw:
+        try:
+            sa_email = json.loads(raw).get("client_email", "") or ""
+        except Exception:
+            pass
+    folder_url = f"https://drive.google.com/drive/folders/{folder_id}" if folder_id else ""
+    return _json({
+        "history": _backup_log_read(limit=30),
+        "gdrive": {
+            "configured": bool(raw and folder_id),
+            "sa_email": sa_email,
+            "folder_id": folder_id,
+            "folder_url": folder_url,
+        },
+    })
+
+
+# Rota legada — mantida para compat, redireciona para a nova
 @app.route("/gerencial/api/backup", methods=["POST"])
 @master_only_required
 @csrf_required
-def api_backup_manual():
-    """Dispara backup imediato e envia por email. Retorna tamanho do ZIP."""
-    try:
-        zip_bytes = _criar_backup_zip()
-        size_kb   = len(zip_bytes) // 1024
-        tz        = ZoneInfo("America/Sao_Paulo")
-        today     = dt.datetime.now(tz).date().isoformat()
-        data_fmt  = today[8:] + "/" + today[5:7] + "/" + today[:4]
-        html = f"<p>Backup manual disparado em {data_fmt}. Tamanho: {size_kb} KB.</p>"
-        fname = f"backup_astro_{today}_manual.zip"
-        _send_email(f"[Astrovistorias] Backup Manual {data_fmt}", html, zip_bytes, fname)
-        return _json({"success": True, "size_kb": size_kb, "message": f"Backup enviado por email ({size_kb} KB)."})
-    except Exception as exc:
-        app.logger.exception("[backup] Falha no backup manual")
-        return _json({"success": False, "error": str(exc)}, 500)
+def api_backup_manual_legacy():
+    user = _current_user() or {}
+    res  = _executar_backup(tipo="manual", ator=user.get("email", "?"))
+    return _json({
+        "success": bool(res.get("ok")),
+        "size_kb": res.get("size_kb"),
+        "gdrive": res.get("gdrive"),
+        "message": f"Backup {'enviado' if res.get('ok') else 'falhou'} ({res.get('size_kb')} KB)."
+    }, 200 if res.get("ok") else 500)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

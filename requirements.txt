@@ -2,3 +2,5 @@ flask>=3.0
 gunicorn>=21.2
 requests>=2.31
 anthropic>=0.40
+google-auth>=2.29
+google-api-python-client>=2.120

@@ -211,6 +211,25 @@
         </a>
       </div>
 
+      <div id="backupCard" style="margin-bottom:var(--ds-space-5);padding:var(--ds-space-4);background:var(--ds-surface-alt);border:1px solid var(--ds-line);border-radius:var(--ds-radius-lg)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--ds-space-3);margin-bottom:var(--ds-space-3)">
+          <div>
+            <div style="font-size:var(--ds-text-xs);color:var(--ds-ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Backup automático</div>
+            <div id="backupSummary" style="font-size:var(--ds-text-sm);color:var(--ds-ink);margin-top:2px">carregando…</div>
+          </div>
+          <div style="display:flex;gap:var(--ds-space-2);flex-wrap:wrap">
+            <a id="backupFolder" class="action-btn" href="#" target="_blank" rel="noopener" style="min-width:160px;display:none">
+              <span class="ab-icon" id="folderIcon"></span>Abrir pasta Drive
+            </a>
+            <button id="backupNow" class="action-btn" style="min-width:200px">
+              <span class="ab-icon" id="backupNowIcon"></span>Fazer backup agora
+            </button>
+          </div>
+        </div>
+        <div id="backupHistory" style="font-size:var(--ds-text-xs);color:var(--ds-ink-muted)"></div>
+      </div>
+
+
       <div class="refresh-bar" id="refreshBar">
         <span class="rb-dot"></span>
         <span id="refreshText">Atualizando a cada 30s · última às <span id="refreshLast">—</span></span>
@@ -460,6 +479,98 @@
   // Preenche ícones estáticos dos botões da barra de ops
   document.getElementById("smtpIcon").innerHTML = AstroShell.icon("send");
   document.getElementById("backupIcon").innerHTML = AstroShell.icon("download");
+  document.getElementById("backupNowIcon").innerHTML = AstroShell.icon("save");
+  document.getElementById("folderIcon").innerHTML = AstroShell.icon("folder");
+
+  function _fmtBr(iso){
+    if(!iso) return "—";
+    try{
+      const d = new Date(iso);
+      const dd = String(d.getDate()).padStart(2,"0");
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const yy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mi = String(d.getMinutes()).padStart(2,"0");
+      return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+    }catch{ return iso; }
+  }
+
+  async function loadBackupStatus(){
+    const sum  = document.getElementById("backupSummary");
+    const hist = document.getElementById("backupHistory");
+    const folder = document.getElementById("backupFolder");
+    try {
+      const r = await fetch("/master/api/backup/status");
+      const j = await r.json();
+      const g = j.gdrive || {};
+      const h = j.history || [];
+      const last = h[0];
+      if (!g.configured){
+        sum.innerHTML = '<span style="color:var(--ds-warning)">⚠ Google Drive não configurado</span> — definir <code>GCP_SERVICE_ACCOUNT_JSON</code> e <code>GDRIVE_BACKUP_FOLDER_ID</code> no Railway';
+        folder.style.display = "none";
+      } else if (last && last.gdrive_ok){
+        sum.innerHTML = `<span style="color:var(--ds-success)">● Último:</span> ${_fmtBr(last.ts)} (${last.size_kb} KB, ${last.tipo})`;
+        folder.href = g.folder_url || "#";
+        folder.style.display = "inline-flex";
+      } else if (last){
+        sum.innerHTML = `<span style="color:var(--ds-danger)">✗ Último falhou:</span> ${_fmtBr(last.ts)} — ${last.error || "ver logs"}`;
+        folder.href = g.folder_url || "#";
+        folder.style.display = g.folder_url ? "inline-flex" : "none";
+      } else {
+        sum.innerHTML = '<span style="color:var(--ds-ink-muted)">Nenhum backup registrado ainda — rodar manual para testar</span>';
+        folder.href = g.folder_url || "#";
+        folder.style.display = g.folder_url ? "inline-flex" : "none";
+      }
+      if (h.length){
+        const rows = h.slice(0, 8).map(e => {
+          const ok = e.gdrive_ok ? '<span style="color:var(--ds-success)">✓</span>' : '<span style="color:var(--ds-danger)">✗</span>';
+          const link = e.gdrive_link ? ` · <a href="${e.gdrive_link}" target="_blank" rel="noopener" style="color:var(--ds-ink-muted)">arquivo</a>` : '';
+          const err = e.error ? ` · <span style="color:var(--ds-danger)">${e.error.slice(0,80)}</span>` : '';
+          return `<div style="padding:3px 0">${ok} ${_fmtBr(e.ts)} · ${e.size_kb} KB · ${e.tipo}${e.ator ? ' por '+e.ator : ''}${link}${err}</div>`;
+        }).join("");
+        hist.innerHTML = `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--ds-line)">${rows}</div>`;
+      } else {
+        hist.innerHTML = "";
+      }
+    } catch (err) {
+      sum.textContent = "erro ao consultar status";
+    }
+  }
+
+  document.getElementById("backupNow").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    if (!confirm("Rodar backup agora? Vai gerar o ZIP e subir no Google Drive.")) return;
+    btn.disabled = true;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<span class="ab-icon">${AstroShell.icon("save")}</span>Rodando…`;
+    try {
+      const token = await getCsrf();
+      const r = await fetch("/master/api/backup/now", {
+        method: "POST",
+        headers: { "X-CSRF-Token": token }
+      });
+      const j = await r.json();
+      if (!j.ok) {
+        const detalhe = j.gdrive?.error || j.error || "falhou";
+        alert("Falhou: " + detalhe);
+      } else {
+        const g = j.gdrive || {};
+        if (g.ok) {
+          alert(`Backup concluído (${j.size_kb} KB)\nDrive: ${g.web_link || 'ok'}`);
+        } else if (g.skipped) {
+          alert(`Backup gerado (${j.size_kb} KB) — Drive não configurado, só email.`);
+        } else {
+          alert(`Backup gerado (${j.size_kb} KB) — Drive falhou: ${g.error || '?'}`);
+        }
+      }
+    } catch (err) {
+      alert("Erro: " + err.message);
+    } finally {
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+      loadBackupStatus();
+    }
+  });
 
   async function loadMaintStatus() {
     const statusEl = document.getElementById("maintStatus");
@@ -563,6 +674,7 @@
   });
 
   loadMaintStatus();
+  loadBackupStatus();
   loadUnits();
 </script>
 </body>
