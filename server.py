@@ -1599,8 +1599,11 @@ def master_api_tiny_health():
     # Cache de test_call por unidade (chave: unit; valor: {result, cached_at}).
     # Valida de verdade o token fazendo 1 chamada leve ao Tiny, mas cacheia por
     # 3 min pra nao bombardear a API a cada refresh do painel master (30s).
+    # Parametro ?force=1 busta o cache (util pos-reautorizacao).
     cache = _TINY_HEALTH_CACHE
     CACHE_TTL = 180  # segundos
+    if request.args.get("force") in ("1", "true", "yes"):
+        cache.clear()
 
     for uid in UNITS.keys():
         p = _unit_state_dir(uid) / "tiny_tokens.json"
@@ -2832,6 +2835,8 @@ def api_auth_callback(unit: str):
         app.logger.info("[oauth.callback] unit=%s ok=start redirect_uri=%s", unit, redirect_uri)
         importer.client.exchange_authorization_code(code, redirect_uri)
         app.logger.info("[oauth.callback] unit=%s ok=True token_saved", unit)
+        # Busta o cache de health pra refletir token novo imediatamente no painel
+        _TINY_HEALTH_CACHE.pop(unit, None)
         return (
             f"<!doctype html><meta charset='utf-8'>"
             f"<title>Tiny autorizado — {unit}</title>"
