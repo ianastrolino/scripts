@@ -3174,16 +3174,22 @@ def api_send(unit: str):
         except Exception as email_exc:
             app.logger.warning("[envio_tiny:email] falha ao enviar email: %s", email_exc)
 
-        # Trava automatica do caixa do dia quando o lote nao teve falha. Permite
-        # reenviar partes (com o botao Limpar historico) enquanto tem pendencia,
-        # e so fecha quando tudo rodou limpo. Pulados contam como sucesso (ja
-        # tinham sido enviados antes).
+        # Trava automatica do caixa: fecha o dia ALVO dos records (nao sempre
+        # hoje). Reenvio retroativo de 22/04 feito em 23/04 fecha 22/04, nao 23.
+        # Pulados contam como sucesso (ja tinham sido enviados antes).
         fechamento_auto = None
         if not results["falhas"]:
             user = _current_user() or {}
             user_email = session.get("email", "") or user.get("email", "")
-            hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
-            fechamento_auto = _fechar_dia(unit, hoje_iso, user_email, motivo="envio_tiny")
+            target_iso = ""
+            for r in records:
+                d = (r.get("data") or "").strip()
+                if d:
+                    target_iso = d[:10]
+                    break
+            if not target_iso:
+                target_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+            fechamento_auto = _fechar_dia(unit, target_iso, user_email, motivo="envio_tiny")
 
         return _json({
             "success": True, "summary": results,
