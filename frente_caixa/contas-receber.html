@@ -109,7 +109,7 @@
       letter-spacing: .02em;
     }
 
-    .loading { opacity: .5; pointer-events: none; }
+    .loading { opacity: .55; pointer-events: none; }
     .spinner {
       display: inline-block; width: 14px; height: 14px;
       border: 2px solid var(--ds-line); border-top-color: var(--ds-accent-600);
@@ -117,6 +117,24 @@
       vertical-align: -2px; margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* Skeleton shimmer pros KPIs enquanto busca Tiny */
+    .kpi-val.skel, .kpi-sub.skel {
+      color: transparent; background: linear-gradient(90deg, var(--ds-line) 0%, var(--ds-surface-alt) 40%, var(--ds-line) 80%);
+      background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite;
+      border-radius: 4px;
+    }
+    .kpi-val.skel { height: 32px; width: 120px; }
+    .kpi-sub.skel { height: 12px; width: 80px; margin-top: 4px; }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .cached-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 10px; font-weight: 700;
+      background: var(--ds-surface-alt); color: var(--ds-ink-muted);
+      letter-spacing: .04em; text-transform: uppercase; margin-left: 6px;
+    }
 
     .btn {
       font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
@@ -331,25 +349,44 @@
     sel.value = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`;
   }
 
-  async function loadDashboard() {
+  function setSkeletonKPIs() {
+    ["kpiEmitidas","kpiRecebidas","kpiEmAberto","kpiAtrasadas","kpiCanceladas"].forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = ""; el.classList.add("skel");
+    });
+    ["kpiEmitidasSub","kpiRecebidasSub","kpiEmAbertoSub","kpiAtrasadasSub","kpiCanceladasSub"].forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = ""; el.classList.add("skel");
+    });
+  }
+  function clearSkeletonKPIs() {
+    document.querySelectorAll(".kpi-val.skel, .kpi-sub.skel").forEach(el => el.classList.remove("skel"));
+  }
+
+  async function loadDashboard(force = false) {
     const root = document.querySelector(".app-content-wrap");
     root.classList.add("loading");
+    setSkeletonKPIs();
     const unit = document.getElementById("selUnit").value;
     const mes  = document.getElementById("selMes").value;
     try {
       const qs = new URLSearchParams();
       if (unit && unit !== "all") qs.set("unit", unit);
       if (mes) qs.set("mes", mes);
+      if (force) qs.set("force", "1");
       const r = await fetch(`/master/api/contas-receber?${qs}`, { cache: "no-store" });
       const j = await r.json();
       if (!j.success) throw new Error(j.error || "falha");
+      clearSkeletonKPIs();
       renderKPIs(j.totais);
       renderUnidades(j.por_unidade);
       renderAtraso(j.em_atraso);
       renderVence7d(j.vencendo_7d);
-      document.getElementById("infoAtualizado").textContent =
-        `atualizado ${fmtRel(j.atualizado_em)} · hoje ${brDate(j.hoje)}`;
+      const cachedTxt = j.cached ? ` <span class="cached-badge">cache ${j.cached_age}s</span>` : "";
+      document.getElementById("infoAtualizado").innerHTML =
+        `atualizado ${fmtRel(j.atualizado_em)} · hoje ${brDate(j.hoje)}${cachedTxt}`;
     } catch (e) {
+      clearSkeletonKPIs();
       alert("Falha ao carregar: " + e.message);
     } finally {
       root.classList.remove("loading");
@@ -432,10 +469,11 @@
 
   document.getElementById("selUnit").addEventListener("change", (e) => {
     localStorage.setItem(LS_UNIT_KEY, e.target.value);
-    loadDashboard();
+    loadDashboard(false);
   });
-  document.getElementById("selMes").addEventListener("change", loadDashboard);
-  document.getElementById("btnRefresh").addEventListener("click", loadDashboard);
+  document.getElementById("selMes").addEventListener("change", () => loadDashboard(false));
+  // Botao "Atualizar" forca bust do cache
+  document.getElementById("btnRefresh").addEventListener("click", () => loadDashboard(true));
 
   (async () => {
     popularMeses();

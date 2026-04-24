@@ -2384,6 +2384,12 @@ def master_api_inadimplencia():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# Cache (unit, mes) -> {data, cached_at}. TTL 5 min pra nao re-puxar do Tiny
+# a cada troca de filtro. Primeira carga paga, as proximas sao instantaneas.
+_CONTAS_RECEBER_CACHE: dict[str, dict] = {}
+_CONTAS_RECEBER_TTL   = 300
+
+
 def _fetch_contas_mes_tiny(unit: str, ano: int, mes: int) -> list[dict]:
     """Busca todas as contas (pagas + abertas) com dataEmissao no mes/ano.
 
@@ -2454,6 +2460,7 @@ def master_api_contas_receber():
         units_iter = list(UNITS.keys()) if unit_filter == "all" else (
             [unit_filter] if unit_filter in UNITS else []
         )
+        force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
 
         # Mes alvo
         hoje = dt.date.today()
@@ -2467,6 +2474,16 @@ def master_api_contas_receber():
         except Exception:
             ano, mes = hoje.year, hoje.month
         mes_iso = f"{ano:04d}-{mes:02d}"
+
+        # Consulta cache antes de chamar Tiny
+        cache_key = f"{unit_filter}:{mes_iso}"
+        now_ts = time.time()
+        cached = _CONTAS_RECEBER_CACHE.get(cache_key)
+        if cached and not force and (now_ts - cached["cached_at"]) < _CONTAS_RECEBER_TTL:
+            payload = dict(cached["data"])
+            payload["cached"]     = True
+            payload["cached_age"] = int(now_ts - cached["cached_at"])
+            return _json(payload)
 
         hoje_mais_7  = hoje + dt.timedelta(days=7)
 
@@ -2587,7 +2604,7 @@ def master_api_contas_receber():
         em_atraso.sort(key=lambda x: (-x["dias_atraso"], -x["valor"]))
         vencendo_7d.sort(key=lambda x: (x["data_vencimento"], -x["valor"]))
 
-        return _json({
+        payload = {
             "success":       True,
             "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
             "hoje":          hoje.isoformat(),
@@ -2596,7 +2613,10 @@ def master_api_contas_receber():
             "por_unidade":   list(por_unidade.values()),
             "em_atraso":     em_atraso,
             "vencendo_7d":   vencendo_7d,
-        })
+            "cached":        False,
+        }
+        _CONTAS_RECEBER_CACHE[cache_key] = {"data": payload, "cached_at": now_ts}
+        return _json(payload)
     except Exception as exc:
         app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
