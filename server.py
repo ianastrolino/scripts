@@ -6577,6 +6577,70 @@ def api_backup_now():
     return _json(res, status)
 
 
+@app.route("/master/api/duplicados-envios")
+@master_only_required
+def api_duplicados_envios():
+    """Procura envios duplicados (mesma placa+servico+valor+data) em todas as unidades.
+
+    Query params:
+      ?cliente=KAVAK  (filtro substring case-insensitive no nome do cliente)
+      ?dias=30        (janela pra procurar, default 30 dias)
+    """
+    filtro   = (request.args.get("cliente") or "").strip().upper()
+    try:
+        dias = max(1, min(365, int(request.args.get("dias") or 30)))
+    except ValueError:
+        dias = 30
+    tz       = ZoneInfo("America/Sao_Paulo")
+    hoje     = dt.datetime.now(tz).date()
+    de       = (hoje - dt.timedelta(days=dias)).isoformat()
+    ate      = hoje.isoformat()
+    resultado: list[dict] = []
+    for uid in UNITS:
+        try:
+            state_dir = _unit_state_dir(uid)
+            with _db_connect(state_dir) as conn:
+                q = """
+                    SELECT placa, servico, valor, data_lancamento, cliente,
+                           COUNT(*) as n,
+                           GROUP_CONCAT(timestamp, '|') as timestamps,
+                           GROUP_CONCAT(chave_deduplicacao, '|') as chaves,
+                           GROUP_CONCAT(status, '|') as statuses
+                    FROM envios_tiny
+                    WHERE unit = ?
+                      AND data_lancamento BETWEEN ? AND ?
+                      AND status IN ('enviado', 'ja_existia_tiny', 'ja_importado_local')
+                    GROUP BY placa, servico, valor, data_lancamento
+                    HAVING COUNT(*) > 1
+                    ORDER BY n DESC, data_lancamento DESC
+                """
+                rows = conn.execute(q, (uid, de, ate)).fetchall()
+                for r in rows:
+                    cliente = (r["cliente"] or "").upper()
+                    if filtro and filtro not in cliente:
+                        continue
+                    resultado.append({
+                        "unit":     uid,
+                        "placa":    r["placa"],
+                        "servico":  r["servico"],
+                        "valor":    r["valor"],
+                        "data":     r["data_lancamento"],
+                        "cliente":  r["cliente"],
+                        "n":        r["n"],
+                        "timestamps": (r["timestamps"] or "").split("|"),
+                        "chaves":     (r["chaves"] or "").split("|"),
+                        "statuses":   (r["statuses"] or "").split("|"),
+                    })
+        except Exception as exc:
+            app.logger.warning("[duplicados] %s falhou: %s", uid, exc)
+    return _json({
+        "janela": {"de": de, "ate": ate, "dias": dias},
+        "filtro_cliente": filtro,
+        "total": len(resultado),
+        "duplicados": resultado,
+    })
+
+
 @app.route("/master/api/backup/status")
 @master_only_required
 def api_backup_status():
