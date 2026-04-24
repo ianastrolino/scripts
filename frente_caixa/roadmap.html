@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Roadmap</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .roadmap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: var(--ds-space-4);
+    }
+    .cat-card {
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .cat-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--ds-line);
+      border-left: 4px solid var(--cat-color, var(--ds-ink-muted));
+    }
+    .cat-nome {
+      font-size: 14px; font-weight: 800; color: var(--ds-ink);
+      letter-spacing: -.01em;
+    }
+    .cat-desc {
+      font-size: 12px; color: var(--ds-ink-muted);
+      margin-top: 2px;
+    }
+    .cat-items { padding: 4px 0; }
+    .item {
+      padding: 10px 18px;
+      display: flex; align-items: flex-start; gap: 10px;
+      border-bottom: 1px solid var(--ds-line);
+    }
+    .item:last-child { border-bottom: none; }
+    .item.concluido { background: #f0fdf4; }
+    .item-check {
+      width: 18px; height: 18px; border-radius: 4px;
+      border: 1.5px solid var(--ds-line-strong);
+      flex-shrink: 0; margin-top: 2px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: transparent; font-weight: 800; font-size: 12px;
+    }
+    .item.concluido .item-check {
+      background: var(--ds-success); border-color: var(--ds-success); color: #fff;
+    }
+    .item.em-andamento .item-check {
+      background: var(--ds-warning); border-color: var(--ds-warning);
+    }
+    .item-body { flex: 1; font-size: 13px; line-height: 1.4; }
+    .item-titulo { font-weight: 600; color: var(--ds-ink); }
+    .item.concluido .item-titulo {
+      color: var(--ds-ink-muted);
+      text-decoration: line-through;
+      text-decoration-color: var(--ds-ink-subtle);
+    }
+    .item-meta {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .chip-est {
+      display: inline-block; padding: 1px 7px;
+      font-size: 10px; font-weight: 700; letter-spacing: .02em;
+      background: var(--ds-surface-alt); color: var(--ds-ink-muted);
+      border-radius: 100px;
+    }
+    .chip-nota {
+      display: inline-block;
+      font-size: 11px; color: var(--ds-ink-muted); font-style: italic;
+    }
+
+    .resumo {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-bottom: var(--ds-space-4);
+      padding: 12px 18px;
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      font-size: 13px; color: var(--ds-ink-muted);
+    }
+    .resumo strong { color: var(--ds-ink); }
+  </style>
+</head>
+<body>
+
+<div id="app-layout">
+  <aside id="app-sidebar"></aside>
+  <header id="app-header"></header>
+
+  <main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-header-text">
+          <div class="app-page-eyebrow">Sistema</div>
+          <h1 class="app-page-title">Roadmap</h1>
+          <p class="app-page-sub">Fila do que tá em desenvolvimento, organizada por prioridade.</p>
+        </div>
+      </div>
+
+      <div class="resumo" id="resumo">—</div>
+      <div class="roadmap-grid" id="grid">—</div>
+    </div>
+  </div>
+  </main>
+</div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "roadmap",
+    breadcrumbs: [
+      { label: "Sistema" },
+      { label: "Roadmap", current: true }
+    ]
+  });
+
+  function esc(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  async function load() {
+    try {
+      const r = await fetch("/master/api/roadmap");
+      const j = await r.json();
+
+      // Resumo
+      let totPend = 0, totFeitos = 0, totAndamento = 0;
+      j.categorias.forEach(c => {
+        c.itens.forEach(i => {
+          if (i.status === "concluido") totFeitos++;
+          else if (i.status === "em_andamento") totAndamento++;
+          else totPend++;
+        });
+      });
+      document.getElementById("resumo").innerHTML =
+        `<span><strong>${totPend}</strong> pendentes</span>` +
+        (totAndamento ? `<span><strong>${totAndamento}</strong> em andamento</span>` : "") +
+        `<span><strong>${totFeitos}</strong> concluídos recentes</span>` +
+        `<span style="margin-left:auto;color:var(--ds-ink-subtle)">atualizado em ${esc(j.atualizado_em)}</span>`;
+
+      // Categorias
+      const grid = document.getElementById("grid");
+      grid.innerHTML = j.categorias.map(c => {
+        const itens = c.itens.map(i => {
+          const cls = i.status === "concluido" ? "concluido" : (i.status === "em_andamento" ? "em-andamento" : "");
+          const check = i.status === "concluido" ? "✓" : (i.status === "em_andamento" ? "…" : "");
+          const est = i.estimativa ? `<span class="chip-est">${esc(i.estimativa)}</span>` : "";
+          const nota = i.nota ? `<span class="chip-nota">${esc(i.nota)}</span>` : "";
+          const meta = (i.estimativa || i.nota) ? `<div class="item-meta">${est}${nota}</div>` : "";
+          return `<div class="item ${cls}">
+            <span class="item-check">${check}</span>
+            <div class="item-body">
+              <div class="item-titulo">${esc(i.titulo)}</div>
+              ${meta}
+            </div>
+          </div>`;
+        }).join("");
+        return `<div class="cat-card">
+          <div class="cat-head" style="--cat-color: ${esc(c.cor)}">
+            <div class="cat-nome">${esc(c.nome)}</div>
+            <div class="cat-desc">${esc(c.descricao || "")}</div>
+          </div>
+          <div class="cat-items">${itens}</div>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      document.getElementById("grid").innerHTML = `<div style="color:var(--ds-danger);padding:20px">Erro: ${esc(e.message)}</div>`;
+    }
+  }
+  load();
+</script>
+</body>
+</html>

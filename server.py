@@ -2744,6 +2744,135 @@ def master_contas_receber_page():
     return send_from_directory(UI_DIR, "contas-receber.html")
 
 
+# Roadmap/backlog do sistema — lista mantida inline pra edicao rapida via
+# commit. Se virar coisa frequente, migra pra JSON editavel.
+_ROADMAP = {
+    "atualizado_em": "2026-04-24",
+    "categorias": [
+        {
+            "nome": "Verificar",
+            "descricao": "Baixo esforço, fecha pendências pequenas",
+            "cor":  "#2563eb",
+            "itens": [
+                {"titulo": "Dedup KAVAK/H&L — chamar endpoint e verificar",
+                 "status": "pendente",
+                 "nota":   "GET /master/api/duplicados-envios?cliente=KAVAK&dias=30"},
+                {"titulo": "Testar reset de senha end-to-end",
+                 "status": "pendente",
+                 "nota":   "pedir, receber email, definir nova, fazer login"},
+                {"titulo": "Confirmar backup 00:00 de 24/04",
+                 "status": "concluido",
+                 "nota":   "✓ rodou normalmente (2 linhas por restart do processo)"},
+            ],
+        },
+        {
+            "nome": "UX / baixo risco",
+            "descricao": "Fazer depois das 18h quando unidades fecharem",
+            "cor":  "#10b981",
+            "itens": [
+                {"titulo": "Reorganizar menu (Parte 1: reagrupar grupos)",
+                 "status": "pendente", "estimativa": "~30 min"},
+                {"titulo": "Mover manutenção + backup para /master/sistema",
+                 "status": "pendente", "estimativa": "~20 min"},
+                {"titulo": "Hero de métricas consolidadas no Painel Master",
+                 "status": "pendente", "estimativa": "~40 min"},
+                {"titulo": "Unblock manual de email rate-limited",
+                 "status": "pendente", "estimativa": "~30 min"},
+                {"titulo": "Reinstalar chatbot nas páginas onde sumiu",
+                 "status": "pendente", "estimativa": "~30-60 min"},
+            ],
+        },
+        {
+            "nome": "Features grandes",
+            "descricao": "Janela dedicada, escopo maior",
+            "cor":  "#f59e0b",
+            "itens": [
+                {"titulo": "Sistema de tickets/suporte",
+                 "status": "pendente", "estimativa": "~2-3h"},
+                {"titulo": "Menu Parte 2 — consolidar telas em tabs",
+                 "status": "pendente", "estimativa": "~2h",
+                 "nota":   "Gerencial+BI · Histórico emitido+PDV · Usuários+Conectados"},
+                {"titulo": "Conferência antecipada (planilha importada cedo, match em tempo real)",
+                 "status": "pendente", "estimativa": "~3-4h",
+                 "nota":   "planilha no servidor + card em caixa2 + match automático"},
+                {"titulo": "Migrar caixa2.html pro shell v2.1",
+                 "status": "pendente", "estimativa": "~2-3h",
+                 "nota":   "arquivo mais crítico — só em janela dedicada"},
+            ],
+        },
+        {
+            "nome": "Cobrança",
+            "descricao": "Multi-sessão, quando resto estabilizar",
+            "cor":  "#dc2626",
+            "itens": [
+                {"titulo": "Infra contatos: tabela local + sync Tiny + CRUD",
+                 "status": "pendente", "estimativa": "~3h",
+                 "nota":   "pre-requisito pra Fase 2"},
+                {"titulo": "Fase 2: régua de email (template + envio em lote)",
+                 "status": "pendente", "estimativa": "~4-6h"},
+                {"titulo": "Fase 3: régua WhatsApp via Z-API",
+                 "status": "pendente", "estimativa": "~4-6h"},
+            ],
+        },
+        {
+            "nome": "Hygiene técnica",
+            "descricao": "Sem urgência, quando der",
+            "cor":  "#6b7280",
+            "itens": [
+                {"titulo": "Testes automatizados (pytest)",
+                 "status": "pendente",
+                 "nota":   "era 3/3 do pacto original backup/auth/testes — só 2/3 feito"},
+                {"titulo": "Atualizar docs (DOCUMENTACAO_TECNICA, CLAUDE.md)",
+                 "status": "pendente"},
+            ],
+        },
+        {
+            "nome": "Ações manuais (não-código)",
+            "descricao": "Decisões ou ações suas, não posso fazer",
+            "cor":  "#0f172a",
+            "itens": [
+                {"titulo": "Reenviar fechamento Barueri 22/04",
+                 "status": "pendente",
+                 "nota":   "pra popular espelho envios_tiny — admin no fechamento"},
+                {"titulo": "Criar outras unidades no sistema",
+                 "status": "pendente",
+                 "nota":   "recuou pra finalizar testes — retomar decisão"},
+                {"titulo": "Decisão sobre mobile/tablet",
+                 "status": "pendente",
+                 "nota":   "nunca foi discutido explicitamente"},
+            ],
+        },
+        {
+            "nome": "Concluídos recentes (últimos dias)",
+            "descricao": "Pra ter histórico visível",
+            "cor":  "#16a34a",
+            "itens": [
+                {"titulo": "Dashboard Contas a Receber", "status": "concluido"},
+                {"titulo": "Chip status no Painel Master (Aberto/Conferindo/Fechado)", "status": "concluido"},
+                {"titulo": "Pulse no dot de atividade + ticker maior", "status": "concluido"},
+                {"titulo": "Fix cache tiny-health pós-callback OAuth", "status": "concluido"},
+                {"titulo": "Step/wizard em Caixa do Dia", "status": "concluido"},
+                {"titulo": "Fix trava do caixa em reenvios retroativos", "status": "concluido"},
+                {"titulo": "Auth hardening: audit login + rate limit email + reset senha", "status": "concluido"},
+                {"titulo": "Backup diário pro Backblaze B2", "status": "concluido"},
+            ],
+        },
+    ],
+}
+
+
+@app.route("/master/api/roadmap")
+@master_view_required
+def master_api_roadmap():
+    return _json(_ROADMAP)
+
+
+@app.route("/master/roadmap")
+@master_view_required
+def master_roadmap_page():
+    return send_from_directory(UI_DIR, "roadmap.html")
+
+
 @app.route("/master/api/inadimplencia.csv")
 @master_view_required
 def master_api_inadimplencia_csv():

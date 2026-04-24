@@ -159,6 +159,7 @@
     {
       group: "Sistema",
       items: [
+        { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
         { id: "manual",        label: "Manual",         icon: "manual", hrefUnit: "/manual", href: "/manual" },
         { id: "configuracoes", label: "Configurações",  icon: "config", disabled: true, badge: "Em breve" },
       ],
