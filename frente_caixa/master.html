@@ -43,6 +43,7 @@
       flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
     }
     .status-badge.open    { background: var(--ds-success-soft); color: var(--ds-success); }
+    .status-badge.conferindo { background: #fff7ed; color: #c2410c; }
     .status-badge.closed  { background: var(--ds-surface-alt);  color: var(--ds-ink-muted); }
     .status-badge.loading { background: var(--ds-surface-alt);  color: var(--ds-ink-subtle); }
 
@@ -411,12 +412,16 @@
       const res  = await fetch(`/u/${unitId}/api/caixa/estado`, { cache: "no-store" });
       const data = await res.json();
       const badge = document.getElementById(`status-${unitId}`);
-      if (data.aberto) {
-        badge.textContent = "● Aberto";
-        badge.className = "status-badge open";
-      } else {
+      // etapa 3 = enviado ao Tiny; 2 = conferencia iniciada; 1 = aberto lancando
+      if (data.fechado || data.etapa === 3) {
         badge.textContent = "Fechado";
         badge.className = "status-badge closed";
+      } else if (data.etapa === 2) {
+        badge.textContent = "⏱ Conferindo";
+        badge.className = "status-badge conferindo";
+      } else {
+        badge.textContent = "● Aberto";
+        badge.className = "status-badge open";
       }
     } catch (_) {
       const badge = document.getElementById(`status-${unitId}`);
