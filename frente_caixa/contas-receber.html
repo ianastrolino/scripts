@@ -135,6 +135,27 @@
       background: var(--ds-surface-alt); color: var(--ds-ink-muted);
       letter-spacing: .04em; text-transform: uppercase; margin-left: 6px;
     }
+    .outros-badge {
+      display: inline-block; margin-left: 8px;
+      padding: 2px 8px; border-radius: 100px;
+      font-size: 10px; font-weight: 700;
+      background: #fef3c7; color: #92400e;
+      letter-spacing: .02em;
+    }
+    .row-header { cursor: pointer; user-select: none; }
+    .row-header:hover td { background: var(--ds-surface-alt); }
+    .row-expand-ico {
+      display: inline-block; width: 14px; text-align: center;
+      transition: transform .15s ease;
+      color: var(--ds-ink-muted); font-size: 10px;
+    }
+    tr.expanded .row-expand-ico { transform: rotate(90deg); }
+    .sub-row td { background: var(--ds-surface-alt); font-size: 12px; }
+    .sub-row .sub-num-doc { color: var(--ds-ink-muted); font-weight: 500; }
+    .sub-outros {
+      padding: 8px 20px; font-size: 12px; color: #92400e;
+      background: #fffbeb; border-top: 1px dashed #fde68a;
+    }
 
     .btn {
       font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
@@ -243,21 +264,22 @@
 
       <div class="section">
         <div class="section-head">
-          <div class="section-title">Em atraso</div>
+          <div class="section-title">Em atraso — todos os meses</div>
           <div class="section-meta" id="atrasoMeta"></div>
         </div>
         <table class="tbl" id="tblAtraso">
           <thead>
             <tr>
+              <th style="width:24px"></th>
               <th>Cliente</th>
               <th>Unidade</th>
-              <th>Vencimento</th>
-              <th class="num">Dias</th>
-              <th class="num">Valor</th>
+              <th class="num">Títulos</th>
+              <th class="num">Máx. atraso</th>
+              <th class="num">Total</th>
             </tr>
           </thead>
           <tbody id="tbodyAtraso">
-            <tr><td colspan="5" class="empty">carregando…</td></tr>
+            <tr><td colspan="6" class="empty">carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -270,14 +292,15 @@
         <table class="tbl" id="tbl7d">
           <thead>
             <tr>
+              <th style="width:24px"></th>
               <th>Cliente</th>
               <th>Unidade</th>
-              <th>Vencimento</th>
-              <th class="num">Valor</th>
+              <th class="num">Títulos</th>
+              <th class="num">Total</th>
             </tr>
           </thead>
           <tbody id="tbody7d">
-            <tr><td colspan="4" class="empty">carregando…</td></tr>
+            <tr><td colspan="5" class="empty">carregando…</td></tr>
           </tbody>
         </table>
       </div>
@@ -458,42 +481,100 @@
     }).join("");
   }
 
+  function mesLabel(mesIso) {
+    const nomes = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+    const [y, m] = mesIso.split("-");
+    return `${nomes[parseInt(m,10)-1]}/${y.slice(2)}`;
+  }
+
+  function renderOutrosMesesBadge(outros) {
+    if (!outros || !outros.length) return "";
+    const totalMeses = outros.length;
+    const totalValor = outros.reduce((s, m) => s + m.total, 0);
+    const detalhe = outros.map(m => `${mesLabel(m.mes)}: ${brl(m.total).replace("R$ ", "")}`).join(" · ");
+    return `<span class="outros-badge" title="${esc(detalhe)}">+${totalMeses} ${totalMeses === 1 ? "mês" : "meses"} · ${brl(totalValor)}</span>`;
+  }
+
   function renderAtraso(lista) {
     const tb = document.getElementById("tbodyAtraso");
     document.getElementById("atrasoMeta").textContent = lista.length
-      ? `${lista.length} título${lista.length === 1 ? "" : "s"}`
+      ? `${lista.length} cliente${lista.length === 1 ? "" : "s"}`
       : "";
     if (!lista.length) {
-      tb.innerHTML = `<tr><td colspan="5" class="empty"><strong>🎉 Nada em atraso</strong>todos os títulos estão em dia</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="6" class="empty"><strong>🎉 Nada em atraso</strong>todos os títulos estão em dia</td></tr>`;
       return;
     }
-    tb.innerHTML = lista.map(c => {
-      const severity = c.dias_atraso > 30 ? "" : "soft";
-      return `<tr>
-        <td><strong>${esc(c.cliente)}</strong></td>
-        <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
-        <td class="muted">${brDate(c.data_vencimento)}</td>
-        <td class="num"><span class="atraso-dias ${severity}">${c.dias_atraso}d</span></td>
-        <td class="num">${brl(c.valor)}</td>
-      </tr>`;
+    tb.innerHTML = lista.map((c, idx) => {
+      const rowId = `atr-${idx}`;
+      const subs = c.titulos.map(t => {
+        const diasTxt = t.dias_atraso > 0 ? `<span class="atraso-dias ${t.dias_atraso > 30 ? "" : "soft"}">${t.dias_atraso}d</span>` : "";
+        return `<tr class="sub-row">
+          <td></td>
+          <td class="sub-num-doc">${esc(t.numero_documento || "—")}</td>
+          <td class="muted">emi ${brDate(t.data_emissao)}</td>
+          <td class="muted">venc ${brDate(t.data_vencimento)}</td>
+          <td class="num">${diasTxt}</td>
+          <td class="num">${brl(t.valor)}</td>
+        </tr>`;
+      }).join("");
+      const outrosRow = (c.outros_meses && c.outros_meses.length) ? `<tr class="sub-row" style="display:none" data-outros="${rowId}"><td colspan="6" class="sub-outros"><strong>+ em aberto em outros meses:</strong> ${c.outros_meses.map(m => `${mesLabel(m.mes)} <strong>${brl(m.total)}</strong> (${m.count})`).join(" · ")}</td></tr>` : "";
+      return `<tr class="row-header" data-row="${rowId}">
+          <td><span class="row-expand-ico">▶</span></td>
+          <td><strong>${esc(c.cliente)}</strong>${renderOutrosMesesBadge(c.outros_meses)}</td>
+          <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
+          <td class="num">${c.qtd_titulos}</td>
+          <td class="num"><span class="atraso-dias ${c.max_dias_atraso > 30 ? "" : "soft"}">${c.max_dias_atraso}d</span></td>
+          <td class="num">${brl(c.total_valor)}</td>
+        </tr>
+        ${subs.replaceAll('class="sub-row"', `class="sub-row" data-row="${rowId}" style="display:none"`)}
+        ${outrosRow}`;
     }).join("");
+    wireRowToggle(tb);
   }
 
   function renderVence7d(lista) {
     const tb = document.getElementById("tbody7d");
     document.getElementById("vence7Meta").textContent = lista.length
-      ? `${lista.length} título${lista.length === 1 ? "" : "s"}`
+      ? `${lista.length} cliente${lista.length === 1 ? "" : "s"}`
       : "";
     if (!lista.length) {
-      tb.innerHTML = `<tr><td colspan="4" class="empty">nenhum título vencendo nos próximos 7 dias</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="5" class="empty">nenhum cliente com título vencendo nos próximos 7 dias</td></tr>`;
       return;
     }
-    tb.innerHTML = lista.map(c => `<tr>
-      <td><strong>${esc(c.cliente)}</strong></td>
-      <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
-      <td class="muted">${brDate(c.data_vencimento)}</td>
-      <td class="num">${brl(c.valor)}</td>
-    </tr>`).join("");
+    tb.innerHTML = lista.map((c, idx) => {
+      const rowId = `v7-${idx}`;
+      const subs = c.titulos.map(t => {
+        return `<tr class="sub-row" data-row="${rowId}" style="display:none">
+          <td></td>
+          <td class="sub-num-doc">${esc(t.numero_documento || "—")}</td>
+          <td class="muted">emi ${brDate(t.data_emissao)}</td>
+          <td class="muted">venc ${brDate(t.data_vencimento)}</td>
+          <td class="num">${brl(t.valor)}</td>
+        </tr>`;
+      }).join("");
+      return `<tr class="row-header" data-row="${rowId}">
+          <td><span class="row-expand-ico">▶</span></td>
+          <td><strong>${esc(c.cliente)}</strong>${renderOutrosMesesBadge(c.outros_meses)}</td>
+          <td><span class="unit-chip">${esc(c.unit_nome)}</span></td>
+          <td class="num">${c.qtd_titulos}</td>
+          <td class="num">${brl(c.total_valor)}</td>
+        </tr>
+        ${subs}`;
+    }).join("");
+    wireRowToggle(tb);
+  }
+
+  function wireRowToggle(tbody) {
+    tbody.querySelectorAll(".row-header").forEach(hdr => {
+      hdr.addEventListener("click", () => {
+        const rowId = hdr.dataset.row;
+        const opening = !hdr.classList.contains("expanded");
+        hdr.classList.toggle("expanded");
+        tbody.querySelectorAll(`.sub-row[data-row="${rowId}"]`).forEach(r => {
+          r.style.display = opening ? "" : "none";
+        });
+      });
+    });
   }
 
   document.getElementById("selUnit").addEventListener("change", (e) => {

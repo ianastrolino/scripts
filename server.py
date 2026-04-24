@@ -2512,8 +2512,9 @@ def master_api_contas_receber():
             "canceladas": 0.0, "canceladas_count": 0,
         }
         por_unidade: dict[str, dict] = {}
-        em_atraso: list[dict] = []
-        vencendo_7d: list[dict] = []
+        # Agrupado por cliente+unit. Chave: "uid::CLIENTE_NAME"
+        atraso_clientes: dict[str, dict]   = {}
+        vencendo_clientes: dict[str, dict] = {}
 
         for uid in units_iter:
             unit_nome = UNITS.get(uid, {}).get("nome", uid)
@@ -2595,29 +2596,102 @@ def master_api_contas_receber():
                     por_unidade[uid]["em_aberto_count"] += 1
 
                     dias_atraso = (hoje - venc).days
-                    num_doc = c.get("numeroDocumento") or ""
                     if dias_atraso > 0:
-                        # Atrasadas = subset de em_aberto com vencimento passado
                         totais["atrasadas"]       += em_aberto
                         totais["atrasadas_count"] += 1
                         por_unidade[uid]["atrasadas"]       += em_aberto
                         por_unidade[uid]["atrasadas_count"] += 1
-                        em_atraso.append({
-                            "cliente":         cliente_nome,
-                            "unit":            uid, "unit_nome": unit_nome,
-                            "valor":           round(em_aberto, 2),
-                            "dias_atraso":     dias_atraso,
-                            "data_vencimento": venc.isoformat(),
-                            "numero_documento": num_doc,
-                        })
-                    elif hoje <= venc <= hoje_mais_7:
-                        vencendo_7d.append({
-                            "cliente":         cliente_nome,
-                            "unit":            uid, "unit_nome": unit_nome,
-                            "valor":           round(em_aberto, 2),
-                            "data_vencimento": venc.isoformat(),
-                            "numero_documento": num_doc,
-                        })
+
+            # Segundo fetch: TODAS as contas em aberto da unidade (qualquer
+            # periodo) — pra listas "Em atraso" e "Vencendo 7d" agrupadas por
+            # cliente com indicador de outros meses.
+            try:
+                contas_abertas = _fetch_contas_abertas_tiny(uid)
+            except Exception as exc:
+                app.logger.warning("[contas-abertas] unit=%s: %s", uid, exc)
+                contas_abertas = []
+            for c in contas_abertas:
+                cliente_obj = c.get("cliente") or {}
+                cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
+                saldo = float(c.get("saldo") or c.get("valor") or 0)
+                if saldo <= 0:
+                    continue
+                venc_str = c.get("dataVencimento") or c.get("data") or ""
+                emi_str  = c.get("data") or c.get("dataEmissao") or ""
+                try:
+                    if "/" in venc_str:
+                        d, m, y = venc_str.split("/")
+                        venc = dt.date(int(y), int(m), int(d))
+                    else:
+                        venc = dt.date.fromisoformat(venc_str[:10])
+                except Exception:
+                    continue
+                try:
+                    if "/" in emi_str:
+                        d, m, y = emi_str.split("/")
+                        emi = dt.date(int(y), int(m), int(d))
+                    else:
+                        emi = dt.date.fromisoformat(emi_str[:10])
+                except Exception:
+                    emi = venc
+
+                mes_emi = f"{emi.year:04d}-{emi.month:02d}"
+                # Dentro do periodo filtrado?
+                if dia_alvo:
+                    dentro_periodo = (emi == dia_alvo)
+                else:
+                    dentro_periodo = (mes_emi == mes_iso)
+
+                dias_atraso = (hoje - venc).days
+                num_doc = c.get("numeroDocumento") or ""
+                titulo = {
+                    "valor":            round(saldo, 2),
+                    "data_vencimento":  venc.isoformat(),
+                    "data_emissao":     emi.isoformat(),
+                    "mes_emissao":      mes_emi,
+                    "dias_atraso":      dias_atraso,
+                    "numero_documento": num_doc,
+                    "dentro_periodo":   dentro_periodo,
+                }
+                unit_nome = UNITS.get(uid, {}).get("nome", uid)
+                key = f"{uid}::{cliente_nome}"
+
+                # Em atraso: vencido (dias_atraso > 0)
+                if dias_atraso > 0:
+                    g = atraso_clientes.setdefault(key, {
+                        "cliente":   cliente_nome,
+                        "unit":      uid, "unit_nome": unit_nome,
+                        "total_valor": 0.0, "qtd_titulos": 0,
+                        "max_dias_atraso": 0,
+                        "titulos":   [],
+                        "outros_meses": {},
+                    })
+                    g["total_valor"]  += saldo
+                    g["qtd_titulos"]  += 1
+                    if dias_atraso > g["max_dias_atraso"]:
+                        g["max_dias_atraso"] = dias_atraso
+                    g["titulos"].append(titulo)
+                    if not dentro_periodo:
+                        m = g["outros_meses"].setdefault(mes_emi, {"mes": mes_emi, "total": 0.0, "count": 0})
+                        m["total"] += saldo
+                        m["count"] += 1
+
+                # Vencendo proximos 7 dias
+                elif hoje <= venc <= hoje_mais_7:
+                    g = vencendo_clientes.setdefault(key, {
+                        "cliente":   cliente_nome,
+                        "unit":      uid, "unit_nome": unit_nome,
+                        "total_valor": 0.0, "qtd_titulos": 0,
+                        "titulos":   [],
+                        "outros_meses": {},
+                    })
+                    g["total_valor"] += saldo
+                    g["qtd_titulos"] += 1
+                    g["titulos"].append(titulo)
+                    if not dentro_periodo:
+                        m = g["outros_meses"].setdefault(mes_emi, {"mes": mes_emi, "total": 0.0, "count": 0})
+                        m["total"] += saldo
+                        m["count"] += 1
 
         # Arredonda
         for k in ("emitidas", "recebidas", "em_aberto", "atrasadas", "canceladas"):
@@ -2628,8 +2702,21 @@ def master_api_contas_receber():
             u["em_aberto"] = round(u["em_aberto"], 2)
             u["atrasadas"] = round(u["atrasadas"], 2)
 
-        em_atraso.sort(key=lambda x: (-x["valor"], -x["dias_atraso"]))
-        vencendo_7d.sort(key=lambda x: (-x["valor"], x["data_vencimento"]))
+        # Consolida clientes agrupados
+        def _finalize_group(g: dict) -> dict:
+            g["total_valor"] = round(g["total_valor"], 2)
+            g["titulos"].sort(key=lambda t: (t.get("dias_atraso", 0) > 0 and -t["dias_atraso"]
+                                             or t["data_vencimento"]))
+            g["outros_meses"] = sorted(
+                [{**v, "total": round(v["total"], 2)} for v in g["outros_meses"].values()],
+                key=lambda m: m["mes"],
+            )
+            return g
+
+        em_atraso = [_finalize_group(g) for g in atraso_clientes.values()]
+        vencendo_7d = [_finalize_group(g) for g in vencendo_clientes.values()]
+        em_atraso.sort(key=lambda x: (-x["total_valor"], -x["max_dias_atraso"]))
+        vencendo_7d.sort(key=lambda x: -x["total_valor"])
 
         payload = {
             "success":       True,
