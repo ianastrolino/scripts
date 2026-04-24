@@ -402,7 +402,7 @@
         }
         el.textContent = fmtRelative(ultima);
         const diffMs = Date.now() - new Date(ultima).getTime();
-        wrap.classList.toggle("fresh", diffMs < 2 * 60_000);
+        wrap.classList.toggle("fresh", diffMs < 5 * 60_000);
 
         const ult = u.hoje?.ultimo;
         if (extra) {
