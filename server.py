@@ -1505,8 +1505,19 @@ def master_api_categorias_importar_tiny(unit: str):
         config = _build_unit_config(unit)
         state_dir = _unit_state_dir(unit)
         importer = TinyImporter(config, state_dir)
-        res = importer.client.request("GET", "categorias-receita-despesa", params={"limit": 200})
-        itens = res.get("itens", [])
+        # Tiny exige limit <= 100; pagina ate esgotar
+        itens: list = []
+        offset = 0
+        while True:
+            res = importer.client.request("GET", "categorias-receita-despesa",
+                                          params={"limit": 100, "offset": offset})
+            page = res.get("itens", []) or []
+            itens.extend(page)
+            if len(page) < 100:
+                break
+            offset += 100
+            if offset > 10000:  # circuit breaker
+                break
         existentes = _load_unit_categorias(unit)
         ja_mapeados = {v for v in existentes.values()}
         saida = []
