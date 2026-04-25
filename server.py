@@ -3151,6 +3151,30 @@ def master_api_unidade_formas_recebimento_save(slug: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/unidades/<slug>/pin", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_pin(slug: str):
+    """Define/troca PIN master da unidade. Aceita 4-8 digitos."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        pin = (data.get("pin") or "").strip()
+        if not pin.isdigit() or not (4 <= len(pin) <= 8):
+            return _json({"success": False, "error": "PIN deve ser 4-8 digitos"}, 400)
+        with _pins_lock:
+            store = _load_pin_store()
+            store[slug] = _hash_pin(pin)
+            _save_pin_store(store)
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.pin_set", target=slug)
+        return _json({"success": True})
+    except Exception as exc:
+        app.logger.exception("[unidades.pin] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>", methods=["DELETE"])
 @master_only_required
 @csrf_required

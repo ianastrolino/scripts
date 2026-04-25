@@ -309,6 +309,7 @@
           <div class="u-actions">
             ${u.erp === "tiny" ? `<a href="/u/${esc(u.slug)}/auth" target="_blank" class="u-btn">Autorizar Tiny</a>` : ""}
             ${canDelete && u.erp === "tiny" ? `<button class="u-btn" data-fp="${esc(u.slug)}">Mapear FP</button>` : ""}
+            <button class="u-btn" data-pin="${esc(u.slug)}">Definir PIN</button>
             <a href="/u/${esc(u.slug)}/gerencial" class="u-btn">Gerencial</a>
             ${canDelete ? `<button class="u-btn danger" data-del="${esc(u.slug)}">Remover</button>` : ""}
           </div>
@@ -333,8 +334,30 @@
       grid.querySelectorAll("[data-fp]").forEach(b => {
         b.addEventListener("click", () => abrirMapearFP(b.dataset.fp));
       });
+      grid.querySelectorAll("[data-pin]").forEach(b => {
+        b.addEventListener("click", () => definirPin(b.dataset.pin));
+      });
     } catch (e) {
       document.getElementById("grid").innerHTML = `<div style="grid-column:1/-1;color:var(--ds-danger);padding:20px">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function definirPin(slug) {
+    const pin = prompt(`Definir PIN master da unidade "${slug}".\n\nUsado para reabrir caixa fechado, excluir lançamentos pós-envio, etc.\n\nDigite 4-8 dígitos:`);
+    if (!pin) return;
+    if (!/^\d{4,8}$/.test(pin)) { alert("PIN deve ter 4 a 8 dígitos numéricos."); return; }
+    try {
+      const token = await getCsrf();
+      const r = await fetch(`/master/api/unidades/${encodeURIComponent(slug)}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ pin }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falhou");
+      alert(`PIN salvo. Use ${pin} pra reabrir caixa / excluir lançamentos da unidade ${slug}.`);
+    } catch (e) {
+      alert("Erro: " + e.message);
     }
   }
 
