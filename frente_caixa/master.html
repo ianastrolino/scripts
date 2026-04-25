@@ -14,8 +14,11 @@
     /* ── Unit grid (painel master) ──────────────────────────── */
     .unit-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: var(--ds-space-4);
+    }
+    @media (max-width: 600px) {
+      .unit-grid { grid-template-columns: 1fr; }
     }
 
     .unit-card {
@@ -85,12 +88,13 @@
     .unit-actions {
       padding: var(--ds-space-3) var(--ds-space-5);
       display: flex; gap: var(--ds-space-2);
+      flex-wrap: wrap;
     }
     .action-btn {
-      flex: 1;
+      flex: 1 1 80px; min-width: 0;
       display: inline-flex; align-items: center; justify-content: center;
-      gap: 8px;
-      padding: 10px 12px;
+      gap: 6px;
+      padding: 10px 8px;
       border-radius: var(--ds-radius-md);
       text-decoration: none; cursor: pointer;
       font-family: inherit;
@@ -99,6 +103,7 @@
       background: var(--ds-surface);
       border: 1px solid var(--ds-line);
       color: var(--ds-ink);
+      overflow: hidden; text-overflow: ellipsis;
       transition: background var(--ds-duration-2) var(--ds-ease),
                   border-color var(--ds-duration-2) var(--ds-ease),
                   color var(--ds-duration-2) var(--ds-ease);
@@ -227,13 +232,13 @@
           <div style="font-size:var(--ds-text-xs);color:var(--ds-ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Modo manutenção</div>
           <div id="maintStatus" style="font-size:var(--ds-text-sm);color:var(--ds-ink);margin-top:2px">carregando...</div>
         </div>
-        <button id="maintToggle" class="action-btn" style="min-width:200px;flex:0 0 auto">
+        <button id="maintToggle" class="action-btn" style="flex:0 1 auto">
           <span class="ab-icon" id="maintIcon"></span><span id="maintLabel">...</span>
         </button>
-        <button id="smtpTest" class="action-btn" style="min-width:180px;flex:0 0 auto">
+        <button id="smtpTest" class="action-btn" style="flex:0 1 auto">
           <span class="ab-icon" id="smtpIcon"></span>Testar e-mail
         </button>
-        <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn" style="min-width:180px;flex:0 0 auto">
+        <a id="backupDl" href="/gerencial/api/backup/download" class="action-btn" style="flex:0 1 auto">
           <span class="ab-icon" id="backupIcon"></span>Baixar backup
         </a>
       </div>
@@ -320,13 +325,13 @@
             <span class="tiny-status"><span class="tiny-dot"></span><span id="tiny-text-${u.id}">verificando...</span></span>
           </div>
           <div class="unit-actions">
-            <a href="/u/${u.id}/caixa2" class="action-btn primary">
-              <span class="ab-icon">${AstroShell.icon("caixa")}</span>Caixa do Dia
+            <a href="/u/${u.id}/caixa2" class="action-btn" title="Caixa do Dia">
+              <span class="ab-icon">${AstroShell.icon("caixa")}</span>Caixa
             </a>
-            <a href="/u/${u.id}/fechamento" class="action-btn">
-              <span class="ab-icon">${AstroShell.icon("fechamento")}</span>Fechamento
+            <a href="/u/${u.id}/fechamento" class="action-btn" title="Fechamento">
+              <span class="ab-icon">${AstroShell.icon("fechamento")}</span>Fechar
             </a>
-            <a href="/u/${u.id}/gerencial" class="action-btn">
+            <a href="/u/${u.id}/gerencial" class="action-btn" title="Gerencial">
               <span class="ab-icon">${AstroShell.icon("gerencial")}</span>Gerencial
             </a>
           </div>
