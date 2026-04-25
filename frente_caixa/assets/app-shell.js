@@ -164,6 +164,7 @@
     {
       group: "Sistema",
       items: [
+        { id: "sistema",       label: "Sistema da Rede", icon: "wrench",     href: "/master/sistema", requires: "master" },
         { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
         { id: "manual",        label: "Manual",         icon: "manual", hrefUnit: "/manual", href: "/manual" },
       ],

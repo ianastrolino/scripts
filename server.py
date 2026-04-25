@@ -2966,6 +2966,12 @@ def master_roadmap_page():
     return send_from_directory(UI_DIR, "roadmap.html")
 
 
+@app.route("/master/sistema")
+@master_only_required
+def master_sistema_page():
+    return send_from_directory(UI_DIR, "sistema.html")
+
+
 # ── Gestao de unidades via UI ─────────────────────────────────────────────
 @app.route("/master/unidades")
 @master_only_required
