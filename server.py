@@ -1675,6 +1675,52 @@ def master_api_units_status():
     return _json({"status": status, "data": today})
 
 
+@app.route("/master/api/diag/tokens")
+@master_view_required
+def master_api_diag_tokens():
+    """Diagnostico read-only dos tokens de cada unidade — sem tentar refresh.
+
+    Mostra: quando o token foi salvo, quanto falta pra expirar, refresh_token
+    tail, ultima renovacao. Ajuda a entender por que tokens expiram (uso
+    esporadico, rotacao, race condition, etc).
+    """
+    out = []
+    now = time.time()
+    for uid in UNITS.keys():
+        info = {"id": uid, "nome": UNITS[uid].get("nome", uid)}
+        token_file = _unit_state_dir(uid) / "tiny_tokens.json"
+        if not token_file.exists():
+            info["has_file"] = False
+            out.append(info)
+            continue
+        info["has_file"] = True
+        try:
+            stored = json.loads(token_file.read_text())
+            mtime = token_file.stat().st_mtime
+            access  = stored.get("access_token", "")
+            refresh = stored.get("refresh_token", "")
+            exp_at  = float(stored.get("expires_at", 0) or 0)
+            exp_in  = stored.get("expires_in", 0)
+            info["access_token_last4"] = access[-4:] if access else ""
+            info["refresh_token_last6"] = refresh[-6:] if refresh else ""
+            info["expires_at_iso"] = (
+                dt.datetime.fromtimestamp(exp_at, ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+                if exp_at else ""
+            )
+            info["expires_in_secs"] = int(exp_at - now) if exp_at else None
+            info["expires_in_human"] = (
+                f"{int((exp_at - now)/3600)}h" if (exp_at and exp_at > now)
+                else ("EXPIRADO" if exp_at else "?")
+            )
+            info["original_expires_in"] = exp_in
+            info["file_modified_iso"] = dt.datetime.fromtimestamp(mtime, ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+            info["file_modified_ago_h"] = round((now - mtime) / 3600, 1)
+        except Exception as exc:
+            info["error"] = str(exc)
+        out.append(info)
+    return _json({"tokens": out, "checked_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")})
+
+
 @app.route("/master/api/tiny-health")
 @master_view_required
 def master_api_tiny_health():
