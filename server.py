@@ -2965,8 +2965,8 @@ def master_api_unidades_criar():
         if erp not in ("tiny", "omie"):
             return _json({"success": False, "error": "erp deve ser 'tiny' ou 'omie'"}, 400)
 
-        host = request.host_url.rstrip("/")
-        redirect_uri = (data.get("redirect_uri") or "").strip() or f"{host}/u/{slug}/callback"
+        # Sempre HTTPS (Railway proxy faz TLS, host_url retorna http as vezes)
+        redirect_uri = (data.get("redirect_uri") or "").strip() or f"https://{request.host}/u/{slug}/callback"
 
         cfg: dict[str, Any] = {
             "nome":         nome,
