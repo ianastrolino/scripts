@@ -7746,9 +7746,10 @@ def _rotacionar_logs() -> None:
 
 def _cron_loop() -> None:
     tz           = ZoneInfo("America/Sao_Paulo")
-    last_alerta  = ""
-    last_backup  = ""
-    last_tokens  = ""
+    last_alerta   = ""
+    last_backup   = ""
+    last_renew    = ""    # 04:00 — renovacao proativa pra unidades chegarem 8h com token fresco
+    last_tokens   = ""    # 08:00 — validacao + alerta se algo falhou na renovacao
     last_rotation = ""
     while True:
         try:
@@ -7765,9 +7766,13 @@ def _cron_loop() -> None:
                 last_rotation = today
                 app.logger.info("[cron] Rotacao de logs %s", today)
                 _rotacionar_logs()
+            if now.hour == 4 and now.minute == 0 and last_renew != today:
+                last_renew = today
+                app.logger.info("[cron] Renovacao proativa de tokens Tiny (4h)")
+                _verificar_saude_tokens()
             if now.hour == 8 and now.minute == 0 and last_tokens != today:
                 last_tokens = today
-                app.logger.info("[cron] Health check dos tokens Tiny")
+                app.logger.info("[cron] Health check dos tokens Tiny (8h)")
                 _verificar_saude_tokens()
         except Exception:
             app.logger.exception("[cron] Erro no loop")
