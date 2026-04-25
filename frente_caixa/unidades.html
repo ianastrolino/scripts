@@ -18,52 +18,120 @@
     }
     .u-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: var(--ds-space-3);
     }
     .u-card {
       background: var(--ds-surface);
       border: 1px solid var(--ds-line);
+      border-left: 3px solid var(--erp-color, var(--ds-ink-muted));
       border-radius: var(--ds-radius-lg);
-      padding: var(--ds-space-4);
       box-shadow: var(--ds-shadow-xs);
-      display: flex; flex-direction: column; gap: 10px;
+      display: flex; flex-direction: column;
+      transition: box-shadow .15s ease, transform .15s ease;
     }
+    .u-card:hover { box-shadow: var(--ds-shadow-md); }
+    .u-card.erp-tiny { --erp-color: #2563eb; }
+    .u-card.erp-omie { --erp-color: #7c3aed; }
+    .u-card.alert    { border-color: #fecaca; }
+
+    .u-head {
+      padding: 14px 16px 10px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 10px;
+    }
+    .u-head-left { min-width: 0; }
     .u-nome {
-      font-size: 16px; font-weight: 800; color: var(--ds-ink);
-      letter-spacing: -.01em;
+      font-size: 17px; font-weight: 800; color: var(--ds-ink);
+      letter-spacing: -.01em; line-height: 1.15;
+      display: flex; align-items: center; gap: 8px;
     }
+    .u-saude {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ds-line-strong);
+      flex-shrink: 0;
+    }
+    .u-saude.ok    { background: #16a34a; }
+    .u-saude.alert { background: #dc2626; box-shadow: 0 0 0 2px #fee2e2; }
     .u-slug {
-      font-size: 11px; font-weight: 600; color: var(--ds-ink-muted);
-      font-family: var(--ds-font-mono);
+      font-size: 11px; font-weight: 500; color: var(--ds-ink-muted);
+      font-family: var(--ds-font-mono); margin-top: 2px;
     }
-    .u-meta { display: flex; gap: 6px; flex-wrap: wrap; }
-    .u-chip {
-      display: inline-block; padding: 2px 8px; border-radius: 100px;
-      font-size: 10px; font-weight: 700; letter-spacing: .04em;
-      text-transform: uppercase;
+    .u-erp-badge {
+      display: inline-flex; padding: 3px 8px; border-radius: 5px;
+      font-size: 10px; font-weight: 800; letter-spacing: .04em;
+      text-transform: uppercase; flex-shrink: 0;
     }
-    .u-chip.tiny   { background: #dbeafe; color: #1e40af; }
-    .u-chip.omie   { background: #ede9fe; color: #6d28d9; }
-    .u-chip.env    { background: var(--ds-surface-alt); color: var(--ds-ink-muted); }
-    .u-chip.custom { background: #fef3c7; color: #92400e; }
-    .u-chip.token-ok { background: #d1fae5; color: #065f46; }
-    .u-chip.token-no { background: #fee2e2; color: #991b1b; }
-    .u-actions {
-      display: flex; gap: 6px; flex-wrap: wrap;
-      padding-top: 10px; border-top: 1px solid var(--ds-line);
-      margin-top: auto;
+    .u-erp-badge.tiny { background: #dbeafe; color: #1e40af; }
+    .u-erp-badge.omie { background: #ede9fe; color: #6d28d9; }
+
+    .u-status {
+      padding: 0 16px 12px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 12px; color: var(--ds-ink-muted);
     }
-    .u-btn {
-      font: inherit; font-size: 12px; font-weight: 600;
-      padding: 6px 10px; border-radius: var(--ds-radius-md);
-      border: 1px solid var(--ds-line); background: var(--ds-surface);
-      color: var(--ds-ink); cursor: pointer; text-decoration: none;
+    .u-status .label {
       display: inline-flex; align-items: center; gap: 4px;
     }
-    .u-btn:hover { background: var(--ds-surface-alt); }
-    .u-btn.danger { color: var(--ds-danger); }
-    .u-btn.danger:hover { background: var(--ds-danger-soft); }
+    .u-status .ok    { color: #16a34a; font-weight: 600; }
+    .u-status .alert { color: #dc2626; font-weight: 600; }
+    .u-status .neutro { color: var(--ds-ink-muted); }
+    .u-status-sep { color: var(--ds-line-strong); }
+
+    /* Acoes primarias — texto, padronizado */
+    .u-actions-main {
+      padding: 10px 16px;
+      display: flex; gap: 6px; flex-wrap: wrap;
+      border-top: 1px solid var(--ds-line);
+    }
+    .u-btn {
+      flex: 1 1 0; min-width: 0;
+      font: inherit; font-size: 12px; font-weight: 600;
+      padding: 7px 10px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      white-space: nowrap;
+    }
+    .u-btn:hover { background: var(--ds-surface-alt); border-color: var(--ds-line-strong); }
+    .u-btn.primary {
+      background: var(--ds-accent-600); color: #fff; border-color: var(--ds-accent-600);
+    }
+    .u-btn.primary:hover { background: var(--ds-accent-700); border-color: var(--ds-accent-700); }
+    .u-btn.warn {
+      background: #fef3c7; color: #92400e; border-color: #fcd34d;
+    }
+    .u-btn.warn:hover { background: #fde68a; }
+
+    /* Acoes admin — icones com tooltip */
+    .u-actions-admin {
+      padding: 8px 16px 12px;
+      display: flex; gap: 4px; flex-wrap: wrap;
+      border-top: 1px dashed var(--ds-line);
+    }
+    .u-icon-btn {
+      width: 30px; height: 30px;
+      border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .u-icon-btn:hover {
+      background: var(--ds-surface-alt); color: var(--ds-ink);
+      border-color: var(--ds-line-strong);
+    }
+    .u-icon-btn.danger:hover {
+      background: var(--ds-danger-soft); color: var(--ds-danger);
+      border-color: #fecaca;
+    }
+    .u-icon-btn svg { width: 14px; height: 14px; }
+    .u-actions-admin-spacer { flex: 1; }
+    .u-origem-tag {
+      font-size: 10px; font-weight: 600; color: var(--ds-ink-muted);
+      letter-spacing: .04em; text-transform: uppercase;
+      align-self: center;
+    }
 
     .btn-primary {
       font: inherit; font-size: 14px; font-weight: 700;
@@ -294,24 +362,58 @@
         return;
       }
       grid.innerHTML = j.unidades.map(u => {
-        const chipErp   = `<span class="u-chip ${u.erp}">${u.erp.toUpperCase()}</span>`;
-        const chipOrig  = `<span class="u-chip ${u.origem}">${u.origem === "custom" ? "UI" : "ENV"}</span>`;
-        const chipToken = u.has_token
-          ? `<span class="u-chip token-ok">✓ Autorizado</span>`
-          : `<span class="u-chip token-no">⚠ Sem token</span>`;
         const canDelete = u.origem === "custom";
-        return `<div class="u-card" data-slug="${esc(u.slug)}">
-          <div>
-            <div class="u-nome">${esc(u.nome)}</div>
-            <div class="u-slug">/u/${esc(u.slug)}</div>
+        const isAlert = u.erp === "tiny" && !u.has_token;
+        const slug = esc(u.slug);
+        // Acao primaria: depende do estado
+        const primaryAction = (u.erp === "tiny" && !u.has_token)
+          ? `<a href="/u/${slug}/auth" target="_blank" class="u-btn warn">⚠ Autorizar Tiny</a>`
+          : `<a href="/u/${slug}/gerencial" class="u-btn primary">Gerencial</a>`;
+        // Botao de fechamento sempre disponivel
+        const fechamentoBtn = `<a href="/u/${slug}/fechamento" class="u-btn">Fechamento</a>`;
+        // Botao de caixa
+        const caixaBtn = `<a href="/u/${slug}/caixa2" class="u-btn">Caixa</a>`;
+
+        const statusLine = u.erp === "tiny"
+          ? (u.has_token
+              ? `<span class="label ok">● Tiny conectado</span>`
+              : `<span class="label alert">⚠ Sem token Tiny</span>`)
+          : `<span class="label neutro">● Omie (envio em breve)</span>`;
+
+        return `<div class="u-card erp-${u.erp} ${isAlert ? "alert" : ""}" data-slug="${slug}">
+          <div class="u-head">
+            <div class="u-head-left">
+              <div class="u-nome">
+                <span class="u-saude ${isAlert ? "alert" : (u.has_token || u.erp === "omie" ? "ok" : "")}"></span>
+                ${esc(u.nome)}
+              </div>
+              <div class="u-slug">/u/${slug}</div>
+            </div>
+            <span class="u-erp-badge ${u.erp}">${u.erp}</span>
           </div>
-          <div class="u-meta">${chipErp} ${chipOrig} ${chipToken}</div>
-          <div class="u-actions">
-            ${u.erp === "tiny" ? `<a href="/u/${esc(u.slug)}/auth" target="_blank" class="u-btn">Autorizar Tiny</a>` : ""}
-            ${canDelete && u.erp === "tiny" ? `<button class="u-btn" data-fp="${esc(u.slug)}">Mapear FP</button>` : ""}
-            <button class="u-btn" data-pin="${esc(u.slug)}">Definir PIN</button>
-            <a href="/u/${esc(u.slug)}/gerencial" class="u-btn">Gerencial</a>
-            ${canDelete ? `<button class="u-btn danger" data-del="${esc(u.slug)}">Remover</button>` : ""}
+
+          <div class="u-status">
+            ${statusLine}
+          </div>
+
+          <div class="u-actions-main">
+            ${primaryAction}
+            ${caixaBtn}
+            ${fechamentoBtn}
+          </div>
+
+          <div class="u-actions-admin">
+            ${canDelete && u.erp === "tiny" ? `<button class="u-icon-btn" data-fp="${slug}" title="Mapear formas de pagamento ↔ Tiny">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 14h4"/></svg>
+            </button>` : ""}
+            <button class="u-icon-btn" data-pin="${slug}" title="Definir PIN master da unidade">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 10-10"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg>
+            </button>
+            ${canDelete ? `<button class="u-icon-btn danger" data-del="${slug}" title="Remover unidade">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+            </button>` : ""}
+            <span class="u-actions-admin-spacer"></span>
+            <span class="u-origem-tag">${u.origem === "custom" ? "via UI" : "via env"}</span>
           </div>
         </div>`;
       }).join("");
