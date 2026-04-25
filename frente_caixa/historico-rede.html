@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Histórico da Rede</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    :root {
+      --card:   var(--ds-surface);
+      --card2:  var(--ds-surface-alt);
+      --border: var(--ds-line);
+      --t1:     var(--ds-ink);
+      --t2:     var(--ds-ink-muted);
+      --t3:     var(--ds-ink-subtle);
+      --rl:     var(--ds-radius-lg);
+      --din:    #059669; --din-bg: #ecfdf5; --din-bd: #6ee7b7;
+      --deb:    #2563eb; --deb-bg: #eff6ff; --deb-bd: #93c5fd;
+      --crd:    #7c3aed; --crd-bg: #f5f3ff; --crd-bd: #c4b5fd;
+      --pix:    #0891b2; --pix-bg: #ecfeff; --pix-bd: #67e8f9;
+      --fat:    #d97706; --fat-bg: #fffbeb; --fat-bd: #fcd34d;
+      --det:    #4f46e5; --det-bg: #eef2ff; --det-bd: #c7d2fe;
+      --accent: var(--ds-accent-600);
+    }
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: var(--ds-space-4);
+    }
+    .tab-btn {
+      background: transparent; border: none; cursor: pointer;
+      padding: 10px 18px;
+      font: inherit; font-size: var(--ds-text-sm); font-weight: var(--ds-weight-semi);
+      color: var(--t2);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--t1); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex; align-items: center; gap: var(--ds-space-3); flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      margin-bottom: var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .filter-label {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: var(--ds-tracking-wide);
+    }
+    .filter-select, .filter-input {
+      background: var(--ds-surface); border: 1px solid var(--border);
+      color: var(--t1); border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-3);
+      font-size: var(--ds-text-base); font-family: inherit;
+      cursor: pointer; outline: none;
+    }
+    .filter-input[type="search"] { cursor: text; min-width: 200px; }
+    .filter-select:focus, .filter-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--ds-accent-100);
+    }
+    .filter-div { width: 1px; height: 24px; background: var(--border); margin: 0 var(--ds-space-1); }
+    .mode-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--ds-ink-muted); border-radius: var(--ds-radius-md);
+      padding: 6px var(--ds-space-3);
+      font-size: var(--ds-text-sm); font-family: inherit;
+      cursor: pointer;
+    }
+    .mode-btn:hover { background: var(--ds-surface-alt); color: var(--t1); }
+    .mode-btn.active {
+      background: var(--ds-accent-50);
+      border-color: var(--ds-accent-500);
+      color: var(--ds-accent-700);
+      font-weight: var(--ds-weight-semi);
+    }
+    .btn-primary {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-5);
+      font-size: var(--ds-text-base); font-family: inherit;
+      font-weight: var(--ds-weight-semi); cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--ds-accent-700); }
+    .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-ghost {
+      background: var(--ds-surface); color: var(--t1);
+      border: 1px solid var(--border); border-radius: var(--ds-radius-md);
+      padding: 7px var(--ds-space-4);
+      font-size: var(--ds-text-sm); font-family: inherit;
+      font-weight: var(--ds-weight-semi); cursor: pointer;
+    }
+    .btn-ghost:hover { background: var(--card2); border-color: var(--ds-line-strong); }
+    .btn-ghost:disabled { opacity: .6; cursor: not-allowed; }
+    .sync-status { margin-left: auto; font-size: var(--ds-text-sm); color: var(--t2); }
+    .sync-status.ok  { color: var(--ds-success); }
+    .sync-status.err { color: var(--ds-danger); }
+
+    /* Cards + Seções (compartilhados) */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--ds-space-3); margin-bottom: var(--ds-space-5);
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-5);
+      position: relative; overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%; background: var(--accent);
+    }
+    .card.alt::before { background: var(--ds-ink-muted); }
+    .card .lbl {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      color: var(--ds-ink-muted); text-transform: uppercase;
+      letter-spacing: var(--ds-tracking-wide);
+      margin-bottom: 4px;
+    }
+    .card .val { font-size: var(--ds-text-xl); font-weight: var(--ds-weight-bold); color: var(--t1); }
+    .card .sub { font-size: var(--ds-text-xs); color: var(--t2); margin-top: 2px; }
+
+    .g-section { margin-bottom: var(--ds-space-5); }
+    .g-section-title {
+      font-size: var(--ds-text-base); font-weight: var(--ds-weight-bold);
+      color: var(--t1); margin-bottom: var(--ds-space-3);
+    }
+
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); overflow: hidden;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    table.rank { width: 100%; border-collapse: collapse; }
+    table.rank th {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      color: var(--ds-ink-muted);
+      padding: var(--ds-space-3) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+      text-align: left; background: var(--card2);
+    }
+    table.rank th.num, table.rank td.num { text-align: right; }
+    table.rank td {
+      padding: var(--ds-space-3) var(--ds-space-5);
+      border-bottom: 1px solid var(--border);
+      font-size: var(--ds-text-base); color: var(--t1);
+    }
+    table.rank tr:last-child td { border-bottom: none; }
+    .pos {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--card2); color: var(--t2);
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+    }
+    .cat-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cat-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 999px;
+      background: var(--card2); border: 1px solid var(--border);
+      font-size: var(--ds-text-xs); color: var(--t2);
+      white-space: nowrap;
+    }
+    .cat-pill b { color: var(--t1); font-weight: var(--ds-weight-bold); }
+    .cat-pill-val { color: var(--t1); font-variant-numeric: tabular-nums; }
+
+    /* KPIs PDV */
+    .kpi-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--ds-space-4); margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--rl); padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi-label { font-size: var(--ds-text-xs); color: var(--t2);
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      font-weight: var(--ds-weight-bold); margin-bottom: 4px; }
+    .kpi-value { font-size: var(--ds-text-xl); font-weight: var(--ds-weight-bold);
+      color: var(--t1); font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: var(--ds-text-xs); color: var(--t3); margin-top: 2px; }
+
+    /* Tabela PDV */
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-4) var(--ds-space-5);
+      border-bottom: 1px solid var(--border); background: var(--card2);
+    }
+    .table-title { font-size: var(--ds-text-md); font-weight: var(--ds-weight-bold); color: var(--t1); }
+    .table-meta  { font-size: var(--ds-text-sm); color: var(--t2); }
+    .table-scroll { overflow-x: auto; max-height: 640px; overflow-y: auto; }
+    table.lc-table { width: 100%; border-collapse: collapse; }
+    table.lc-table thead th {
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-bold);
+      text-transform: uppercase; letter-spacing: var(--ds-tracking-wide);
+      color: var(--ds-ink-muted); padding: var(--ds-space-3) var(--ds-space-4);
+      text-align: left; background: var(--card2);
+      position: sticky; top: 0; z-index: 1;
+      border-bottom: 1px solid var(--border);
+    }
+    table.lc-table tbody td {
+      padding: var(--ds-space-3) var(--ds-space-4);
+      font-size: var(--ds-text-sm); color: var(--t1);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    table.lc-table tbody tr:last-child td { border-bottom: none; }
+    table.lc-table tbody tr:hover { background: var(--card2); }
+    td.num { font-variant-numeric: tabular-nums; text-align: right; font-weight: var(--ds-weight-semi); }
+    td.data { color: var(--t2); font-variant-numeric: tabular-nums; }
+
+    .fp-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: var(--ds-radius-full);
+      font-size: var(--ds-text-xs); font-weight: var(--ds-weight-semi);
+      white-space: nowrap; border: 1px solid transparent;
+    }
+    .fp-chip .fp-ico { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; flex-shrink: 0; }
+    .fp-chip .fp-ico svg { width: 13px; height: 13px; }
+    .fp-chip.dinheiro { background: var(--din-bg); color: var(--din); border-color: var(--din-bd); }
+    .fp-chip.debito   { background: var(--deb-bg); color: var(--deb); border-color: var(--deb-bd); }
+    .fp-chip.credito  { background: var(--crd-bg); color: var(--crd); border-color: var(--crd-bd); }
+    .fp-chip.pix      { background: var(--pix-bg); color: var(--pix); border-color: var(--pix-bd); }
+    .fp-chip.faturado { background: var(--fat-bg); color: var(--fat); border-color: var(--fat-bd); }
+    .fp-chip.detran   { background: var(--det-bg); color: var(--det); border-color: var(--det-bd); }
+
+    .unit-tag {
+      display: inline-block; font-size: var(--ds-text-xs);
+      font-weight: var(--ds-weight-semi); padding: 1px var(--ds-space-2);
+      border-radius: var(--ds-radius-sm);
+      background: var(--ds-accent-50); color: var(--ds-accent-700);
+      border: 1px solid var(--ds-accent-100);
+    }
+
+    .g-loading { text-align: center; padding: var(--ds-space-10) var(--ds-space-5); color: var(--ds-ink-muted); font-size: var(--ds-text-md); }
+    .g-empty   { text-align: center; padding: var(--ds-space-8) var(--ds-space-5); color: var(--ds-ink-muted); font-size: var(--ds-text-base); }
+    .g-error   { text-align: center; padding: var(--ds-space-8) var(--ds-space-5); color: var(--ds-danger); font-size: var(--ds-text-base); }
+
+    .pager {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: var(--ds-space-3) var(--ds-space-5); border-top: 1px solid var(--border);
+      background: var(--card2); font-size: var(--ds-text-sm); color: var(--t2);
+    }
+    .pager .pager-buttons { display: flex; gap: var(--ds-space-2); }
+    .pager button {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--t1); border-radius: var(--ds-radius-md);
+      padding: 4px var(--ds-space-3); font-size: var(--ds-text-sm);
+      font-family: inherit; cursor: pointer;
+    }
+    .pager button:disabled { opacity: .4; cursor: not-allowed; }
+    .pager button:not(:disabled):hover { background: var(--card2); }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede Astro</div>
+        <h1 class="app-page-title">Histórico da Rede</h1>
+        <p class="app-page-sub">Dados históricos por mês — emitidos no Tiny (BI) e lançamentos do PDV (Caixa do Dia).</p>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="emitidos">Emitidos no Tiny</button>
+        <button type="button" class="tab-btn" data-tab="pdv">Lançamentos PDV</button>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <span class="filter-label">Período</span>
+        <button class="mode-btn active" id="modeMonth" type="button">Mês</button>
+        <button class="mode-btn only-pdv" id="modeRange" type="button" style="display:none">Intervalo</button>
+
+        <div id="filterMonth" style="display:flex;align-items:center;gap:8px">
+          <input class="filter-input" type="month" id="inpMes">
+        </div>
+        <div id="filterRange" style="display:none;align-items:center;gap:8px">
+          <input class="filter-input" type="date" id="inpFrom">
+          <span style="color:var(--t2);font-size:var(--ds-text-sm)">até</span>
+          <input class="filter-input" type="date" id="inpTo">
+        </div>
+
+        <div class="filter-div"></div>
+        <span class="filter-label">Unidade</span>
+        <select class="filter-select" id="selUnit">
+          <option value="all">Todas</option>
+        </select>
+
+        <!-- Só PDV -->
+        <div id="pdvFilters" style="display:none;gap:var(--ds-space-3);align-items:center" >
+          <div class="filter-div"></div>
+          <span class="filter-label">FP</span>
+          <select class="filter-select" id="selFp">
+            <option value="all">Todas</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="debito">Débito</option>
+            <option value="credito">Crédito</option>
+            <option value="pix">PIX</option>
+            <option value="faturado">Faturado</option>
+            <option value="detran">DETRAN</option>
+          </select>
+          <input class="filter-input" type="search" id="inpBusca" placeholder="placa, cliente, CPF, serviço…">
+        </div>
+
+        <button class="btn-primary" id="btnAplicar" type="button">Aplicar</button>
+        <button class="btn-ghost" id="btnSync" type="button" style="display:none" title="Puxa contas a receber do Tiny via API e salva no banco. Use pra backfill de meses antigos.">Sincronizar do Tiny</button>
+        <button class="btn-ghost" id="btnExportar" type="button" style="display:none">⬇ Export CSV</button>
+        <span class="sync-status" id="syncStatus"></span>
+      </div>
+
+      <!-- Panel: Emitidos -->
+      <div id="panelEmitidos">
+        <div class="cards" id="cardsStrip">
+          <div class="g-loading" style="grid-column:1/-1">Carregando…</div>
+        </div>
+
+        <div class="g-section">
+          <div class="g-section-title">Top 3 categorias de receita</div>
+          <div class="table-wrap">
+            <table class="rank">
+              <thead><tr>
+                <th style="width:32px">#</th>
+                <th>Categoria</th>
+                <th class="num" style="width:90px">Qtd</th>
+                <th class="num" style="width:160px">Total</th>
+              </tr></thead>
+              <tbody id="top3Body"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="g-section">
+          <div class="g-section-title">Por unidade</div>
+          <div class="table-wrap">
+            <table class="rank">
+              <thead><tr>
+                <th style="width:32px">#</th>
+                <th>Unidade</th>
+                <th class="num">Qtd</th>
+                <th class="num">Total</th>
+              </tr></thead>
+              <tbody id="unitBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="g-section">
+          <div class="g-section-title">Top 10 clientes · total por categoria</div>
+          <div class="table-wrap">
+            <table class="rank">
+              <thead><tr>
+                <th style="width:32px">#</th>
+                <th>Cliente</th>
+                <th>Categorias</th>
+                <th class="num" style="width:80px">Qtd</th>
+                <th class="num" style="width:140px">Total</th>
+              </tr></thead>
+              <tbody id="cliBody"><tr><td colspan="5" class="g-empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="g-section">
+          <div class="g-section-title">Todas as categorias</div>
+          <div class="table-wrap">
+            <table class="rank">
+              <thead><tr>
+                <th style="width:32px">#</th>
+                <th>Categoria</th>
+                <th class="num" style="width:90px">Qtd</th>
+                <th class="num" style="width:160px">Total</th>
+              </tr></thead>
+              <tbody id="catBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel: PDV -->
+      <div id="panelPdv" style="display:none">
+        <div class="kpi-strip">
+          <div class="kpi"><div class="kpi-label">Registros</div><div class="kpi-value" id="kpiCount">—</div><div class="kpi-sub" id="kpiCountSub">no filtro</div></div>
+          <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-sub">soma filtrada</div></div>
+          <div class="kpi"><div class="kpi-label">Ticket médio</div><div class="kpi-value" id="kpiTicket">—</div></div>
+          <div class="kpi"><div class="kpi-label">À vista</div><div class="kpi-value" id="kpiAvista">—</div></div>
+          <div class="kpi"><div class="kpi-label">Faturado</div><div class="kpi-value" id="kpiFat">—</div></div>
+          <div class="kpi"><div class="kpi-label">DETRAN</div><div class="kpi-value" id="kpiDet">—</div></div>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-head">
+            <div class="table-title">Lançamentos</div>
+            <div class="table-meta" id="tableMeta">—</div>
+          </div>
+          <div class="table-scroll">
+            <table class="lc-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Hora</th>
+                  <th>Unidade</th>
+                  <th>Placa</th>
+                  <th>Cliente</th>
+                  <th>CPF/CNPJ</th>
+                  <th>Serviço</th>
+                  <th>FP</th>
+                  <th class="num">Valor</th>
+                </tr>
+              </thead>
+              <tbody id="lcBody"><tr><td colspan="9" class="g-loading">Carregando…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="pager" id="pager" style="display:none">
+            <div class="pager-info" id="pagerInfo">—</div>
+            <div class="pager-buttons">
+              <button id="pgPrev" type="button">← Anterior</button>
+              <button id="pgNext" type="button">Próxima →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "historico-rede",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Histórico", current: true }
+    ]
+  });
+
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = s => { if (!s) return ""; const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; };
+  const escHtml = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fpLabel = { dinheiro: "Dinheiro", debito: "Débito", credito: "Crédito",
+                    pix: "PIX", faturado: "Faturado", detran: "DETRAN" };
+
+  // ── Tabs ─────────────────────────────────────────
+  let currentTab = "emitidos";
+  function setTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+    document.getElementById("panelEmitidos").style.display = tab === "emitidos" ? "" : "none";
+    document.getElementById("panelPdv").style.display      = tab === "pdv"      ? "" : "none";
+    document.getElementById("pdvFilters").style.display    = tab === "pdv"      ? "flex" : "none";
+    document.getElementById("btnSync").style.display       = tab === "emitidos" ? "" : "none";
+    document.getElementById("btnExportar").style.display   = tab === "pdv"      ? "" : "none";
+    document.querySelectorAll(".only-pdv").forEach(el => el.style.display = tab === "pdv" ? "" : "none");
+    // Se estava em modo range e a tab nao suporta, volta pra mes
+    if (tab === "emitidos" && filterMode === "range") switchMode("month");
+    if (tab === "emitidos") carregarEmitidos();
+    else carregarPdv();
+  }
+
+  // ── Período ────────────────────────────────────────
+  const now = new Date();
+  const ymNow = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  document.getElementById("inpMes").value = ymNow;
+  document.getElementById("inpFrom").value = `${ymNow}-01`;
+  document.getElementById("inpTo").value   = now.toISOString().slice(0, 10);
+
+  let filterMode = "month";
+  function switchMode(mode) {
+    filterMode = mode;
+    document.getElementById("modeMonth").classList.toggle("active", mode === "month");
+    document.getElementById("modeRange").classList.toggle("active", mode === "range");
+    document.getElementById("filterMonth").style.display = mode === "month" ? "flex" : "none";
+    document.getElementById("filterRange").style.display = mode === "range" ? "flex" : "none";
+  }
+  document.getElementById("modeMonth").addEventListener("click", () => switchMode("month"));
+  document.getElementById("modeRange").addEventListener("click", () => switchMode("range"));
+
+  function getRange() {
+    if (filterMode === "month") {
+      const mes = document.getElementById("inpMes").value;
+      if (!mes) return { from: "", to: "" };
+      const [y, m] = mes.split("-").map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      return {
+        from: `${y}-${String(m).padStart(2,"0")}-01`,
+        to:   `${y}-${String(m).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`,
+      };
+    }
+    return { from: document.getElementById("inpFrom").value, to: document.getElementById("inpTo").value };
+  }
+  function getMes() {
+    if (filterMode === "month") return document.getElementById("inpMes").value;
+    // Em modo range, usa o mes do "from"
+    const from = document.getElementById("inpFrom").value;
+    return from ? from.slice(0, 7) : ymNow;
+  }
+
+  // ── CSRF ────────────────────────────────────────────
+  let _csrfToken = "";
+  async function getCsrf(force = false) {
+    if (!force && _csrfToken) return _csrfToken;
+    try {
+      const r = await fetch("/api/csrf-token");
+      const j = await r.json();
+      _csrfToken = j.token || "";
+    } catch { _csrfToken = ""; }
+    return _csrfToken;
+  }
+
+  // ── Unidades ───────────────────────────────────────
+  async function loadUnidades() {
+    try {
+      const r = await fetch("/master/api/units");
+      const j = await r.json();
+      const sel = document.getElementById("selUnit");
+      (j.units || []).forEach(u => {
+        const o = document.createElement("option");
+        o.value = u.id; o.textContent = u.nome;
+        sel.appendChild(o);
+      });
+    } catch (e) { console.warn("unidades", e); }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB: EMITIDOS NO TINY
+  // ═══════════════════════════════════════════════════════════════
+  async function carregarEmitidos() {
+    const mes  = getMes();
+    const unit = document.getElementById("selUnit").value;
+    if (!mes) return;
+
+    ["cardsStrip","top3Body","unitBody","cliBody","catBody"].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const colspan = id === "cliBody" ? 5 : 4;
+      el.innerHTML = id === "cardsStrip"
+        ? '<div class="g-loading" style="grid-column:1/-1">Carregando…</div>'
+        : `<tr><td colspan="${colspan}" class="g-loading">Carregando…</td></tr>`;
+    });
+
+    try {
+      const qs = new URLSearchParams({ mes });
+      if (unit && unit !== "all") qs.set("unit", unit);
+      const r = await fetch(`/gerencial/api/bi/historico-emitido?${qs}`);
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "Erro.");
+      renderEmitCards(j);
+      renderTop3(j.top3_categorias);
+      renderUnidadesEmit(j.por_unit);
+      renderClientes(j.top10_clientes);
+      renderCategorias(j.ranking_categorias);
+    } catch (e) {
+      ["cardsStrip","top3Body","unitBody","cliBody","catBody"].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const colspan = id === "cliBody" ? 5 : 4;
+        el.innerHTML = id === "cardsStrip"
+          ? `<div class="g-error" style="grid-column:1/-1">${escHtml(e.message)}</div>`
+          : `<tr><td colspan="${colspan}" class="g-error">${escHtml(e.message)}</td></tr>`;
+      });
+    }
+  }
+
+  function renderEmitCards(j) {
+    const el = document.getElementById("cardsStrip");
+    const fixas = Object.fromEntries((j.categorias_fixas || []).map(c => [c.key, c]));
+    const trans = fixas.transferencia || { count: 0, total: 0 };
+    const caut  = fixas.cautelar      || { count: 0, total: 0 };
+    const cp    = fixas.cautelar_pintura || { count: 0, total: 0 };
+    const unidadesCount = Object.keys(j.por_unit || {}).length;
+    el.innerHTML = `
+      <div class="card"><div class="lbl">Laudos emitidos</div><div class="val">${Number(j.count_laudos).toLocaleString("pt-BR")}</div><div class="sub">${unidadesCount} unidade(s)</div></div>
+      <div class="card"><div class="lbl">Faturamento bruto</div><div class="val">${brl(j.total_bruto)}</div><div class="sub">mês ${escHtml(j.mes)}</div></div>
+      <div class="card alt"><div class="lbl">Laudo de transferência</div><div class="val">${brl(trans.total)}</div><div class="sub">${trans.count} laudo(s)</div></div>
+      <div class="card alt"><div class="lbl">Vistoria cautelar</div><div class="val">${brl(caut.total)}</div><div class="sub">${caut.count} laudo(s)</div></div>
+      <div class="card alt"><div class="lbl">Cautelar com pintura</div><div class="val">${brl(cp.total)}</div><div class="sub">${cp.count} laudo(s)</div></div>
+    `;
+  }
+
+  function renderTop3(lista) {
+    const tbody = document.getElementById("top3Body");
+    if (!lista || !lista.length) { tbody.innerHTML = '<tr><td colspan="4" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = lista.map((r, i) => `
+      <tr><td><span class="pos">${i + 1}</span></td>
+        <td>${escHtml(r.categoria)}</td>
+        <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
+        <td class="num"><b>${brl(r.total)}</b></td></tr>
+    `).join("");
+  }
+
+  function renderUnidadesEmit(porUnit) {
+    const tbody = document.getElementById("unitBody");
+    const rows = Object.entries(porUnit || {})
+      .map(([slug, info]) => ({ slug, ...info }))
+      .sort((a, b) => (b.total || 0) - (a.total || 0));
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = rows.map((r, i) => `
+      <tr><td><span class="pos">${i + 1}</span></td>
+        <td>${escHtml(r.nome || r.slug)}</td>
+        <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
+        <td class="num">${brl(r.total)}</td></tr>
+    `).join("");
+  }
+
+  function renderClientes(lista) {
+    const tbody = document.getElementById("cliBody");
+    if (!lista || !lista.length) { tbody.innerHTML = '<tr><td colspan="5" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = lista.map((c, i) => {
+      const cats = (c.categorias || []).map(cat =>
+        `<span class="cat-pill">${escHtml(cat.categoria)} <b>${cat.count}×</b> <span class="cat-pill-val">${brl(cat.total)}</span></span>`
+      ).join("");
+      return `<tr><td><span class="pos">${i + 1}</span></td>
+        <td>${escHtml(c.cliente)}</td>
+        <td><div class="cat-pills">${cats}</div></td>
+        <td class="num">${Number(c.count).toLocaleString("pt-BR")}</td>
+        <td class="num"><b>${brl(c.total)}</b></td></tr>`;
+    }).join("");
+  }
+
+  function renderCategorias(lista) {
+    const tbody = document.getElementById("catBody");
+    if (!lista || !lista.length) { tbody.innerHTML = '<tr><td colspan="4" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = lista.map((r, i) => `
+      <tr><td><span class="pos">${i + 1}</span></td>
+        <td>${escHtml(r.categoria)}</td>
+        <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
+        <td class="num">${brl(r.total)}</td></tr>
+    `).join("");
+  }
+
+  async function sincronizar() {
+    const mes  = getMes();
+    const unit = document.getElementById("selUnit").value;
+    if (!mes) { alert("Selecione o mês."); return; }
+    if (!unit || unit === "all") {
+      alert("Escolha uma unidade específica para sincronizar. Sincronize uma unidade por vez.");
+      return;
+    }
+    if (!confirm(`Sincronizar o mês ${mes} da unidade ${unit} a partir da API do Tiny? Isso pode levar 1–5 minutos.`)) return;
+    const btn = document.getElementById("btnSync");
+    const status = document.getElementById("syncStatus");
+    btn.disabled = true;
+    status.className = "sync-status";
+    status.textContent = "Sincronizando… não feche a página.";
+    try {
+      let token = await getCsrf();
+      let r = await fetch("/gerencial/api/bi/sync-historico", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ unit, mes }),
+      });
+      if (r.status === 403) {
+        token = await getCsrf(true);
+        r = await fetch("/gerencial/api/bi/sync-historico", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+          body: JSON.stringify({ unit, mes }),
+        });
+      }
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "Erro.");
+      status.className = "sync-status ok";
+      status.textContent = `OK · API: ${j.total_api} · detalhes: ${j.detalhes_ok} · novos: ${j.novos} · atualizados: ${j.atualizados} (tabela: ${j.total_tabela})`;
+      carregarEmitidos();
+    } catch (e) {
+      status.className = "sync-status err";
+      status.textContent = "Erro: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TAB: LANÇAMENTOS PDV
+  // ═══════════════════════════════════════════════════════════════
+  let allLcs = [];
+  let filteredLcs = [];
+  let pdvPage = 0;
+  const PAGE_SIZE = 200;
+
+  async function carregarPdv() {
+    const tb = document.getElementById("lcBody");
+    tb.innerHTML = `<tr><td colspan="9" class="g-loading">Carregando…</td></tr>`;
+    document.getElementById("tableMeta").textContent = "—";
+    document.getElementById("pager").style.display = "none";
+    const { from, to } = getRange();
+    if (!from || !to) {
+      tb.innerHTML = `<tr><td colspan="9" class="g-error">Informe o período.</td></tr>`;
+      return;
+    }
+    const unit = document.getElementById("selUnit").value;
+    const url = `/gerencial/api/historico?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&unit=${encodeURIComponent(unit)}&detail=1`;
+    try {
+      const r = await fetch(url, { credentials: "same-origin" });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || "erro");
+      allLcs = Array.isArray(d.lancamentos) ? d.lancamentos : [];
+      applyPdvFilters();
+    } catch (e) {
+      tb.innerHTML = `<tr><td colspan="9" class="g-error">Erro: ${escHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  function applyPdvFilters() {
+    const fp = document.getElementById("selFp").value;
+    const q = (document.getElementById("inpBusca").value || "").trim().toLowerCase();
+    filteredLcs = allLcs.filter(lc => {
+      if (fp !== "all" && (lc.fp || "") !== fp) return false;
+      if (q) {
+        const hay = [lc.placa, lc.cliente, lc.cpf, lc.servico, lc.unit_nome]
+          .map(x => String(x || "").toLowerCase()).join(" | ");
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    pdvPage = 0;
+    renderPdv();
+  }
+
+  function renderPdv() {
+    const tb = document.getElementById("lcBody");
+    const total = filteredLcs.length;
+    if (total === 0) {
+      const msg = allLcs.length === 0
+        ? `Nenhum lançamento do PDV nesse período.<br><span style="font-size:var(--ds-text-xs);color:var(--t3)">Essa aba mostra só lançamentos individuais em tempo real.</span>`
+        : `Nenhum lançamento bate com os filtros atuais.`;
+      tb.innerHTML = `<tr><td colspan="9" class="g-empty">${msg}</td></tr>`;
+      document.getElementById("tableMeta").textContent = "0 registro(s)";
+      document.getElementById("pager").style.display = "none";
+      updatePdvKPIs([]);
+      return;
+    }
+    updatePdvKPIs(filteredLcs);
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (pdvPage >= pages) pdvPage = pages - 1;
+    if (pdvPage < 0) pdvPage = 0;
+    const start = pdvPage * PAGE_SIZE;
+    const slice = filteredLcs.slice(start, start + PAGE_SIZE);
+    tb.innerHTML = slice.map(lc => {
+      const fp = lc.fp || "";
+      const fpLbl = escHtml(fpLabel[fp] || fp);
+      const fpIco = (window.AstroShell && AstroShell.fpIcon && fp) ? AstroShell.fpIcon(fp) : "";
+      const chip = fp ? `<span class="fp-chip ${fp}">${fpIco ? `<span class="fp-ico">${fpIco}</span>` : ""}${fpLbl}</span>` : "—";
+      const unitHtml = lc.unit_nome ? `<span class="unit-tag">${escHtml(lc.unit_nome)}</span>` : "—";
+      return `<tr>
+        <td class="data">${escHtml(fmtDate(lc.data))}</td>
+        <td class="data">${escHtml(lc.hora || "")}</td>
+        <td>${unitHtml}</td>
+        <td>${escHtml(lc.placa || "")}</td>
+        <td>${escHtml(lc.cliente || "")}</td>
+        <td>${escHtml(lc.cpf || "")}</td>
+        <td>${escHtml(lc.servico || "")}</td>
+        <td>${chip}</td>
+        <td class="num">${brl(lc.valor)}</td>
+      </tr>`;
+    }).join("");
+    document.getElementById("tableMeta").textContent =
+      `${total.toLocaleString("pt-BR")} registro(s) · pág. ${pdvPage + 1}/${pages}`;
+    const pager = document.getElementById("pager");
+    if (pages > 1) {
+      pager.style.display = "flex";
+      document.getElementById("pagerInfo").textContent =
+        `${(start + 1).toLocaleString("pt-BR")}–${(start + slice.length).toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")}`;
+      document.getElementById("pgPrev").disabled = pdvPage === 0;
+      document.getElementById("pgNext").disabled = pdvPage >= pages - 1;
+    } else {
+      pager.style.display = "none";
+    }
+  }
+
+  function updatePdvKPIs(lcs) {
+    let total = 0, avista = 0, fat = 0, det = 0;
+    for (const lc of lcs) {
+      const v = Number(lc.valor || 0);
+      total += v;
+      const fp = lc.fp || "";
+      if (fp === "faturado") fat += v;
+      else if (fp === "detran") det += v;
+      else avista += v;
+    }
+    const count = lcs.length;
+    document.getElementById("kpiCount").textContent = count.toLocaleString("pt-BR");
+    document.getElementById("kpiCountSub").textContent = count === allLcs.length ? "no período" : `de ${allLcs.length.toLocaleString("pt-BR")} no período`;
+    document.getElementById("kpiTotal").textContent = brl(total);
+    document.getElementById("kpiTicket").textContent = count ? brl(total / count) : "—";
+    document.getElementById("kpiAvista").textContent = brl(avista);
+    document.getElementById("kpiFat").textContent = brl(fat);
+    document.getElementById("kpiDet").textContent = brl(det);
+  }
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  // ── Listeners globais ─────────────────────────────
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.addEventListener("click", () => setTab(b.dataset.tab));
+  });
+
+  document.getElementById("btnAplicar").addEventListener("click", () => {
+    if (currentTab === "emitidos") carregarEmitidos();
+    else carregarPdv();
+  });
+
+  document.getElementById("btnSync").addEventListener("click", sincronizar);
+
+  document.getElementById("btnExportar").addEventListener("click", () => {
+    const { from, to } = getRange();
+    if (!from || !to) return;
+    const unit = document.getElementById("selUnit").value;
+    window.location.href = `/gerencial/api/exportar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&unit=${encodeURIComponent(unit)}`;
+  });
+
+  document.getElementById("selFp").addEventListener("change", applyPdvFilters);
+  document.getElementById("inpBusca").addEventListener("input", debounce(applyPdvFilters, 200));
+  document.getElementById("pgPrev").addEventListener("click", () => { pdvPage--; renderPdv(); });
+  document.getElementById("pgNext").addEventListener("click", () => { pdvPage++; renderPdv(); });
+
+  document.getElementById("inpMes").addEventListener("change", () => {
+    if (currentTab === "emitidos") carregarEmitidos();
+    else carregarPdv();
+  });
+
+  document.getElementById("selUnit").addEventListener("change", () => {
+    if (currentTab === "emitidos") carregarEmitidos();
+    else carregarPdv();
+  });
+
+  // Boot
+  (async () => {
+    await loadUnidades();
+    setTab("emitidos");
+  })();
+</script>
+</body>
+</html>

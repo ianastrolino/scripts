@@ -5489,22 +5489,29 @@ def master_gerencial_page():
     return _nocache(send_from_directory(UI_DIR, "master_gerencial.html"))
 
 
+@app.route("/master/historico")
+@master_view_required
+def master_historico_rede_page():
+    return _nocache(send_from_directory(UI_DIR, "historico-rede.html"))
+
+
+# Rotas legadas apontam pra tela unificada (mantem bookmarks/links funcionando)
 @app.route("/gerencial/historico-caixa")
 @master_view_required
 def master_historico_caixa_page():
-    return _nocache(send_from_directory(UI_DIR, "historico-caixa.html"))
+    return redirect("/master/historico")
+
+
+@app.route("/gerencial/historico-emitido")
+@master_view_required
+def master_historico_emitido_page():
+    return redirect("/master/historico")
 
 
 @app.route("/gerencial/bi")
 @master_view_required
 def master_bi_page():
     return _nocache(send_from_directory(UI_DIR, "bi.html"))
-
-
-@app.route("/gerencial/historico-emitido")
-@master_view_required
-def master_historico_emitido_page():
-    return _nocache(send_from_directory(UI_DIR, "historico-emitido.html"))
 
 
 @app.route("/master/usuarios-conectados")

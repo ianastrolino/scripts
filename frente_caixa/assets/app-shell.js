@@ -145,8 +145,7 @@
         { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
         { id: "cobranca",          label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
         { id: "bi-rede",           label: "BI",                   icon: "relatorios", href: "/gerencial/bi" },
-        { id: "historico-emitido", label: "Histórico emitido",    icon: "historico",  href: "/gerencial/historico-emitido" },
-        { id: "historico-caixa",   label: "Histórico PDV",        icon: "historico",  href: "/gerencial/historico-caixa" },
+        { id: "historico-rede",    label: "Histórico",            icon: "historico",  href: "/master/historico" },
       ],
     },
     {
