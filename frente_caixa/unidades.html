@@ -409,6 +409,9 @@
             <button class="u-icon-btn" data-pin="${slug}" title="Definir PIN master da unidade">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 10-10"/><path d="m18 5 3 3"/><path d="m15 8 3 3"/></svg>
             </button>
+            <button class="u-icon-btn" data-limpar="${slug}" title="Limpar dia (apaga envios_tiny, imported.json e caixa do dia — não toca no Tiny)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 12V8.5A2.5 2.5 0 0 0 11.5 6h0A2.5 2.5 0 0 0 9 8.5V12"/><path d="M5 12h14l-2 9H7l-2-9z"/></svg>
+            </button>
             ${canDelete ? `<button class="u-icon-btn danger" data-del="${slug}" title="Remover unidade">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
             </button>` : ""}
@@ -439,8 +442,33 @@
       grid.querySelectorAll("[data-pin]").forEach(b => {
         b.addEventListener("click", () => definirPin(b.dataset.pin));
       });
+      grid.querySelectorAll("[data-limpar]").forEach(b => {
+        b.addEventListener("click", () => limparDia(b.dataset.limpar));
+      });
     } catch (e) {
       document.getElementById("grid").innerHTML = `<div style="grid-column:1/-1;color:var(--ds-danger);padding:20px">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function limparDia(slug) {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const data = prompt(`⚠ LIMPEZA DESTRUTIVA — unidade "${slug}"\n\nVai apagar do sistema:\n• envios_tiny do dia (espelho local)\n• imported.json (libera reenvio)\n• caixa_dia local (se data = hoje)\n• fechamento do dia (etapa volta a 1)\n\nNÃO toca no Tiny — você cancela o título lá manualmente.\n\nData (YYYY-MM-DD):`, hoje);
+    if (!data) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) { alert("Data inválida. Use YYYY-MM-DD."); return; }
+    if (!confirm(`Confirma apagar dados do dia ${data} da unidade ${slug}?\n\nIsso é IRREVERSÍVEL no espelho local.`)) return;
+    try {
+      const token = await getCsrf();
+      const r = await fetch(`/master/api/unidades/${encodeURIComponent(slug)}/limpar-dia`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ data, confirm: true }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falhou");
+      alert(`Limpeza concluída:\n• envios_tiny removidos: ${j.envios_tiny_removidos}\n• imported.json removidos: ${j.imported_removidos}\n• caixa do dia limpo: ${j.caixa_dia_lancamentos_removidos} lançamento(s)\n\nLembrete: cancele/exclua o título no Tiny manualmente se ainda estiver lá.`);
+      load();
+    } catch (e) {
+      alert("Erro: " + e.message);
     }
   }
 

@@ -3236,6 +3236,98 @@ def master_royalties_page():
     return _nocache(send_from_directory(UI_DIR, "royalties.html"))
 
 
+@app.route("/master/api/unidades/<slug>/limpar-dia", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_limpar_dia(slug: str):
+    """Limpeza destrutiva pra testes/correcoes: remove envios_tiny do dia,
+    remove entries de imported.json correspondentes e desbloqueia fechamento.
+    NAO mexe no Tiny — quem cancela title la e voce manualmente."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        date_iso = (body.get("data") or "").strip()
+        confirm = bool(body.get("confirm"))
+        if not (len(date_iso) == 10 and date_iso[4] == "-" and date_iso[7] == "-"):
+            return _json({"success": False, "error": "data deve ser YYYY-MM-DD"}, 400)
+        if not confirm:
+            return _json({"success": False, "error": "confirmacao obrigatoria"}, 400)
+
+        state_dir = _unit_state_dir(slug)
+        chaves_removidas: list[str] = []
+
+        # 1. envios_tiny.db
+        try:
+            with _db_connect(state_dir) as conn:
+                rows = conn.execute(
+                    "SELECT chave_deduplicacao FROM envios_tiny WHERE unit=? AND data_lancamento=?",
+                    (slug, date_iso)
+                ).fetchall()
+                chaves_removidas = [r["chave_deduplicacao"] for r in rows if r["chave_deduplicacao"]]
+                conn.execute(
+                    "DELETE FROM envios_tiny WHERE unit=? AND data_lancamento=?",
+                    (slug, date_iso)
+                )
+                conn.commit()
+        except Exception as exc:
+            app.logger.warning("[limpar-dia] envios_tiny %s/%s: %s", slug, date_iso, exc)
+
+        # 2. imported.json
+        imp_removidos = 0
+        try:
+            state_path = state_dir / "imported.json"
+            st = load_state(state_path)
+            imp = st.get("imported", {}) if isinstance(st, dict) else {}
+            for chave in chaves_removidas:
+                if chave in imp:
+                    imp.pop(chave)
+                    imp_removidos += 1
+            if isinstance(st, dict):
+                st["imported"] = imp
+                save_state(state_path, st)
+        except Exception as exc:
+            app.logger.warning("[limpar-dia] imported.json %s: %s", slug, exc)
+
+        # 3. caixa_fechamento.json — remove o dia
+        try:
+            fechs = _load_fechamentos(slug)
+            fechs.pop(date_iso, None)
+            _save_fechamentos(slug, fechs)
+        except Exception as exc:
+            app.logger.warning("[limpar-dia] fechamento %s: %s", slug, exc)
+
+        # 4. caixa_dia local (se for hoje, zera lancamentos)
+        lc_removidos = 0
+        try:
+            tz = ZoneInfo("America/Sao_Paulo")
+            hoje_iso = dt.datetime.now(tz).date().isoformat()
+            if date_iso == hoje_iso:
+                state = _load_caixa_dia(slug)
+                lc_removidos = len(state.get("lancamentos", []))
+                state["lancamentos"] = []
+                _save_caixa_dia(slug, state)
+        except Exception as exc:
+            app.logger.warning("[limpar-dia] caixa_dia %s: %s", slug, exc)
+
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.limpar_dia", target=slug, payload={
+            "data": date_iso,
+            "envios_tiny_removidos": len(chaves_removidas),
+            "imported_removidos": imp_removidos,
+            "caixa_dia_lancamentos_removidos": lc_removidos,
+        })
+        return _json({
+            "success": True,
+            "envios_tiny_removidos": len(chaves_removidas),
+            "imported_removidos": imp_removidos,
+            "caixa_dia_lancamentos_removidos": lc_removidos,
+        })
+    except Exception as exc:
+        app.logger.exception("[limpar-dia] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>/pin", methods=["POST"])
 @master_only_required
 @csrf_required
