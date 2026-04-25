@@ -3084,6 +3084,73 @@ def master_api_unidades_criar():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/unidades/<slug>/formas-recebimento")
+@master_only_required
+def master_api_unidade_formas_recebimento(slug: str):
+    """Lista formas de recebimento cadastradas no Tiny da unidade + mapeamento atual."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        importer = TinyImporter(config, state_dir)
+        res = importer.client.request("GET", "formas-recebimento", params={"situacao": 1, "limit": 100})
+        formas = []
+        for it in (res.get("itens") or []):
+            try:
+                tid = int(it.get("id", 0))
+            except Exception:
+                continue
+            if tid <= 0:
+                continue
+            formas.append({"id": tid, "nome": it.get("nome", "") or it.get("descricao", "")})
+        formas.sort(key=lambda x: x["nome"].lower())
+        return _json({
+            "success": True,
+            "formas_tiny": formas,
+            "mapeamento_atual": config["tiny"].get("forma_recebimento_ids", {}),
+        })
+    except Exception as exc:
+        app.logger.exception("[unidades.formas] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/unidades/<slug>/formas-recebimento", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_formas_recebimento_save(slug: str):
+    """Salva mapeamento {chave: tiny_id} pra unidade. So funciona em unidades
+    custom (criadas via UI) — ambientais (env UNITS_CONFIG) nao podem ser
+    editadas em runtime."""
+    custom = _load_units_custom()
+    if slug not in custom:
+        return _json({"success": False, "error": "unidade nao e custom (criada via env)"}, 400)
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        mapeamento = data.get("forma_recebimento_ids") or {}
+        # Valida: chaves esperadas + valores int positivos (ou ausentes)
+        chaves_validas = {"dinheiro", "debito", "credito", "pix", "FA", "faturado", "detran"}
+        limpo: dict[str, int] = {}
+        for k, v in mapeamento.items():
+            if k not in chaves_validas:
+                continue
+            try:
+                vi = int(v)
+            except Exception:
+                continue
+            if vi > 0:
+                limpo[k] = vi
+        custom[slug]["forma_recebimento_ids"] = limpo
+        _save_units_custom(custom)
+        _reload_units()
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.formas_recebimento", target=slug, payload={"qtd": len(limpo)})
+        return _json({"success": True, "saved": limpo})
+    except Exception as exc:
+        app.logger.exception("[unidades.formas.save] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>", methods=["DELETE"])
 @master_only_required
 @csrf_required

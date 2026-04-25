@@ -166,6 +166,27 @@
   </div>
 </main>
 
+<!-- Modal: Mapear formas de pagamento -->
+<div class="modal-overlay" id="modalFP">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">Mapear formas de pagamento — <span id="fpUnitNome"></span></div>
+      <button class="modal-close" id="fpClose" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-top:0;font-size:13px;color:var(--ds-ink-muted)">
+        Pra cada chave do PDV, escolha qual forma de recebimento do Tiny corresponde.
+        Sem isso, o Tiny usa o default da conta (geralmente Boleto).
+      </p>
+      <div id="fpFields"><div style="padding:20px;text-align:center;color:var(--ds-ink-muted)">carregando do Tiny…</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="fpCancel" type="button">Cancelar</button>
+      <button class="btn-primary" id="fpSave" type="button">Salvar mapeamento</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Nova unidade -->
 <div class="modal-overlay" id="modalNova">
   <div class="modal-card">
@@ -287,6 +308,7 @@
           <div class="u-meta">${chipErp} ${chipOrig} ${chipToken}</div>
           <div class="u-actions">
             ${u.erp === "tiny" ? `<a href="/u/${esc(u.slug)}/auth" target="_blank" class="u-btn">Autorizar Tiny</a>` : ""}
+            ${canDelete && u.erp === "tiny" ? `<button class="u-btn" data-fp="${esc(u.slug)}">Mapear FP</button>` : ""}
             <a href="/u/${esc(u.slug)}/gerencial" class="u-btn">Gerencial</a>
             ${canDelete ? `<button class="u-btn danger" data-del="${esc(u.slug)}">Remover</button>` : ""}
           </div>
@@ -308,10 +330,92 @@
           load();
         });
       });
+      grid.querySelectorAll("[data-fp]").forEach(b => {
+        b.addEventListener("click", () => abrirMapearFP(b.dataset.fp));
+      });
     } catch (e) {
       document.getElementById("grid").innerHTML = `<div style="grid-column:1/-1;color:var(--ds-danger);padding:20px">${esc(e.message)}</div>`;
     }
   }
+
+  // ── Modal Mapear FP ─────────────────────────────────────
+  const FP_KEYS = [
+    { key: "dinheiro", label: "Dinheiro" },
+    { key: "debito",   label: "Débito" },
+    { key: "credito",  label: "Crédito" },
+    { key: "pix",      label: "PIX" },
+    { key: "FA",       label: "Faturado (FA)" },
+    { key: "detran",   label: "DETRAN" },
+  ];
+  let _fpSlugAtual = null;
+  let _fpFormas = [];
+
+  async function abrirMapearFP(slug) {
+    _fpSlugAtual = slug;
+    document.getElementById("fpUnitNome").textContent = slug;
+    document.getElementById("fpFields").innerHTML = '<div style="padding:20px;text-align:center;color:var(--ds-ink-muted)">carregando do Tiny…</div>';
+    document.getElementById("modalFP").classList.add("open");
+    try {
+      const r = await fetch(`/master/api/unidades/${encodeURIComponent(slug)}/formas-recebimento`);
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falhou");
+      _fpFormas = j.formas_tiny || [];
+      const atual = j.mapeamento_atual || {};
+      const opts = _fpFormas.map(f => `<option value="${f.id}">${esc(f.nome)} (id ${f.id})</option>`).join("");
+      document.getElementById("fpFields").innerHTML = FP_KEYS.map(k => {
+        const sel = atual[k.key] || "";
+        return `<div class="field">
+          <label>${esc(k.label)}</label>
+          <select data-fpkey="${k.key}">
+            <option value="">— não mapeado —</option>
+            ${opts}
+          </select>
+        </div>`;
+      }).join("");
+      // pré-seleciona valores atuais
+      document.querySelectorAll("#fpFields select").forEach(sel => {
+        const v = atual[sel.dataset.fpkey];
+        if (v) sel.value = String(v);
+      });
+    } catch (e) {
+      document.getElementById("fpFields").innerHTML = `<div style="color:var(--ds-danger);padding:20px">Erro: ${esc(e.message)}</div>`;
+    }
+  }
+
+  document.getElementById("fpClose").addEventListener("click",  () => document.getElementById("modalFP").classList.remove("open"));
+  document.getElementById("fpCancel").addEventListener("click", () => document.getElementById("modalFP").classList.remove("open"));
+
+  document.getElementById("fpSave").addEventListener("click", async () => {
+    if (!_fpSlugAtual) return;
+    const map = {};
+    document.querySelectorAll("#fpFields select").forEach(sel => {
+      const v = sel.value;
+      if (v) map[sel.dataset.fpkey] = parseInt(v, 10);
+    });
+    const btn = document.getElementById("fpSave");
+    btn.disabled = true;
+    btn.textContent = "Salvando…";
+    try {
+      const token = await getCsrf();
+      const r = await fetch(`/master/api/unidades/${encodeURIComponent(_fpSlugAtual)}/formas-recebimento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({ forma_recebimento_ids: map }),
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falhou");
+      btn.textContent = "Salvo ✓";
+      setTimeout(() => {
+        document.getElementById("modalFP").classList.remove("open");
+        btn.disabled = false;
+        btn.textContent = "Salvar mapeamento";
+      }, 800);
+    } catch (e) {
+      alert("Erro: " + e.message);
+      btn.disabled = false;
+      btn.textContent = "Salvar mapeamento";
+    }
+  });
 
   // Modal
   const modal = document.getElementById("modalNova");
