@@ -7433,6 +7433,133 @@ def _backup_log_read(limit: int = 30) -> list[dict]:
         return []
 
 
+def _test_restore_backup() -> dict:
+    """Baixa o backup mais recente do B2, valida que e restauravel.
+
+    Pra cada SQL dump no ZIP: importa num SQLite temporario em memoria.
+    Pra cada JSON: valida que parseia.
+    Retorna {ok, ultimo_arquivo, validos, falhas, error}.
+    """
+    import io, zipfile, sqlite3, tempfile
+    res = {"ok": False, "ultimo_arquivo": "", "validos": [], "falhas": [], "error": None}
+    try:
+        bucket, _ = _b2_bucket()
+        if not bucket:
+            res["error"] = "B2 nao configurado"
+            return res
+        # Lista arquivos, pega o mais recente
+        files = []
+        for fv, _f in bucket.ls(latest_only=True):
+            if fv.file_name.endswith(".zip"):
+                files.append(fv)
+        files.sort(key=lambda f: getattr(f, "upload_timestamp", 0), reverse=True)
+        if not files:
+            res["error"] = "nenhum backup no bucket"
+            return res
+        ultimo = files[0]
+        res["ultimo_arquivo"] = ultimo.file_name
+
+        # Download em memoria
+        buf = io.BytesIO()
+        downloaded = bucket.download_file_by_id(ultimo.id_)
+        downloaded.save(buf)
+        buf.seek(0)
+
+        # Abre o ZIP e valida cada item
+        with zipfile.ZipFile(buf) as zf:
+            for name in zf.namelist():
+                try:
+                    raw = zf.read(name)
+                    if name.endswith(".sql"):
+                        sql = raw.decode("utf-8")
+                        # Importa num SQLite efemero
+                        with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as tf:
+                            conn = sqlite3.connect(tf.name)
+                            try:
+                                conn.executescript(sql)
+                                conn.commit()
+                                # Conta tabelas
+                                tables = conn.execute(
+                                    "SELECT name FROM sqlite_master WHERE type='table'"
+                                ).fetchall()
+                                res["validos"].append({
+                                    "arquivo": name,
+                                    "tabelas": len(tables),
+                                    "tipo": "sql",
+                                })
+                            finally:
+                                conn.close()
+                    elif name.endswith(".json") or name.endswith(".jsonl"):
+                        if name.endswith(".jsonl"):
+                            for line in raw.decode("utf-8").splitlines():
+                                if line.strip():
+                                    json.loads(line)
+                        else:
+                            json.loads(raw.decode("utf-8"))
+                        res["validos"].append({"arquivo": name, "tipo": "json"})
+                    else:
+                        res["validos"].append({"arquivo": name, "tipo": "outro"})
+                except Exception as exc:
+                    res["falhas"].append({"arquivo": name, "erro": str(exc)[:200]})
+
+        res["ok"] = len(res["falhas"]) == 0
+        return res
+    except Exception as exc:
+        app.logger.exception("[backup.test_restore] falha geral")
+        res["error"] = str(exc)
+        return res
+
+
+def _cron_test_restore_backup() -> None:
+    """Roda 1x por mes (dia 1 03:00). Manda email com resultado."""
+    res = _test_restore_backup()
+    tz = ZoneInfo("America/Sao_Paulo")
+    data = dt.datetime.now(tz).strftime("%d/%m/%Y")
+    if res["ok"]:
+        cor, status = "#16a34a", "✓ Backup integro"
+    else:
+        cor, status = "#dc2626", "✗ Backup com falhas"
+    detalhes_html = ""
+    if res["validos"]:
+        detalhes_html += f"<p><strong>{len(res['validos'])}</strong> itens validados</p>"
+    if res["falhas"]:
+        detalhes_html += "<p><strong>Falhas:</strong></p><ul>"
+        for f in res["falhas"][:10]:
+            detalhes_html += f'<li>{f["arquivo"]}: {f["erro"]}</li>'
+        detalhes_html += "</ul>"
+    if res.get("error"):
+        detalhes_html += f"<p style='color:#dc2626'>Erro geral: {res['error']}</p>"
+    html = f"""<!DOCTYPE html>
+<html><body style='font-family:sans-serif;max-width:520px;margin:32px auto;padding:24px;background:#fff;border-radius:8px;border:1px solid #e5e7eb'>
+<h2 style='color:{cor};margin:0 0 8px'>{status}</h2>
+<p style='color:#6b7280;font-size:13px;margin:0 0 16px'>Test restore mensal · {data}</p>
+<p>Arquivo: <code>{res.get('ultimo_arquivo','-')}</code></p>
+{detalhes_html}
+<p style='color:#9ca3af;font-size:12px;margin-top:20px'>Backup baixado do B2, descomprimido, SQL re-importado em SQLite efemero, JSONs validados.</p>
+</body></html>"""
+    try:
+        _send_email(f"[Astrovistorias] Test restore backup — {status}", html)
+    except Exception:
+        app.logger.exception("[backup.test_restore] falha ao enviar email")
+    app.logger.info("[backup.test_restore] ok=%s validos=%d falhas=%d",
+                    res["ok"], len(res["validos"]), len(res["falhas"]))
+
+
+@app.route("/master/api/backup/test-restore", methods=["POST"])
+@master_only_required
+@csrf_required
+def api_backup_test_restore():
+    """Dispara test restore agora. Retorna o resultado."""
+    res = _test_restore_backup()
+    user = _current_user() or {}
+    _write_audit_log(user, "backup_test_restore", target="sistema", payload={
+        "ok": res.get("ok"),
+        "validos": len(res.get("validos", [])),
+        "falhas": len(res.get("falhas", [])),
+    })
+    return _json(res, 200 if res.get("ok") else 500)
+
+
 def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
     """Roda o backup completo: cria ZIP, sobe no Drive, aplica retencao, loga e (opcional) emaila.
 
@@ -7751,6 +7878,7 @@ def _cron_loop() -> None:
     last_renew_am = ""    # 07:00 — token fresco antes da abertura (8h)
     last_renew_pm = ""    # 15:00 — recarrega pra cobrir a tarde
     last_rotation = ""
+    last_test_restore = ""  # dia 1 do mes 03:00 — valida backup
     while True:
         try:
             now   = dt.datetime.now(tz)
@@ -7766,6 +7894,10 @@ def _cron_loop() -> None:
                 last_rotation = today
                 app.logger.info("[cron] Rotacao de logs %s", today)
                 _rotacionar_logs()
+            if now.day == 1 and now.hour == 3 and now.minute == 0 and last_test_restore != today:
+                last_test_restore = today
+                app.logger.info("[cron] Test restore mensal do backup B2")
+                _cron_test_restore_backup()
             if now.hour == 7 and now.minute == 0 and last_renew_am != today:
                 last_renew_am = today
                 app.logger.info("[cron] Renovacao tokens Tiny (07:00 — abertura)")

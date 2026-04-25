@@ -93,6 +93,9 @@
             <a id="backupFolder" class="action-btn" href="#" target="_blank" rel="noopener" style="display:none">
               <span class="ab-icon" id="folderIcon"></span>Abrir painel B2
             </a>
+            <button id="backupTestRestore" class="action-btn" title="Baixa o ultimo ZIP do B2 e valida que e restauravel">
+              Testar restore
+            </button>
             <button id="backupNow" class="action-btn">
               <span class="ab-icon" id="backupNowIcon"></span>Fazer backup agora
             </button>
@@ -190,6 +193,33 @@
       sum.textContent = "erro ao consultar status";
     }
   }
+
+  document.getElementById("backupTestRestore").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    if (!confirm("Testar restore: baixa o último ZIP do B2 e valida que é restaurável. Pode demorar 30s-2min.")) return;
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "Validando…";
+    try {
+      const token = await getCsrf();
+      const r = await fetch("/master/api/backup/test-restore", {
+        method: "POST",
+        headers: { "X-CSRF-Token": token }
+      });
+      const j = await r.json();
+      if (j.ok) {
+        alert(`✓ Backup íntegro\n\nArquivo: ${j.ultimo_arquivo}\nValidados: ${j.validos.length} itens\nFalhas: 0`);
+      } else {
+        const falhasMsg = (j.falhas || []).slice(0,5).map(f => `• ${f.arquivo}: ${f.erro}`).join("\n");
+        alert(`✗ Backup com falhas\n\nArquivo: ${j.ultimo_arquivo || '?'}\nFalhas:\n${falhasMsg || j.error || 'erro desconhecido'}`);
+      }
+    } catch (err) {
+      alert("Erro: " + err.message);
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById("backupNow").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
