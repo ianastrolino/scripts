@@ -395,8 +395,14 @@ def _load_units() -> dict[str, Any]:
         base = json.loads(raw)
     except json.JSONDecodeError:
         base = {}
-    # Merge custom por cima (unidades criadas via UI tem precedencia)
-    base.update(_load_units_custom())
+    # Merge custom: pode ser entry parcial (override de campos) OU unit nova.
+    # Unit ja existente no env recebe os campos de custom por cima (shallow merge),
+    # preservando os outros campos do env. Campos novos (de unit nova) entram inteiros.
+    for slug, cfg in _load_units_custom().items():
+        if slug in base and isinstance(base[slug], dict) and isinstance(cfg, dict):
+            base[slug] = {**base[slug], **cfg}
+        else:
+            base[slug] = cfg
     return base
 
 
@@ -3119,12 +3125,12 @@ def master_api_unidade_formas_recebimento(slug: str):
 @master_only_required
 @csrf_required
 def master_api_unidade_formas_recebimento_save(slug: str):
-    """Salva mapeamento {chave: tiny_id} pra unidade. So funciona em unidades
-    custom (criadas via UI) — ambientais (env UNITS_CONFIG) nao podem ser
-    editadas em runtime."""
+    """Salva mapeamento {chave: tiny_id} pra unidade. Aceita qualquer unidade —
+    se for ambiental (env), cria override parcial em units_custom.json.
+    _load_units faz shallow merge env + custom, custom vence."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
     custom = _load_units_custom()
-    if slug not in custom:
-        return _json({"success": False, "error": "unidade nao e custom (criada via env)"}, 400)
     try:
         data = request.get_json(force=True, silent=True) or {}
         mapeamento = data.get("forma_recebimento_ids") or {}
@@ -3140,6 +3146,9 @@ def master_api_unidade_formas_recebimento_save(slug: str):
                 continue
             if vi > 0:
                 limpo[k] = vi
+        # Cria entry parcial se nao existia (override de unit env)
+        if slug not in custom:
+            custom[slug] = {}
         custom[slug]["forma_recebimento_ids"] = limpo
         _save_units_custom(custom)
         _reload_units()
