@@ -61,6 +61,8 @@
     .tiny-dot { width: 8px; height: 8px; border-radius: 50%; }
     .tiny-ok      .tiny-dot    { background: var(--ds-success); }
     .tiny-ok      .tiny-status { color: var(--ds-success); }
+    .tiny-aguardando_autorizacao .tiny-status { color: var(--ds-ink-muted); }
+    .tiny-nao_aplicavel .tiny-status { color: var(--ds-ink-muted); }
     .tiny-renovar .tiny-dot    { background: var(--ds-warning); }
     .tiny-renovar .tiny-status { color: var(--ds-warning); }
     .tiny-erro    .tiny-dot,
@@ -441,19 +443,25 @@
         const text = document.getElementById(`tiny-text-${u.id}`);
         const card = document.getElementById(`card-${u.id}`);
         if (!row || !text) return;
-        row.classList.remove("tiny-ok","tiny-renovar","tiny-erro","tiny-ausente");
+        row.classList.remove("tiny-ok","tiny-renovar","tiny-erro","tiny-ausente","tiny-aguardando_autorizacao","tiny-nao_aplicavel");
         const labels = {
           ok: "Online",
           renovar: "Renovacao pendente",
           ausente: "Nao autorizado",
-          erro: "Erro"
+          erro: "Erro",
+          aguardando_autorizacao: "Aguardando autorizacao",
+          nao_aplicavel: u.erp === "omie" ? "Omie (em breve)" : "—",
         };
         row.classList.add(`tiny-${u.status}`);
         text.textContent = labels[u.status] || u.status;
 
-        // Remove link antigo se houver (evita duplicar em refreshes)
+        // Remove link antigo se houver
         row.querySelectorAll(".tiny-reauth").forEach(n => n.remove());
-        if (u.status === "ausente" || u.status === "erro") {
+        // Reautorizar so faz sentido pra Tiny com erro real (renovar/erro/ausente
+        // de unidade Tiny ja autorizada antes — nao pra "aguardando_autorizacao"
+        // que indica unidade nova nunca autorizada, ou pra Omie)
+        const precisaAcao = u.status === "ausente" || u.status === "erro" || u.status === "renovar";
+        if (precisaAcao && u.erp === "tiny") {
           const a = document.createElement("a");
           a.className   = "tiny-reauth";
           a.href        = `/u/${u.id}/auth`;
@@ -462,8 +470,9 @@
           a.textContent = "Reautorizar";
           row.appendChild(a);
         }
-        // Borda vermelha no card inteiro quando Tiny problema
-        if (card) card.classList.toggle("tiny-alert", u.status === "ausente" || u.status === "erro");
+        // Borda vermelha so quando token de unidade Tiny ativa esta com problema
+        // ("aguardando_autorizacao" e "nao_aplicavel" nao alarmam)
+        if (card) card.classList.toggle("tiny-alert", precisaAcao && u.erp === "tiny");
       });
     } catch (_) {}
   }

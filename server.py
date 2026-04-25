@@ -1745,10 +1745,18 @@ def master_api_tiny_health():
         cache.clear()
 
     for uid in UNITS.keys():
+        unit_cfg = UNITS[uid] or {}
+        erp = (unit_cfg.get("erp") or "tiny").lower()
+        entry = {"id": uid, "nome": unit_cfg.get("nome", uid), "erp": erp}
+        # Unidades nao-Tiny nao fazem OAuth — marca como nao_aplicavel
+        if erp != "tiny":
+            entry["status"] = "nao_aplicavel"
+            entry["has_token"] = False
+            items.append(entry)
+            continue
         p = _unit_state_dir(uid) / "tiny_tokens.json"
-        entry = {"id": uid, "nome": UNITS[uid].get("nome", uid)}
         if not p.exists():
-            entry["status"] = "ausente"
+            entry["status"] = "aguardando_autorizacao"
             entry["has_token"] = False
             items.append(entry)
             continue
