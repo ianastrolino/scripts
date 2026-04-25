@@ -146,6 +146,11 @@ def _maintenance_gate():
     /api/csrf-token, estaticos de /u/<unit>/<file.ext> (html/css/js/png/ico).
     Bloqueia: /u/<unit>/api/* e /u/<unit>/ (redireciona pra pagina de manutencao).
     """
+    # Multi-worker: recarrega UNITS/USERS se arquivo mudou em outro worker
+    try:
+        _state_maybe_reload()
+    except Exception:
+        pass
     # Registra presenca do usuario logado (para painel "Usuarios conectados")
     try:
         email = session.get("email")
@@ -401,9 +406,50 @@ def _reload_units() -> None:
     UNITS = _load_units()
 
 
+def _reload_users() -> None:
+    """Recarrega USERS em memoria apos mutacao."""
+    global USERS
+    USERS = _load_users()
+
+
 # Carrega uma vez no startup
 USERS: dict[str, Any] = _load_users()
 UNITS: dict[str, Any] = _load_units()
+
+# Multi-worker: detecta mudanca dos arquivos e recarrega. Gunicorn roda com
+# varios workers, cada um com sua copia em memoria. Quando worker A grava,
+# worker B precisa detectar e recarregar. Usa mtime pra evitar ler o JSON a
+# toda request — so quando arquivo mudou.
+_UNITS_MTIME_SEEN: float = 0.0
+_USERS_MTIME_SEEN: float = 0.0
+
+
+def _state_maybe_reload() -> None:
+    """Chamado em cada request (via before_request). Le stat() dos arquivos
+    e recarrega se mtime mudou desde a ultima visita deste worker."""
+    global _UNITS_MTIME_SEEN, _USERS_MTIME_SEEN
+    try:
+        m = _UNITS_CUSTOM_FILE.stat().st_mtime if _UNITS_CUSTOM_FILE.exists() else 0.0
+    except Exception:
+        m = 0.0
+    if m != _UNITS_MTIME_SEEN:
+        _UNITS_MTIME_SEEN = m
+        _reload_units()
+    try:
+        m = _USERS_FILE.stat().st_mtime if _USERS_FILE.exists() else 0.0
+    except Exception:
+        m = 0.0
+    if m != _USERS_MTIME_SEEN:
+        _USERS_MTIME_SEEN = m
+        _reload_users()
+
+
+# Seeds iniciais pra evitar disparar reload no primeiro request
+try:
+    _UNITS_MTIME_SEEN = _UNITS_CUSTOM_FILE.stat().st_mtime if _UNITS_CUSTOM_FILE.exists() else 0.0
+    _USERS_MTIME_SEEN = _USERS_FILE.stat().st_mtime if _USERS_FILE.exists() else 0.0
+except Exception:
+    pass
 
 # ── Auth helpers ───────────────────────────────────────────────────────────────
 # ── Reset de senha self-service ────────────────────────────────────────────
@@ -7200,22 +7246,41 @@ def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
 
 
 def _verificar_saude_tokens() -> None:
-    """Tenta renovar o access_token de cada unidade preventivamente.
+    """Tenta renovar o access_token de cada unidade preventivamente E faz
+    test_call pra validar que o token tem acesso real (empresa certa).
 
-    Se a renovacao falhar (refresh_token expirado/invalido), manda email
-    imediato pro Ian com link de reautorizacao. Deduplicacao: o arquivo
-    `.token_alert_sent` no dir da unidade marca que ja foi alertado hoje.
+    Se qualquer etapa falhar, manda email imediato pro Ian com link de
+    reautorizacao. Deduplicacao: `.token_alert_sent` no dir da unidade
+    marca que ja foi alertado hoje.
     """
     tz    = ZoneInfo("America/Sao_Paulo")
     today = dt.datetime.now(tz).date().isoformat()
     for uid in UNITS:
+        # So faz sentido pra unidades com ERP tiny
+        unit_cfg = UNITS.get(uid, {})
+        if (unit_cfg.get("erp") or "tiny") != "tiny":
+            continue
         try:
             config    = _build_unit_config(uid)
             state_dir = _unit_state_dir(uid)
             _seed_tokens(uid, config)
             importer  = TinyImporter(config, state_dir)
-            # Forca renovacao; se funcionar, access_token fica valido 4h+
+            # 1. Forca renovacao; se funcionar, access_token fica valido 4h+
             importer.refresh_access_token()
+            # 2. Valida acesso real — token pode renovar mas estar em empresa
+            # errada. test_call pega isso.
+            import requests as _rq
+            url = f"{importer.client.base_url}/contas-receber"
+            headers = {"Authorization": f"Bearer {importer.client.access_token()}", "Accept": "application/json"}
+            resp = _rq.get(url, headers=headers, params={"limit": 1}, timeout=10)
+            if resp.status_code in (401, 403):
+                raise RuntimeError(f"HTTP {resp.status_code} — token sem acesso a empresa (reautorizar com empresa certa ativa no Tiny)")
+            elif resp.status_code >= 400:
+                raise RuntimeError(f"HTTP {resp.status_code} no test_call: {resp.text[:200]}")
+            # Tudo ok — limpa marker antigo se existir (libera alerta futuro)
+            marker = _unit_state_dir(uid) / ".token_alert_sent"
+            if marker.exists():
+                marker.unlink()
             app.logger.info("[cron:tokens] %s OK", uid)
         except Exception as exc:
             # Deduplica alerta por unidade por dia
