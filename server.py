@@ -7119,15 +7119,30 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
         "error": None,
     }
     try:
-        zip_bytes = _criar_backup_zip()
-        size_kb   = len(zip_bytes) // 1024
-        resultado["size_kb"] = size_kb
-
         # Nome do arquivo — auto usa so data (1 por dia), manual inclui hora
         if tipo == "auto":
             fname = f"astro_backup_{today}.zip"
         else:
             fname = f"astro_backup_{today}_{now.strftime('%H%M%S')}_manual.zip"
+
+        # Dedup: se ja rodou backup 'auto' com sucesso hoje, pula. Protege contra
+        # restart proximo a 00:00 que fazia o cron rodar 2x (2 workers perdem
+        # last_backup ao reiniciar).
+        if tipo == "auto":
+            for entry in _backup_log_read(limit=10):
+                if (entry.get("tipo") == "auto"
+                        and entry.get("b2_ok")
+                        and (entry.get("ts") or "")[:10] == today
+                        and entry.get("b2_name") == fname):
+                    app.logger.info("[backup] auto do dia %s ja existe (%s) — pulando", today, fname)
+                    resultado["ok"] = True
+                    resultado["deduped"] = True
+                    resultado["b2"] = {"ok": True, "name": fname, "deduped": True}
+                    return resultado
+
+        zip_bytes = _criar_backup_zip()
+        size_kb   = len(zip_bytes) // 1024
+        resultado["size_kb"] = size_kb
 
         # Backblaze B2
         resultado["b2"] = _upload_backup_to_b2(zip_bytes, fname)
