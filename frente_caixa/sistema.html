@@ -65,6 +65,21 @@
         <p class="app-page-sub">Manutenção, backup, infraestrutura.</p>
       </div>
 
+      <!-- Saúde do sistema (visão geral) -->
+      <div class="card" id="saudeCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--ds-space-3)">
+          <div class="card-label">Saúde do sistema</div>
+          <button id="saudeRefresh" class="action-btn" type="button">Recarregar</button>
+        </div>
+        <div id="saudeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+          <div style="grid-column:1/-1;color:var(--ds-ink-muted);font-size:13px">carregando…</div>
+        </div>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--ds-ink-muted)">Crons agendados</summary>
+          <table id="saudeCrons" style="width:100%;margin-top:8px;font-size:12px;border-collapse:collapse"></table>
+        </details>
+      </div>
+
       <!-- Modo Manutenção -->
       <div class="card" style="display:flex;gap:var(--ds-space-3);flex-wrap:wrap;align-items:center">
         <div style="flex:1;min-width:220px">
@@ -398,9 +413,46 @@
 
   document.getElementById("jsErrRefresh").addEventListener("click", loadJsErrors);
 
+  async function loadSaude() {
+    const grid = document.getElementById("saudeGrid");
+    const cronsTb = document.getElementById("saudeCrons");
+    try {
+      const r = await fetch("/master/api/sistema/saude");
+      const j = await r.json();
+      const tinyTotal = (j.tiny.online || 0) + (j.tiny.aguardando || 0) + (j.tiny.erro || 0);
+      const tinyOk = j.tiny.online === tinyTotal && tinyTotal > 0;
+      const diskPct = j.disco.disk_used_pct || 0;
+      const diskCor = diskPct > 85 ? "var(--ds-danger)" : (diskPct > 70 ? "var(--ds-warning)" : "var(--ds-success)");
+      const backupCor = j.backup.ok ? "var(--ds-success)" : "var(--ds-danger)";
+      const jsCor = (j.js_errors.total_24h > 0) ? "var(--ds-danger)" : "var(--ds-success)";
+      const cells = [
+        { lbl: "Uptime",        val: j.uptime_human, sub: `desde ${j.boot_iso ? j.boot_iso.replace("T"," ").slice(0,16) : "—"}`, cor: "var(--ds-ink)" },
+        { lbl: "Tiny",          val: `${j.tiny.online}/${tinyTotal}`, sub: tinyOk ? "todos online" : (j.tiny.aguardando ? `${j.tiny.aguardando} aguardando` : `${j.tiny.erro} com erro`), cor: tinyOk ? "var(--ds-success)" : "var(--ds-warning)" },
+        { lbl: "Backup último", val: j.backup.ok ? "✓ OK" : "✗ FALHA", sub: j.backup.ha ? `${j.backup.ha} atrás · ${j.backup.size_kb} KB` : "—", cor: backupCor },
+        { lbl: "Disco",         val: `${diskPct}%`, sub: `${j.disco.data_size} · ${j.disco.disk_free} livres`, cor: diskCor },
+        { lbl: "Erros JS 24h",  val: String(j.js_errors.total_24h), sub: `${j.js_errors.total_total} no histórico`, cor: jsCor },
+        { lbl: "Unidades",      val: String(j.unidades_total), sub: `${j.tiny.nao_aplicavel} Omie`, cor: "var(--ds-ink)" },
+      ];
+      grid.innerHTML = cells.map(c => `
+        <div style="padding:10px 12px;background:var(--ds-surface);border:1px solid var(--ds-line);border-radius:var(--ds-radius-md)">
+          <div style="font-size:10px;font-weight:800;color:var(--ds-ink-muted);text-transform:uppercase;letter-spacing:.06em">${escHtml(c.lbl)}</div>
+          <div style="font-size:18px;font-weight:800;color:${c.cor};margin-top:2px;font-variant-numeric:tabular-nums">${escHtml(c.val)}</div>
+          <div style="font-size:11px;color:var(--ds-ink-muted);margin-top:2px">${escHtml(c.sub || "—")}</div>
+        </div>
+      `).join("");
+      cronsTb.innerHTML = `<thead><tr><th style="text-align:left;padding:4px 8px;color:var(--ds-ink-muted);font-weight:600">Hora</th><th style="text-align:left;padding:4px 8px;color:var(--ds-ink-muted);font-weight:600">Tarefa</th></tr></thead><tbody>` +
+        (j.crons || []).map(c => `<tr><td style="padding:4px 8px;font-family:var(--ds-font-mono)">${escHtml(c.hora)}</td><td style="padding:4px 8px">${escHtml(c.tarefa)}</td></tr>`).join("") +
+        `</tbody>`;
+    } catch (e) {
+      grid.innerHTML = `<div style="grid-column:1/-1;color:var(--ds-danger)">erro: ${escHtml(e.message)}</div>`;
+    }
+  }
+  document.getElementById("saudeRefresh").addEventListener("click", loadSaude);
+
   loadMaintStatus();
   loadBackupStatus();
   loadJsErrors();
+  loadSaude();
 </script>
 </body>
 </html>

@@ -117,6 +117,9 @@ app.config.update(
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
+# Marca quando o processo subiu — usado pelo dashboard de saude pra mostrar uptime
+_BOOT_TS = time.time()
+
 # ── Modo manutencao (flag em arquivo no volume persistente) ───────────────────
 _MAINTENANCE_FLAG = DATA_DIR / "maintenance.flag"
 
@@ -1674,6 +1677,137 @@ def master_api_units_status():
             },
         })
     return _json({"status": status, "data": today})
+
+
+@app.route("/master/api/sistema/saude")
+@master_view_required
+def master_api_sistema_saude():
+    """Dashboard de saude: uptime, disco, tiny, backup, js errors, crons."""
+    import shutil as _shutil
+    now_ts = time.time()
+    tz = ZoneInfo("America/Sao_Paulo")
+    now = dt.datetime.now(tz)
+
+    def _human_secs(s: float) -> str:
+        s = int(s)
+        if s < 60: return f"{s}s"
+        if s < 3600: return f"{s // 60}min"
+        if s < 86400: return f"{s // 3600}h {(s % 3600) // 60}min"
+        return f"{s // 86400}d {(s % 86400) // 3600}h"
+
+    # Uptime
+    uptime_secs = now_ts - _BOOT_TS
+    boot_iso = dt.datetime.fromtimestamp(_BOOT_TS, tz).isoformat(timespec="seconds")
+
+    # Disco — DATA_DIR
+    disk_info = {}
+    try:
+        target = DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent
+        du = _shutil.disk_usage(str(target))
+        used_pct = round(du.used / du.total * 100, 1) if du.total else 0
+        # Tamanho do DATA_DIR
+        data_bytes = 0
+        data_files = 0
+        if DATA_DIR.exists():
+            for p in DATA_DIR.rglob("*"):
+                try:
+                    if p.is_file():
+                        data_bytes += p.stat().st_size
+                        data_files += 1
+                except OSError:
+                    continue
+        disk_info = {
+            "data_dir":     str(DATA_DIR),
+            "data_size":    _human_bytes(data_bytes),
+            "data_files":   data_files,
+            "disk_total":   _human_bytes(du.total),
+            "disk_used":    _human_bytes(du.used),
+            "disk_free":    _human_bytes(du.free),
+            "disk_used_pct": used_pct,
+        }
+    except Exception as exc:
+        disk_info = {"error": str(exc)}
+
+    # Tiny: resumo (sem fazer test_call — usa cache)
+    tiny_resumo = {"online": 0, "aguardando": 0, "erro": 0, "nao_aplicavel": 0}
+    for uid in UNITS.keys():
+        unit_cfg = UNITS[uid] or {}
+        if (unit_cfg.get("erp") or "tiny").lower() != "tiny":
+            tiny_resumo["nao_aplicavel"] += 1
+            continue
+        token_file = _unit_state_dir(uid) / "tiny_tokens.json"
+        if not token_file.exists():
+            tiny_resumo["aguardando"] += 1
+            continue
+        # Heuristica simples: se file mtime < 24h ago e expires_at futuro, ok
+        try:
+            stored = json.loads(token_file.read_text())
+            exp_at = float(stored.get("expires_at", 0) or 0)
+            if exp_at > now_ts:
+                tiny_resumo["online"] += 1
+            else:
+                tiny_resumo["erro"] += 1
+        except Exception:
+            tiny_resumo["erro"] += 1
+
+    # Backup: ultimo registro
+    backup_resumo = {"ultimo": None, "ok": False, "size_kb": 0, "ha": ""}
+    try:
+        log = _backup_log_read(limit=10)
+        if log:
+            ult = log[0]
+            backup_resumo["ultimo"] = ult.get("ts", "")
+            backup_resumo["ok"] = bool(ult.get("b2_ok") or ult.get("gdrive_ok"))
+            backup_resumo["size_kb"] = ult.get("size_kb", 0)
+            backup_resumo["tipo"] = ult.get("tipo", "")
+            try:
+                ult_dt = dt.datetime.fromisoformat(ult["ts"])
+                backup_resumo["ha"] = _human_secs((now - ult_dt.astimezone(tz)).total_seconds())
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # JS errors: contagem ultimas 24h
+    js_resumo = {"total_24h": 0, "total_total": 0}
+    try:
+        if _JS_ERRORS_PATH.exists():
+            cutoff = now - dt.timedelta(hours=24)
+            cutoff_iso = cutoff.isoformat(timespec="seconds")
+            with _JS_ERRORS_PATH.open("r", encoding="utf-8") as f:
+                for line in f:
+                    js_resumo["total_total"] += 1
+                    try:
+                        e = json.loads(line)
+                        if (e.get("ts") or "") > cutoff_iso:
+                            js_resumo["total_24h"] += 1
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    # Crons agendados (estatico — refletir o que o _cron_loop faz)
+    cron_schedule = [
+        {"hora": "00:00", "tarefa": "Backup automatico (B2)"},
+        {"hora": "02:30", "tarefa": "Rotacao de logs"},
+        {"hora": "07:00", "tarefa": "Renovacao tokens Tiny"},
+        {"hora": "15:00", "tarefa": "Renovacao tokens Tiny"},
+        {"hora": "18:30", "tarefa": "Alerta de fechamento (operadoras)"},
+        {"hora": "dia 1, 03:00", "tarefa": "Test restore mensal do backup"},
+    ]
+
+    return _json({
+        "boot_iso": boot_iso,
+        "uptime_secs": int(uptime_secs),
+        "uptime_human": _human_secs(uptime_secs),
+        "now_iso": now.isoformat(timespec="seconds"),
+        "disco": disk_info,
+        "tiny": tiny_resumo,
+        "backup": backup_resumo,
+        "js_errors": js_resumo,
+        "crons": cron_schedule,
+        "unidades_total": len(UNITS),
+    })
 
 
 @app.route("/api/log/js-error", methods=["POST"])
