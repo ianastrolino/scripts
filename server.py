@@ -3160,6 +3160,82 @@ def master_api_unidade_formas_recebimento_save(slug: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# ── Royalties ─────────────────────────────────────────────────────────────
+# Percentual por unidade. Default 3%; Itu = 7%.
+_ROYALTY_PCT = {"itu": 7.0}
+_ROYALTY_DEFAULT_PCT = 3.0
+
+
+@app.route("/master/api/royalties")
+@master_only_required
+def master_api_royalties():
+    """Calcula royalties por unidade pro mes selecionado.
+
+    Base: faturamento bruto = soma(valor) de envios_tiny no mes (exclui falhas).
+    Royalty = base × % da unidade (Itu 7%, demais 3%).
+    """
+    try:
+        hoje = dt.date.today()
+        mes_param = (request.args.get("mes") or "").strip()
+        try:
+            ano, m = mes_param.split("-") if mes_param else (str(hoje.year), f"{hoje.month:02d}")
+            ano, m = int(ano), int(m)
+        except Exception:
+            ano, m = hoje.year, hoje.month
+        primeiro = dt.date(ano, m, 1).isoformat()
+        if m == 12:
+            ultimo = (dt.date(ano + 1, 1, 1) - dt.timedelta(days=1)).isoformat()
+        else:
+            ultimo = (dt.date(ano, m + 1, 1) - dt.timedelta(days=1)).isoformat()
+
+        por_unidade = []
+        total_fat = 0.0
+        total_roy = 0.0
+        for uid, info in UNITS.items():
+            unit_dir = _unit_state_dir(uid)
+            try:
+                envios = _db_load_envios_range(uid, unit_dir, primeiro, ultimo)
+            except Exception as exc:
+                app.logger.warning("[royalties] %s: %s", uid, exc)
+                envios = []
+            fat = sum(float(e.get("valor") or 0) for e in envios)
+            qtd = len(envios)
+            pct = float(info.get("royalty_pct", _ROYALTY_PCT.get(uid, _ROYALTY_DEFAULT_PCT)))
+            roy = round(fat * pct / 100.0, 2)
+            por_unidade.append({
+                "unit":       uid,
+                "nome":       info.get("nome", uid),
+                "faturamento": round(fat, 2),
+                "qtd":        qtd,
+                "pct":        pct,
+                "royalty":    roy,
+            })
+            total_fat += fat
+            total_roy += roy
+        por_unidade.sort(key=lambda x: -x["royalty"])
+
+        return _json({
+            "success":      True,
+            "mes":          f"{ano:04d}-{m:02d}",
+            "periodo":      {"de": primeiro, "ate": ultimo},
+            "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "por_unidade":  por_unidade,
+            "totais": {
+                "faturamento": round(total_fat, 2),
+                "royalty":     round(total_roy, 2),
+            },
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/royalties")
+@master_only_required
+def master_royalties_page():
+    return _nocache(send_from_directory(UI_DIR, "royalties.html"))
+
+
 @app.route("/master/api/unidades/<slug>/pin", methods=["POST"])
 @master_only_required
 @csrf_required

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Royalties</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .filter-bar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    select.filter-sel, input.filter-sel {
+      font: inherit; font-size: var(--ds-text-sm);
+      padding: 7px 12px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink);
+    }
+    .btn {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 7px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-surface-alt); }
+
+    .hero {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--ds-space-3); margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-left: 4px solid var(--ds-ink-muted);
+      border-radius: var(--ds-radius-lg);
+      padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi.k-royalty { border-left-color: #16a34a; }
+    .kpi.k-fat     { border-left-color: #2563eb; }
+    .kpi.k-units   { border-left-color: #6b7280; }
+    .kpi-label {
+      font-size: 11px; font-weight: 800; color: var(--ds-ink-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+    }
+    .kpi-val {
+      font-size: 28px; font-weight: 800; color: var(--ds-ink);
+      font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+      line-height: 1.1;
+    }
+    .kpi-sub { font-size: 12px; color: var(--ds-ink-muted); margin-top: 4px; }
+
+    .section {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      overflow: hidden;
+      margin-bottom: var(--ds-space-4);
+    }
+    .section-head {
+      padding: 14px 20px; border-bottom: 1px solid var(--ds-line);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 800; color: var(--ds-ink);
+    }
+    .section-meta { font-size: 12px; color: var(--ds-ink-muted); }
+
+    table.tbl { width: 100%; border-collapse: collapse;
+      font-size: 13px; font-variant-numeric: tabular-nums; }
+    .tbl thead th {
+      text-align: left;
+      font-size: 11px; font-weight: 700;
+      color: var(--ds-ink-muted); text-transform: uppercase; letter-spacing: .04em;
+      padding: 10px 20px; background: var(--ds-surface-alt);
+      border-bottom: 1px solid var(--ds-line);
+    }
+    .tbl tbody td {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--ds-line);
+      color: var(--ds-ink);
+    }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr:hover td { background: var(--ds-surface-alt); }
+    .tbl .num { text-align: right; font-weight: 700; }
+    .tbl .pct { text-align: center; }
+    .pct-chip {
+      display: inline-block; padding: 2px 9px; border-radius: 100px;
+      font-size: 11px; font-weight: 800;
+      background: var(--ds-surface-alt); color: var(--ds-ink-muted);
+    }
+    .pct-chip.high { background: #fef3c7; color: #92400e; }
+    .royalty-val {
+      color: #16a34a; font-weight: 800;
+    }
+    .empty {
+      padding: 30px 20px; text-align: center;
+      color: var(--ds-ink-muted); font-size: 13px;
+    }
+
+    .skel {
+      color: transparent; background: linear-gradient(90deg, var(--ds-line) 0%, var(--ds-surface-alt) 40%, var(--ds-line) 80%);
+      background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite;
+      border-radius: 4px; height: 28px; width: 140px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede — Relatórios</div>
+        <h1 class="app-page-title">Royalties</h1>
+        <p class="app-page-sub">Total devido por unidade no período. Itu 7%, demais unidades 3% sobre o faturamento bruto.</p>
+      </div>
+
+      <div class="toolbar">
+        <div class="filter-bar">
+          <select id="selMes" class="filter-sel"></select>
+          <button id="btnRefresh" class="btn" type="button">Atualizar</button>
+        </div>
+        <div id="infoAtualizado" style="font-size:12px;color:var(--ds-ink-muted)">—</div>
+      </div>
+
+      <div class="hero">
+        <div class="kpi k-royalty">
+          <div class="kpi-label">Royalty total a receber</div>
+          <div class="kpi-val" id="kpiRoyalty">—</div>
+          <div class="kpi-sub" id="kpiRoyaltySub">carregando…</div>
+        </div>
+        <div class="kpi k-fat">
+          <div class="kpi-label">Faturamento bruto da rede</div>
+          <div class="kpi-val" id="kpiFat">—</div>
+          <div class="kpi-sub" id="kpiFatSub">—</div>
+        </div>
+        <div class="kpi k-units">
+          <div class="kpi-label">Unidades</div>
+          <div class="kpi-val" id="kpiUnits">—</div>
+          <div class="kpi-sub" id="kpiUnitsSub">no período</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Por unidade</div>
+          <div class="section-meta" id="metaPeriodo">—</div>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th class="num">Lançamentos</th>
+              <th class="num">Faturamento</th>
+              <th class="pct">Taxa</th>
+              <th class="num">Royalty</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="5" class="empty">carregando…</td></tr></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "royalties",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Royalties", current: true }
+    ]
+  });
+
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function popularMeses() {
+    const sel = document.getElementById("selMes");
+    const hoje = new Date();
+    const nomes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = `${nomes[d.getMonth()]} ${d.getFullYear()}${i === 0 ? " (atual)" : ""}`;
+      sel.appendChild(opt);
+    }
+    sel.value = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`;
+  }
+
+  function fmtBr(iso) {
+    if (!iso) return "—";
+    const [y,m,d] = iso.slice(0,10).split("-");
+    return `${d}/${m}/${y}`;
+  }
+  function fmtRel(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+      if (diff < 60)   return `há ${Math.floor(diff)}s`;
+      if (diff < 3600) return `há ${Math.floor(diff/60)} min`;
+      return `às ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    } catch { return "—"; }
+  }
+
+  async function load() {
+    const root = document.querySelector(".app-content-wrap");
+    const mes = document.getElementById("selMes").value;
+    document.getElementById("kpiRoyalty").innerHTML = '<div class="skel"></div>';
+    document.getElementById("kpiFat").innerHTML = '<div class="skel"></div>';
+    document.getElementById("kpiUnits").innerHTML = '<div class="skel"></div>';
+    document.getElementById("tbody").innerHTML = '<tr><td colspan="5" class="empty">carregando…</td></tr>';
+    try {
+      const r = await fetch(`/master/api/royalties?mes=${encodeURIComponent(mes)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      const t = j.totais;
+      const ativas = (j.por_unidade || []).filter(u => u.qtd > 0).length;
+      document.getElementById("kpiRoyalty").textContent = brl(t.royalty);
+      document.getElementById("kpiRoyaltySub").textContent = `de R$ ${t.faturamento.toLocaleString("pt-BR", {minimumFractionDigits:2})} faturados`;
+      document.getElementById("kpiFat").textContent = brl(t.faturamento);
+      document.getElementById("kpiFatSub").textContent = `mês ${esc(j.mes)}`;
+      document.getElementById("kpiUnits").textContent = `${ativas}/${j.por_unidade.length}`;
+      document.getElementById("kpiUnitsSub").textContent = `com lançamentos no mês`;
+      document.getElementById("metaPeriodo").textContent = `${fmtBr(j.periodo.de)} — ${fmtBr(j.periodo.ate)}`;
+      document.getElementById("infoAtualizado").textContent = `atualizado ${fmtRel(j.atualizado_em)}`;
+      const tb = document.getElementById("tbody");
+      if (!j.por_unidade.length) {
+        tb.innerHTML = '<tr><td colspan="5" class="empty">Nenhuma unidade ativa</td></tr>';
+        return;
+      }
+      tb.innerHTML = j.por_unidade.map(u => {
+        const cls = u.pct >= 5 ? "high" : "";
+        return `<tr>
+          <td><strong>${esc(u.nome)}</strong></td>
+          <td class="num">${u.qtd.toLocaleString("pt-BR")}</td>
+          <td class="num">${brl(u.faturamento)}</td>
+          <td class="pct"><span class="pct-chip ${cls}">${u.pct.toFixed(1).replace(".", ",")}%</span></td>
+          <td class="num royalty-val">${brl(u.royalty)}</td>
+        </tr>`;
+      }).join("");
+    } catch (e) {
+      document.getElementById("tbody").innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--ds-danger)">Erro: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  document.getElementById("selMes").addEventListener("change", load);
+  document.getElementById("btnRefresh").addEventListener("click", load);
+
+  popularMeses();
+  load();
+</script>
+</body>
+</html>

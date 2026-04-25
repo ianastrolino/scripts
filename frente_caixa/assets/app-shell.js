@@ -142,6 +142,7 @@
       items: [
         { id: "master",            label: "Painel Master",        icon: "master",     href: "/master" },
         { id: "contas-receber",    label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
+        { id: "royalties",         label: "Royalties",            icon: "relatorios", href: "/master/royalties", requires: "master" },
         { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
         { id: "cobranca",          label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
         { id: "historico-rede",    label: "Histórico",            icon: "historico",  href: "/master/historico" },
