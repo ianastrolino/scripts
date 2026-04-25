@@ -131,29 +131,34 @@
       ],
     },
     {
-      group: "Gestão",
+      group: "Gestão da unidade",
       items: [
         { id: "gerencial-unit", label: "Gerencial",   icon: "gerencial",  hrefUnit: "/gerencial", requires: "gerencial" },
-        { id: "relatorios",     label: "Relatórios",  icon: "relatorios", disabled: true, badge: "Em breve" },
       ],
     },
     {
-      group: "Rede",
+      group: "Rede — Relatórios",
       requires: "rede",
       items: [
-        { id: "master",           label: "Painel Master",    icon: "master",     href: "/master" },
-        { id: "gerencial-rede",   label: "Gerencial Rede",   icon: "gerencial",  href: "/gerencial" },
-        { id: "bi-rede",             label: "BI",                   icon: "relatorios", href: "/gerencial/bi" },
-        { id: "historico-emitido",   label: "Histórico emitido",    icon: "historico",  href: "/gerencial/historico-emitido" },
-        { id: "historico-caixa",     label: "Histórico PDV",        icon: "historico",  href: "/gerencial/historico-caixa" },
-        { id: "usuarios-conectados", label: "Usuários Conectados",  icon: "usuarios",   href: "/master/usuarios-conectados" },
+        { id: "master",            label: "Painel Master",        icon: "master",     href: "/master" },
+        { id: "contas-receber",    label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
+        { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
+        { id: "cobranca",          label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
+        { id: "bi-rede",           label: "BI",                   icon: "relatorios", href: "/gerencial/bi" },
+        { id: "historico-emitido", label: "Histórico emitido",    icon: "historico",  href: "/gerencial/historico-emitido" },
+        { id: "historico-caixa",   label: "Histórico PDV",        icon: "historico",  href: "/gerencial/historico-caixa" },
+      ],
+    },
+    {
+      group: "Rede — Admin",
+      requires: "rede",
+      items: [
+        { id: "unidades",            label: "Unidades",             icon: "unidades",    href: "/master/unidades", requires: "master" },
         { id: "usuarios",            label: "Usuários",             icon: "usuariosCog", href: "/master/usuarios" },
-        { id: "auditoria",           label: "Auditoria",            icon: "auditoria",  href: "/master/auditoria" },
-        { id: "aprovacoes",          label: "Aprovações",           icon: "aprovacoes", href: "/master/aprovacoes", requires: "master", dynamicBadge: "pendingApprovals" },
-        { id: "contas-receber",      label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
-        { id: "cobranca",            label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
-        { id: "categorias",          label: "Categorias",           icon: "categorias", href: "/master/categorias" },
-        { id: "unidades",            label: "Unidades",             icon: "unidades",   href: "/master/unidades", requires: "master" },
+        { id: "usuarios-conectados", label: "Conectados",           icon: "usuarios",    href: "/master/usuarios-conectados" },
+        { id: "aprovacoes",          label: "Aprovações",           icon: "aprovacoes",  href: "/master/aprovacoes", requires: "master", dynamicBadge: "pendingApprovals" },
+        { id: "auditoria",           label: "Auditoria",            icon: "auditoria",   href: "/master/auditoria" },
+        { id: "categorias",          label: "Categorias",           icon: "categorias",  href: "/master/categorias" },
       ],
     },
     {
@@ -161,7 +166,6 @@
       items: [
         { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
         { id: "manual",        label: "Manual",         icon: "manual", hrefUnit: "/manual", href: "/manual" },
-        { id: "configuracoes", label: "Configurações",  icon: "config", disabled: true, badge: "Em breve" },
       ],
     },
     {
