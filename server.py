@@ -7314,11 +7314,80 @@ def _verificar_saude_tokens() -> None:
                 app.logger.error("[cron:tokens] falha ao enviar email de alerta: %s", email_exc)
 
 
+def _rotacionar_jsonl_por_idade(path: Path, dias: int) -> int:
+    """Mantem apenas linhas com ts mais recente que `dias`. Retorna qtd removida.
+    Linhas sem campo 'ts' ou invalidas sao preservadas (seguranca)."""
+    if not path.exists():
+        return 0
+    cutoff_iso = (dt.datetime.now(ZoneInfo("America/Sao_Paulo")) - dt.timedelta(days=dias)).isoformat(timespec="seconds")
+    kept: list[str] = []
+    removed = 0
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.rstrip("\n")
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                    ts = entry.get("ts") or ""
+                    if ts and ts < cutoff_iso:
+                        removed += 1
+                        continue
+                except Exception:
+                    pass  # linha invalida — preserva
+                kept.append(stripped)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(("\n".join(kept) + "\n") if kept else "", encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        app.logger.exception("[log_rotation] falha em %s", path)
+    return removed
+
+
+def _rotacionar_reset_tokens(dias: int = 7) -> int:
+    """Remove tokens de reset usados ou expirados ha mais de `dias`."""
+    tokens = _load_reset_tokens()
+    if not tokens:
+        return 0
+    cutoff_iso = (dt.datetime.now(ZoneInfo("America/Sao_Paulo")) - dt.timedelta(days=dias)).isoformat(timespec="seconds")
+    removed = 0
+    for h in list(tokens.keys()):
+        info = tokens[h] or {}
+        used    = info.get("used_at") or ""
+        expires = info.get("expires_at") or ""
+        if (used and used < cutoff_iso) or (not used and expires and expires < cutoff_iso):
+            del tokens[h]
+            removed += 1
+    if removed:
+        _save_reset_tokens(tokens)
+    return removed
+
+
+def _rotacionar_logs() -> None:
+    """Roda 1x por dia na madrugada. Aplica retencao por idade:
+      - audit_log:   180 dias (6 meses — investigacao historica)
+      - session_log: 90 dias  (3 meses — visao operacional)
+      - backup_log:  180 dias
+      - reset_tokens: 7 dias apos usado/expirado
+    pending_approvals nao rotaciona (fila operacional, volume baixo).
+    """
+    try:
+        r1 = _rotacionar_jsonl_por_idade(_AUDIT_LOG_PATH, 180)
+        r2 = _rotacionar_jsonl_por_idade(_SESSION_LOG_PATH, 90)
+        r3 = _rotacionar_jsonl_por_idade(_BACKUP_LOG_PATH, 180)
+        r4 = _rotacionar_reset_tokens(7)
+        app.logger.info("[log_rotation] audit=%d session=%d backup=%d reset=%d", r1, r2, r3, r4)
+    except Exception:
+        app.logger.exception("[log_rotation] erro geral")
+
+
 def _cron_loop() -> None:
     tz           = ZoneInfo("America/Sao_Paulo")
     last_alerta  = ""
     last_backup  = ""
     last_tokens  = ""
+    last_rotation = ""
     while True:
         try:
             now   = dt.datetime.now(tz)
@@ -7330,6 +7399,10 @@ def _cron_loop() -> None:
             if now.hour == 0 and now.minute == 0 and last_backup != today:
                 last_backup = today
                 _executar_backup()
+            if now.hour == 2 and now.minute == 30 and last_rotation != today:
+                last_rotation = today
+                app.logger.info("[cron] Rotacao de logs %s", today)
+                _rotacionar_logs()
             if now.hour == 8 and now.minute == 0 and last_tokens != today:
                 last_tokens = today
                 app.logger.info("[cron] Health check dos tokens Tiny")
