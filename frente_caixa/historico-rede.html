@@ -393,6 +393,21 @@
             </table>
           </div>
         </div>
+
+        <div class="g-section">
+          <div class="g-section-title">Faturamento por dia · quebrado por categoria</div>
+          <div class="table-wrap">
+            <table class="rank">
+              <thead><tr>
+                <th style="width:110px">Data</th>
+                <th>Categorias</th>
+                <th class="num" style="width:80px">Qtd</th>
+                <th class="num" style="width:140px">Total</th>
+              </tr></thead>
+              <tbody id="diaCatBody"><tr><td colspan="4" class="g-empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Panel: PDV -->
@@ -560,14 +575,21 @@
     try {
       const qs = new URLSearchParams({ mes });
       if (unit && unit !== "all") qs.set("unit", unit);
-      const r = await fetch(`/gerencial/api/bi/historico-emitido?${qs}`);
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || "Erro.");
+      // Paralelo: historico-emitido (ranking) + bi/faturamento (por_dia_categoria)
+      const [r1, r2] = await Promise.allSettled([
+        fetch(`/gerencial/api/bi/historico-emitido?${qs}`).then(r => r.json()),
+        fetch(`/gerencial/api/bi/faturamento?${qs}`).then(r => r.json()),
+      ]);
+      const j = r1.status === "fulfilled" ? r1.value : null;
+      if (!j || !j.success) throw new Error((j && j.error) || "Erro ao carregar.");
       renderEmitCards(j);
       renderTop3(j.top3_categorias);
       renderUnidadesEmit(j.por_unit);
       renderClientes(j.top10_clientes);
       renderCategorias(j.ranking_categorias);
+      // Por dia x categoria (do endpoint bi/faturamento)
+      const jf = (r2.status === "fulfilled" && r2.value && r2.value.success) ? r2.value : null;
+      renderDiaCategoria(jf ? jf.por_dia_categoria : []);
     } catch (e) {
       ["cardsStrip","top3Body","unitBody","cliBody","catBody"].forEach(id => {
         const el = document.getElementById(id);
@@ -645,6 +667,22 @@
         <td class="num">${Number(r.count).toLocaleString("pt-BR")}</td>
         <td class="num">${brl(r.total)}</td></tr>
     `).join("");
+  }
+
+  function renderDiaCategoria(lista) {
+    const tbody = document.getElementById("diaCatBody");
+    if (!lista || !lista.length) { tbody.innerHTML = '<tr><td colspan="4" class="g-empty">—</td></tr>'; return; }
+    tbody.innerHTML = lista.map(d => {
+      const cats = (d.categorias || []).map(cat =>
+        `<span class="cat-pill">${escHtml(cat.categoria)} <b>${cat.count}×</b> <span class="cat-pill-val">${brl(cat.total)}</span></span>`
+      ).join("");
+      return `<tr>
+        <td class="data">${escHtml(fmtDate(d.data))}</td>
+        <td><div class="cat-pills">${cats}</div></td>
+        <td class="num">${Number(d.count).toLocaleString("pt-BR")}</td>
+        <td class="num"><b>${brl(d.total)}</b></td>
+      </tr>`;
+    }).join("");
   }
 
   async function sincronizar() {

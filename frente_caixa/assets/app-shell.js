@@ -144,7 +144,6 @@
         { id: "contas-receber",    label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
         { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
         { id: "cobranca",          label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },
-        { id: "bi-rede",           label: "BI",                   icon: "relatorios", href: "/gerencial/bi" },
         { id: "historico-rede",    label: "Histórico",            icon: "historico",  href: "/master/historico" },
       ],
     },

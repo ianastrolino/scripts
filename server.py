@@ -5508,10 +5508,11 @@ def master_historico_emitido_page():
     return redirect("/master/historico")
 
 
+# BI absorvido em /master/historico (tab "Emitidos no Tiny")
 @app.route("/gerencial/bi")
 @master_view_required
 def master_bi_page():
-    return _nocache(send_from_directory(UI_DIR, "bi.html"))
+    return redirect("/master/historico")
 
 
 @app.route("/master/usuarios-conectados")
