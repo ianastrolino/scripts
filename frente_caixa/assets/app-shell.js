@@ -728,4 +728,56 @@
     fpChip,
     refreshBadges,
   };
+
+  // ── Captura global de erros JS ────────────────────────────
+  // Envia ao backend pra log centralizado. Throttle pra evitar flood,
+  // dedup por (message+source+line) na mesma sessao, e nao bloqueia UI.
+  const _jsErrSeen = new Set();
+  let _jsErrCount = 0;
+  const _JS_ERR_MAX = 30; // por sessao
+
+  function _reportJsError(payload) {
+    if (_jsErrCount >= _JS_ERR_MAX) return;
+    const sig = `${payload.message}|${payload.source}|${payload.line}`;
+    if (_jsErrSeen.has(sig)) return;
+    _jsErrSeen.add(sig);
+    _jsErrCount++;
+    payload.url = location.href;
+    try {
+      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/log/js-error", blob);
+      } else {
+        fetch("/api/log/js-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }
+
+  window.addEventListener("error", (ev) => {
+    _reportJsError({
+      type:    "error",
+      message: String(ev.message || (ev.error && ev.error.message) || "unknown"),
+      source:  String(ev.filename || ""),
+      line:    ev.lineno || 0,
+      col:     ev.colno || 0,
+      stack:   ev.error && ev.error.stack ? String(ev.error.stack) : "",
+    });
+  });
+
+  window.addEventListener("unhandledrejection", (ev) => {
+    const reason = ev.reason;
+    _reportJsError({
+      type:    "unhandledrejection",
+      message: reason && reason.message ? String(reason.message) : String(reason),
+      source:  "",
+      line:    0,
+      col:     0,
+      stack:   reason && reason.stack ? String(reason.stack) : "",
+    });
+  });
 })(window);

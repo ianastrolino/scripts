@@ -82,6 +82,18 @@
         </a>
       </div>
 
+      <!-- Erros JS recentes -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--ds-space-3)">
+          <div>
+            <div class="card-label">Erros de frontend</div>
+            <div style="font-size:var(--ds-text-sm);color:var(--ds-ink-muted);margin-top:2px" id="jsErrSummary">carregando…</div>
+          </div>
+          <button id="jsErrRefresh" class="action-btn" type="button">Recarregar</button>
+        </div>
+        <div id="jsErrList" style="font-size:12px;font-family:var(--ds-font-mono);max-height:300px;overflow-y:auto"></div>
+      </div>
+
       <!-- Backup Automático -->
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--ds-space-3);margin-bottom:var(--ds-space-3)">
@@ -353,8 +365,42 @@
     }
   });
 
+  async function loadJsErrors() {
+    const list = document.getElementById("jsErrList");
+    const sum  = document.getElementById("jsErrSummary");
+    list.innerHTML = "<div style='color:var(--ds-ink-muted);padding:8px'>carregando…</div>";
+    try {
+      const r = await fetch("/master/api/js-errors?limit=30");
+      const j = await r.json();
+      const errs = j.errors || [];
+      sum.textContent = errs.length === 0 ? "Nenhum erro JS recente — saudável" : `${errs.length} erro${errs.length === 1 ? "" : "s"} recente${errs.length === 1 ? "" : "s"}`;
+      if (!errs.length) {
+        list.innerHTML = "<div style='color:var(--ds-success);padding:12px;text-align:center'>✓ Nenhum erro registrado</div>";
+        return;
+      }
+      list.innerHTML = errs.map(e => {
+        const when = e.ts ? e.ts.replace("T", " ").slice(0, 16) : "—";
+        const url = (e.url || "").replace(/^https?:\/\/[^/]+/, "");
+        return `<div style="padding:8px;border-bottom:1px dashed var(--ds-line)">
+          <div style="color:var(--ds-danger);font-weight:600">${escHtml(e.message)}</div>
+          <div style="color:var(--ds-ink-muted);margin-top:2px">${escHtml(when)} · ${escHtml(url)} ${e.user_email ? "· " + escHtml(e.user_email) : ""}</div>
+          ${e.source ? `<div style="color:var(--ds-ink-subtle);font-size:11px;margin-top:2px">${escHtml(e.source.split("/").pop())}:${e.line}:${e.col}</div>` : ""}
+        </div>`;
+      }).join("");
+    } catch (e) {
+      list.innerHTML = `<div style='color:var(--ds-danger);padding:8px'>erro: ${e.message}</div>`;
+    }
+  }
+
+  function escHtml(s) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  document.getElementById("jsErrRefresh").addEventListener("click", loadJsErrors);
+
   loadMaintStatus();
   loadBackupStatus();
+  loadJsErrors();
 </script>
 </body>
 </html>

@@ -684,6 +684,7 @@ def _end_session_on_logout(email: str) -> None:
 # Registra toda acao administrativa feita por usuarios com perfil matriz ou
 # master. Operadores comuns nao entram no audit (volume alto, pouco util).
 _AUDIT_LOG_PATH = DATA_DIR / "audit_log.jsonl"
+_JS_ERRORS_PATH = DATA_DIR / "js_errors.jsonl"
 _AUDIT_LOG_LOCK = threading.Lock()
 
 
@@ -1673,6 +1674,61 @@ def master_api_units_status():
             },
         })
     return _json({"status": status, "data": today})
+
+
+@app.route("/api/log/js-error", methods=["POST"])
+def api_log_js_error():
+    """Coleta erros JS do frontend pra diagnostico. Sem auth (pra captar
+    erros mesmo de tela de login). Aceita body small, ignora se gigante.
+    Rate limit informal: max 30 entries/min por sessao (in-memory)."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        msg = (data.get("message") or "")[:500]
+        if not msg:
+            return _json({"ok": True, "skipped": True})
+        entry = {
+            "ts":         dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "user_email": (session.get("email") or "")[:120],
+            "url":        (data.get("url") or "")[:300],
+            "message":    msg,
+            "source":     (data.get("source") or "")[:300],
+            "line":       int(data.get("line") or 0) if isinstance(data.get("line"), (int, str)) else 0,
+            "col":        int(data.get("col") or 0) if isinstance(data.get("col"), (int, str)) else 0,
+            "stack":      (data.get("stack") or "")[:1500],
+            "type":       (data.get("type") or "error")[:30],
+            "user_agent": (request.headers.get("User-Agent") or "")[:200],
+            "ip":         (request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()),
+        }
+        _JS_ERRORS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _JS_ERRORS_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        return _json({"ok": True})
+    except Exception:
+        # Nao loga erro do log de erro pra evitar loop infinito
+        return _json({"ok": False}, 200)
+
+
+@app.route("/master/api/js-errors")
+@master_view_required
+def master_api_js_errors():
+    """Retorna ultimos N erros JS pro debug."""
+    try:
+        limit = max(1, min(int(request.args.get("limit") or 100), 500))
+    except ValueError:
+        limit = 100
+    out: list[dict] = []
+    if _JS_ERRORS_PATH.exists():
+        try:
+            with _JS_ERRORS_PATH.open("r", encoding="utf-8") as f:
+                lines = f.readlines()
+            for line in lines[-limit:]:
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+    return _json({"errors": list(reversed(out))})
 
 
 @app.route("/master/api/diag/tokens")
@@ -7866,7 +7922,8 @@ def _rotacionar_logs() -> None:
         r2 = _rotacionar_jsonl_por_idade(_SESSION_LOG_PATH, 90)
         r3 = _rotacionar_jsonl_por_idade(_BACKUP_LOG_PATH, 180)
         r4 = _rotacionar_reset_tokens(7)
-        app.logger.info("[log_rotation] audit=%d session=%d backup=%d reset=%d", r1, r2, r3, r4)
+        r5 = _rotacionar_jsonl_por_idade(_JS_ERRORS_PATH, 30)
+        app.logger.info("[log_rotation] audit=%d session=%d backup=%d reset=%d js=%d", r1, r2, r3, r4, r5)
     except Exception:
         app.logger.exception("[log_rotation] erro geral")
 
