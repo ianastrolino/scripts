@@ -3798,7 +3798,7 @@ def api_info(unit: str):
         "matriz": bool(user and user.get("matriz")),
         "gerencial": bool(user and (user.get("gerencial") or user.get("master") or user.get("matriz"))),
         "servicos": servicos,
-        "pin_configurado": bool(ud.get("master_pin")),
+        "pin_configurado": bool(ud.get("master_pin") or unit in _load_pin_store()),
     })
 
 
