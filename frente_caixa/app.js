@@ -50,6 +50,9 @@ const state = {
   conferencia: {},     // { recordId: { status, pdv_valor, pdv_fp, pdv_hora } }
   conferido: new Set(), // IDs confirmados manualmente apesar de divergencia/sem_pdv
   pdvBase: null,       // { dinheiro, debito, credito, pix } snapshot do PDV (base para Entradas)
+  confV2: null,        // payload v2: { av, fa, alertas: { match_aproximado, duplicatas, sem_pdv_av }, ... }
+  decisoesV2: new Set(), // IDs de alertas ja resolvidos nesta sessao (chave = tipo+alvo serializado)
+  alertasOpen: true,    // estado colapsavel do banner
 };
 
 // ── Snapshot/autosave: persistencia contra perda de dados ────────────────────
@@ -349,6 +352,8 @@ function loadSample() {
   state.sourceFiles = ["14_04_2026.xls"];
   state.conferencia = {};
   state.conferido = new Set();
+  state.confV2 = null;
+  state.decisoesV2 = new Set();
   render();
   conferirComPDV();
 }
@@ -358,6 +363,8 @@ function clearBatch() {
   state.sourceFiles = [];
   state.conferencia = {};
   state.conferido = new Set();
+  state.confV2 = null;
+  state.decisoesV2 = new Set();
   els.fileInput.value = "";
   render();
 }
@@ -434,6 +441,144 @@ function render() {
   renderTable();
   renderSummary();
   renderIssues();
+  renderAlertasV2();
+}
+
+// ─── Banner de alertas v2 (match aproximado / duplicatas / AV sem PDV) ─────
+function _alertaKey(tipo, alvo) {
+  // chave determinista pra marcar resolvido (sobrevive a re-render)
+  try { return tipo + "|" + JSON.stringify(alvo); } catch { return tipo + "|" + String(alvo); }
+}
+
+function _fmtMoneyShort(v) {
+  return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderAlertasV2() {
+  const host = document.getElementById("v2Alertas");
+  if (!host) return;
+  const v2 = state.confV2;
+  if (!v2 || !v2.alertas) { host.style.display = "none"; host.innerHTML = ""; return; }
+
+  const ma  = v2.alertas.match_aproximado || [];
+  const dup = v2.alertas.duplicatas       || [];
+  const sav = v2.alertas.sem_pdv_av       || [];
+  const total = ma.length + dup.length + sav.length;
+  if (total === 0) { host.style.display = "none"; host.innerHTML = ""; return; }
+
+  const open = state.alertasOpen !== false;
+  const dataIso = (state.records[0]?.data) || new Date().toISOString().slice(0, 10);
+
+  const itemMatch = (m) => {
+    const k = _alertaKey("match_aproximado", { rid: m.planilha_record_id, pdv_id: m.pdv_id });
+    const resolved = state.decisoesV2.has(k);
+    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+      <div class="v2-alerta-desc">
+        Placa <span class="mono"><strong>${escHtml(m.planilha_placa)}</strong></span> da planilha parece ser
+        <span class="mono"><strong>${escHtml(m.pdv_placa)}</strong></span> no PDV
+        (mesmo valor ${_fmtMoneyShort(m.pdv_valor)}, ${m.distancia} caractere(s) diferente)
+      </div>
+      <div class="v2-alerta-acoes">
+        <button class="v2-btn primary" data-v2-decisao="match_aproximado_aplicar"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:m.planilha_record_id, pdv_id:m.pdv_id, planilha_placa:m.planilha_placa, pdv_placa:m.pdv_placa}))}'>Aplicar</button>
+        <button class="v2-btn ghost" data-v2-decisao="match_aproximado_rejeitar"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:m.planilha_record_id, pdv_id:m.pdv_id}))}'>Manter separado</button>
+      </div>
+    </div>`;
+  };
+
+  const itemDup = (d) => {
+    const k = _alertaKey("duplicata", { placa: d.placa, servico: d.servico, valor: d.valor });
+    const resolved = state.decisoesV2.has(k);
+    const horas = (d.lancamentos || []).map((l) => l.hora || "—").join(" · ");
+    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+      <div class="v2-alerta-desc">
+        <span class="mono"><strong>${escHtml(d.placa)}</strong></span> · ${escHtml(d.servico)} · ${_fmtMoneyShort(d.valor)}
+        cobrado <strong>${d.qtd}×</strong> no PDV (horários: ${escHtml(horas)})
+      </div>
+      <div class="v2-alerta-acoes">
+        <button class="v2-btn ghost" data-v2-decisao="duplicata_manter"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({placa:d.placa, servico:d.servico, valor:d.valor, qtd:d.qtd}))}'>São diferentes</button>
+        <button class="v2-btn danger" data-v2-decisao="duplicata_remover"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({placa:d.placa, servico:d.servico, valor:d.valor, qtd:d.qtd, lancamentos:d.lancamentos}))}'>É duplicata</button>
+      </div>
+    </div>`;
+  };
+
+  const itemSav = (s) => {
+    const k = _alertaKey("sem_pdv_av", { rid: s.id });
+    const resolved = state.decisoesV2.has(k);
+    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+      <div class="v2-alerta-desc">
+        AV na planilha sem registro no PDV: <span class="mono"><strong>${escHtml(s.placa || "—")}</strong></span> ·
+        ${escHtml(s.servico || "—")} · ${_fmtMoneyShort(s.preco)}
+        <em style="color:var(--t5)">(receita potencialmente perdida)</em>
+      </div>
+      <div class="v2-alerta-acoes">
+        <button class="v2-btn primary" data-v2-decisao="marcar_cortesia" data-needs-motivo="1"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}'>Cortesia</button>
+        <button class="v2-btn ghost" data-v2-decisao="marcar_ignorar"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}'>Ignorar</button>
+      </div>
+    </div>`;
+  };
+
+  host.innerHTML = `
+    <div class="v2-alertas-header" id="v2AlertasHeader">
+      <div>
+        <span class="v2-alertas-title">⚠ Alertas a revisar<span class="v2-alertas-count">${total}</span></span>
+      </div>
+      <button class="v2-alertas-toggle" type="button">${open ? "ocultar ▴" : "mostrar ▾"}</button>
+    </div>
+    ${open ? `<div class="v2-alertas-body">
+      ${ma.length  ? `<div class="v2-alerta-grupo-titulo">Possível erro de digitação na placa (${ma.length})</div>${ma.map(itemMatch).join("")}` : ""}
+      ${dup.length ? `<div class="v2-alerta-grupo-titulo">Possível duplicata no PDV (${dup.length})</div>${dup.map(itemDup).join("")}` : ""}
+      ${sav.length ? `<div class="v2-alerta-grupo-titulo">À Vista na planilha sem PDV (${sav.length})</div>${sav.map(itemSav).join("")}` : ""}
+    </div>` : ""}
+  `;
+  host.style.display = "block";
+
+  // Toggle
+  host.querySelector("#v2AlertasHeader")?.addEventListener("click", () => {
+    state.alertasOpen = !open;
+    renderAlertasV2();
+  });
+
+  // Botoes de decisao
+  host.querySelectorAll("[data-v2-decisao]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const tipo  = btn.dataset.v2Decisao;
+      const data  = btn.dataset.data;
+      let alvo;
+      try { alvo = JSON.parse(btn.dataset.alvo || "{}"); } catch { alvo = {}; }
+      let motivo = "";
+      if (btn.dataset.needsMotivo === "1") {
+        motivo = (prompt("Motivo da cortesia? (obrigatório)") || "").trim();
+        if (!motivo) return;
+      }
+      const item = btn.closest(".v2-alerta-item");
+      const acoes = item?.querySelector(".v2-alerta-acoes");
+      if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      try {
+        const r = await apiFetch(`${apiBase}/api/fechamento/decisao`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data, tipo, alvo, motivo: motivo || null }),
+        });
+        if (r && r.success) {
+          state.decisoesV2.add(item.dataset.key);
+          item.classList.add("v2-alerta-resolvido");
+        } else {
+          alert("Falha ao registrar decisão: " + (r?.error || "desconhecida"));
+          if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        }
+      } catch (err) {
+        if (err && err.message !== "session_expired") alert("Erro: " + err.message);
+        if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      }
+    });
+  });
 }
 
 function renderStatusChip(record, conf) {
@@ -835,6 +980,7 @@ async function conferirComPDV() {
     });
     if (!result.success) return;
     state.conferencia = result.conferencia;
+    state.confV2 = result.v2 || null;
 
     // Auto-preenche avPagamento para registros confirmados no PDV
     // ("ok" = match por placa+servico, "ok_fallback" = match por placa+valor
@@ -960,6 +1106,8 @@ els.fileInput.addEventListener("change", async (event) => {
   state.records = [...state.records, ...imported];
   state.conferencia = {};
   state.conferido = new Set();
+  state.confV2 = null;
+  state.decisoesV2 = new Set();
   render();
   conferirComPDV().then(() => refreshWizardEtapa());
   if (imported.length) {
