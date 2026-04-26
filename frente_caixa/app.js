@@ -550,11 +550,13 @@ function renderConservacao() {
   card.style.display = "block";
 }
 
-// ─── Modal de PIN (Wizard v2 Fase A — decisoes que mudam regime do lancamento) ───
-// Retorna Promise<{motivo, pin} | null>. null = cancelou.
-function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg }) {
+// ─── Modal de confirmacao (Wizard v2 — decisoes da operadora) ────────────
+// Retorna Promise<{motivo, pin?} | null>. null = cancelou.
+// requerPin=false esconde o campo PIN (decisoes "sem barreira": faturar etc)
+function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg, requerPin = true }) {
   return new Promise((resolve) => {
     const modal  = document.getElementById("pinModal");
+    const card   = modal?.querySelector(".pin-modal-card");
     const tEl    = document.getElementById("pinModalTitle");
     const dEl    = document.getElementById("pinModalDesc");
     const mEl    = document.getElementById("pinModalMotivo");
@@ -562,15 +564,16 @@ function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg }) {
     const errEl  = document.getElementById("pinModalError");
     const okBtn  = document.getElementById("pinModalOk");
     const canBtn = document.getElementById("pinModalCancel");
-    if (!modal || !tEl || !dEl || !mEl || !pEl || !okBtn || !canBtn) {
+    if (!modal || !card || !tEl || !dEl || !mEl || !pEl || !okBtn || !canBtn) {
       resolve(null); return;
     }
-    tEl.textContent = titulo || "Confirmar com PIN";
-    dEl.textContent = descricao || "Esta ação requer o PIN gerencial da unidade.";
-    mEl.placeholder = motivoPlaceholder || "Ex: cliente VIP, política do mês...";
+    tEl.textContent = titulo || "Confirmar";
+    dEl.textContent = descricao || "";
+    mEl.placeholder = motivoPlaceholder || "Justificativa...";
     mEl.value = "";
     pEl.value = "";
     errEl.textContent = errorMsg || "";
+    card.classList.toggle("no-pin", !requerPin);
     modal.hidden = false;
     setTimeout(() => mEl.focus(), 50);
 
@@ -582,11 +585,11 @@ function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg }) {
     const onCancel = () => { cleanup(); resolve(null); };
     const onOk = () => {
       const motivo = mEl.value.trim();
-      const pin    = pEl.value.trim();
-      if (!motivo) { errEl.textContent = "Motivo obrigatório"; mEl.focus(); return; }
-      if (!pin)    { errEl.textContent = "PIN obrigatório"; pEl.focus(); return; }
+      const pin    = requerPin ? pEl.value.trim() : "";
+      if (!motivo)             { errEl.textContent = "Motivo obrigatório"; mEl.focus(); return; }
+      if (requerPin && !pin)   { errEl.textContent = "PIN obrigatório"; pEl.focus(); return; }
       cleanup();
-      resolve({ motivo, pin });
+      resolve(requerPin ? { motivo, pin } : { motivo });
     };
     okBtn.onclick  = onOk;
     canBtn.onclick = onCancel;
@@ -670,7 +673,9 @@ function renderAlertasV2() {
         <em style="color:var(--t5)">(receita potencialmente perdida)</em>
       </div>
       <div class="v2-alerta-acoes">
-        <button class="v2-btn primary" data-v2-decisao="marcar_cortesia"
+        <button class="v2-btn primary" data-v2-decisao="marcar_faturado"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Converter para conta a receber">→ Faturar</button>
+        <button class="v2-btn ghost" data-v2-decisao="marcar_cortesia"
           data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Requer PIN gerencial">🔒 Cortesia</button>
         <button class="v2-btn ghost" data-v2-decisao="marcar_ignorar"
           data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}'>Ignorar</button>
@@ -729,6 +734,16 @@ function renderAlertasV2() {
         render();
       }
     }
+    // Acoplamento marcar_faturado → converte AV → FA na linha
+    if (tipo === "marcar_faturado" && alvo.rid) {
+      const rec = state.records.find((r) => r.id === alvo.rid);
+      if (rec) {
+        rec.fp = "FA";
+        rec.avPagamento = "faturado";
+        rec.editadoOperador = true; // marker pra Fase D
+        render();
+      }
+    }
     carregarRelatorioV2();
     renderAlertasV2(); // re-renderiza pra atualizar o "tudo conferido"
   }
@@ -744,6 +759,40 @@ function renderAlertasV2() {
       let motivo = "", pin = "";
       // Regra Ian: operadora resolve qualquer problema (com log), so cortesia exige PIN
       const requerPin = (tipo === "marcar_cortesia");
+      const requerMotivoSemPin = (tipo === "marcar_faturado");
+
+      // Caminho A: faturar — modal so com motivo (sem PIN)
+      if (requerMotivoSemPin) {
+        const result = await pedirPinModal({
+          titulo: "Marcar como faturado",
+          descricao: "Esta ação converte o lançamento em conta a receber. Fica registrado.",
+          motivoPlaceholder: "Ex: cliente pagará na próxima visita...",
+          requerPin: false,
+        });
+        if (!result) return;
+        motivo = result.motivo;
+        const item = btn.closest(".v2-alerta-item");
+        const acoes = item?.querySelector(".v2-alerta-acoes");
+        if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        try {
+          const r = await apiFetch(`${apiBase}/api/fechamento/decisao`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data, tipo, alvo, motivo }),
+          });
+          if (r && r.success) { _aplicarDecisao(btn, tipo, alvo); }
+          else {
+            alert("Falha: " + (r?.error || "desconhecida"));
+            if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          }
+        } catch (err) {
+          if (err && err.message !== "session_expired") alert("Erro: " + err.message);
+          if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        }
+        return;
+      }
+
+      // Caminho B: cortesia — modal com motivo + PIN (loop ate OK ou cancel)
       if (requerPin) {
         // Loop ate PIN OK ou cancel — backend retorna 403 com code:pin_invalid
         let lastError = "";
