@@ -5649,6 +5649,94 @@ def api_fechamento_relatorio(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# ── Conferencia antecipada: planilha do dia (Etapa 1 / Commit 1) ──────────
+# Operadora exporta planilha do Sispevi varias vezes ao dia. Frontend
+# parseia (parser HTML existente em app.js) e envia records ja como JSON.
+# Backend so persiste por data e devolve.
+def _planilha_dia_dir(unit: str) -> Path:
+    p = _unit_state_dir(unit) / "planilha_dia"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _planilha_dia_path(unit: str, data_iso: str) -> Path:
+    return _planilha_dia_dir(unit) / f"{data_iso}.json"
+
+
+@app.route("/u/<unit>/api/planilha/upload", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_planilha_upload(unit: str):
+    """Persiste a planilha do dia. Body: {data: YYYY-MM-DD, records: [...], arquivo?: str}.
+    Sobrescreve a versao anterior do mesmo dia (com aviso de diff no GET status).
+    Records vem ja parseados pelo frontend (HTML/XLS do Sispevi)."""
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data_iso = (body.get("data") or "").strip()
+        records  = body.get("records") or []
+        arquivo  = (body.get("arquivo") or "").strip()
+        if not data_iso or len(data_iso) != 10:
+            return _json({"success": False, "error": "data invalida (YYYY-MM-DD)"}, 400)
+        if not isinstance(records, list):
+            return _json({"success": False, "error": "records deve ser uma lista"}, 400)
+
+        p = _planilha_dia_path(unit, data_iso)
+        # Diff inteligente (decisao 3): preserva snapshot anterior pra detectar placas removidas
+        prev = {}
+        if p.exists():
+            try: prev = json.loads(p.read_text(encoding="utf-8"))
+            except Exception: prev = {}
+        prev_placas = {(r.get("placa") or "").upper().strip() for r in (prev.get("records") or []) if r.get("placa")}
+        novas_placas = {(r.get("placa") or "").upper().strip() for r in records if r.get("placa")}
+        sumiram = sorted(prev_placas - novas_placas)
+
+        user = _current_user() or {}
+        payload = {
+            "data":      data_iso,
+            "records":   records,
+            "arquivo":   arquivo,
+            "uploaded_at": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "uploaded_by": session.get("email", "") or user.get("email", "") or "?",
+            "versao":    int(prev.get("versao", 0)) + 1,
+        }
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(p)
+        return _json({
+            "success": True,
+            "data": data_iso,
+            "total": len(records),
+            "versao": payload["versao"],
+            "placas_removidas": sumiram,  # frontend mostra aviso se nao vazio
+        })
+    except Exception as exc:
+        app.logger.exception("[planilha.upload] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/planilha/dia")
+@unit_access_required
+def api_planilha_dia(unit: str):
+    """Retorna a planilha do dia persistida.
+    Query: ?data=YYYY-MM-DD (default hoje)."""
+    try:
+        data_iso = (request.args.get("data") or "").strip()
+        if not data_iso:
+            data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        p = _planilha_dia_path(unit, data_iso)
+        if not p.exists():
+            return _json({"success": True, "data": data_iso, "exists": False, "records": []})
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            app.logger.exception("[planilha.dia] %s — JSON corrompido", unit)
+            return _json({"success": True, "data": data_iso, "exists": False, "records": [], "warning": "arquivo corrompido"})
+        return _json({"success": True, "exists": True, **payload})
+    except Exception as exc:
+        app.logger.exception("[planilha.dia] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/caixa/conferir", methods=["POST"])
 @unit_access_required
 @csrf_required
