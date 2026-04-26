@@ -370,14 +370,39 @@
     }, 350);
   }
 
-  async function fetchStatus() {
+  let _fetching = false;
+  let _lastErrorAt = 0;
+
+  async function fetchStatus({ silent = false } = {}) {
+    if (_fetching) return; // evita corrida (auto-refresh + manual)
+    _fetching = true;
+    if (!silent) {
+      els.btnRefresh?.classList.add("is-loading");
+      const prev = els.meta.textContent;
+      if (_lastStatus?.exists) {
+        els.meta.textContent = prev.replace(/atualizada \S+/, "atualizando…");
+      }
+    }
     try {
       const data = _todayIso();
       const r = await fetch(`${apiBase}/api/planilha/status?data=${data}`, { cache: "no-store" });
       const j = await r.json();
-      if (j.success) renderStatus(j);
+      if (j.success) {
+        _lastErrorAt = 0;
+        renderStatus(j);
+      } else {
+        throw new Error(j.error || "resposta sem success");
+      }
     } catch (e) {
-      console.warn("[planilha-dia] status fetch falhou", e);
+      _lastErrorAt = Date.now();
+      console.warn("[planilha-dia] status fetch falhou:", e.message || e);
+      // Indicador discreto de erro: append no meta
+      if (els.meta && _lastStatus?.exists) {
+        els.meta.textContent = els.meta.textContent.replace(/ · ⚠.*$/, "") + " · ⚠ erro ao recalcular";
+      }
+    } finally {
+      _fetching = false;
+      els.btnRefresh?.classList.remove("is-loading");
     }
   }
 
@@ -465,11 +490,40 @@
     if (files.length) uploadPlanilhas(files);
     e.target.value = "";
   });
-  els.btnRefresh.addEventListener("click", fetchStatus);
+  els.btnRefresh.addEventListener("click", () => fetchStatus({ silent: false }));
   els.toggleDetails.addEventListener("click", () => {
     _detailsOpen = !_detailsOpen;
     if (_lastStatus) renderStatus(_lastStatus);
   });
 
-  fetchStatus();
+  // ─── Auto-refresh inteligente ────────────────────────────────────────
+  // 2min, mas só dispara quando aba está visível. Quando aba volta a ser
+  // visível depois de 2min escondida, dispara um refresh imediato.
+  const REFRESH_INTERVAL_MS = 120_000; // 2min
+  let _autoRefreshTimer = null;
+  let _lastFetchAt = Date.now();
+
+  function _scheduleAutoRefresh() {
+    if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+    _autoRefreshTimer = setInterval(() => {
+      if (document.visibilityState !== "visible") return; // pausa em background
+      fetchStatus({ silent: true }).then(() => { _lastFetchAt = Date.now(); });
+    }, REFRESH_INTERVAL_MS);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      const elapsed = Date.now() - _lastFetchAt;
+      if (elapsed > REFRESH_INTERVAL_MS) {
+        // estava escondida tempo suficiente — refresh imediato
+        fetchStatus({ silent: true }).then(() => { _lastFetchAt = Date.now(); });
+      }
+    }
+  });
+
+  // Carga inicial + agenda auto-refresh
+  fetchStatus().then(() => {
+    _lastFetchAt = Date.now();
+    _scheduleAutoRefresh();
+  });
 })();
