@@ -578,7 +578,7 @@ function renderAlertasV2() {
   const itemMatch = (m) => {
     const k = _alertaKey("match_aproximado", { rid: m.planilha_record_id, pdv_id: m.pdv_id });
     const resolved = state.decisoesV2.has(k);
-    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+    return `<div class="v2-alerta-item tipo-match${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
       <div class="v2-alerta-desc">
         Placa <span class="mono"><strong>${escHtml(m.planilha_placa)}</strong></span> da planilha parece ser
         <span class="mono"><strong>${escHtml(m.pdv_placa)}</strong></span> no PDV
@@ -597,7 +597,7 @@ function renderAlertasV2() {
     const k = _alertaKey("duplicata", { placa: d.placa, servico: d.servico, valor: d.valor });
     const resolved = state.decisoesV2.has(k);
     const horas = (d.lancamentos || []).map((l) => l.hora || "—").join(" · ");
-    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+    return `<div class="v2-alerta-item tipo-dup${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
       <div class="v2-alerta-desc">
         <span class="mono"><strong>${escHtml(d.placa)}</strong></span> · ${escHtml(d.servico)} · ${_fmtMoneyShort(d.valor)}
         cobrado <strong>${d.qtd}×</strong> no PDV (horários: ${escHtml(horas)})
@@ -614,7 +614,7 @@ function renderAlertasV2() {
   const itemSav = (s) => {
     const k = _alertaKey("sem_pdv_av", { rid: s.id });
     const resolved = state.decisoesV2.has(k);
-    return `<div class="v2-alerta-item${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
+    return `<div class="v2-alerta-item tipo-sav${resolved ? " v2-alerta-resolvido" : ""}" data-key="${k}">
       <div class="v2-alerta-desc">
         AV na planilha sem registro no PDV: <span class="mono"><strong>${escHtml(s.placa || "—")}</strong></span> ·
         ${escHtml(s.servico || "—")} · ${_fmtMoneyShort(s.preco)}
@@ -650,9 +650,9 @@ function renderAlertasV2() {
       <button class="v2-alertas-toggle" type="button">${open ? "ocultar ▴" : "mostrar ▾"}</button>
     </div>
     ${open ? `<div class="v2-alertas-body">
-      ${ma.length  ? `<div class="v2-alerta-grupo-titulo">Possível erro de digitação na placa (${ma.length})</div>${ma.map(itemMatch).join("")}` : ""}
-      ${dup.length ? `<div class="v2-alerta-grupo-titulo">Possível duplicata no PDV (${dup.length})</div>${dup.map(itemDup).join("")}` : ""}
-      ${sav.length ? `<div class="v2-alerta-grupo-titulo">À Vista na planilha sem PDV (${sav.length})</div>${sav.map(itemSav).join("")}` : ""}
+      ${ma.length  ? `<div class="v2-alerta-grupo-titulo tipo-match">Possível erro de digitação na placa (${ma.length})</div>${ma.map(itemMatch).join("")}` : ""}
+      ${dup.length ? `<div class="v2-alerta-grupo-titulo tipo-dup">Possível duplicata no PDV (${dup.length})</div>${dup.map(itemDup).join("")}` : ""}
+      ${sav.length ? `<div class="v2-alerta-grupo-titulo tipo-sav">À Vista na planilha sem PDV (${sav.length})</div>${sav.map(itemSav).join("")}` : ""}
     </div>` : ""}
   `;
   host.style.display = "block";
