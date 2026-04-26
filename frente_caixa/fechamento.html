@@ -353,10 +353,15 @@
     /* ─── Banner de alertas v2 (match aprox / duplicata / sem PDV) ─── */
     .v2-alertas {
       margin: 0 0 12px;
-      background: var(--ds-warning-soft);
-      border: 1px solid var(--ds-warning);
+      background: var(--ds-info-soft);
+      border: 1px solid var(--ds-info);
       border-radius: var(--ds-radius-md);
       overflow: hidden;
+      transition: background .25s ease, border-color .25s ease;
+    }
+    .v2-alertas.is-all-resolved {
+      background: var(--ds-success-soft);
+      border-color: var(--ds-success);
     }
     .v2-alertas-header {
       display: flex; align-items: center; justify-content: space-between;
@@ -364,26 +369,30 @@
       background: rgba(0,0,0,.025); cursor: pointer;
       user-select: none;
     }
-    .v2-alertas-title { font-size: 12.5px; font-weight: 700; color: var(--ds-warning-strong); letter-spacing: -.01em; }
+    .v2-alertas-title { font-size: 12.5px; font-weight: 700; color: var(--ds-info); letter-spacing: -.01em; }
+    .v2-alertas.is-all-resolved .v2-alertas-title { color: var(--ds-success); }
     .v2-alertas-count {
       display: inline-flex; align-items: center; justify-content: center;
       margin-left: 6px; min-width: 20px; padding: 1px 7px;
       font-size: 11px; font-weight: 700;
-      background: var(--ds-warning); color: #fff;
+      background: var(--ds-info); color: #fff;
       border-radius: 10px; font-variant-numeric: tabular-nums;
     }
+    .v2-alertas.is-all-resolved .v2-alertas-count { background: var(--ds-success); }
     .v2-alertas-toggle {
       font-size: 11px; font-weight: 600;
-      color: var(--ds-warning-strong); background: transparent;
+      color: var(--ds-info); background: transparent;
       border: none; cursor: pointer;
     }
+    .v2-alertas.is-all-resolved .v2-alertas-toggle { color: var(--ds-success); }
     .v2-alertas-body { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
     .v2-alerta-grupo-titulo {
       font-size: 10px; font-weight: 700;
       letter-spacing: .07em; text-transform: uppercase;
-      color: var(--ds-warning-strong);
+      color: var(--ds-info);
       margin-top: 4px;
     }
+    .v2-alertas.is-all-resolved .v2-alerta-grupo-titulo { color: var(--ds-success); }
     .v2-alerta-grupo-titulo:first-child { margin-top: 0; }
     .v2-alerta-item {
       display: flex; align-items: center; justify-content: space-between;
@@ -413,7 +422,11 @@
     .v2-btn.ghost    { background: transparent; color: var(--t4); border-color: var(--ds-line); }
     .v2-btn.ghost:hover    { background: var(--sf3); color: var(--t2); }
     .v2-btn[disabled] { opacity: .5; cursor: default; pointer-events: none; }
-    .v2-alerta-resolvido { opacity: .6; background: var(--sf2); }
+    .v2-alerta-resolvido {
+      background: var(--ds-success-soft);
+      border-color: var(--ds-success);
+    }
+    .v2-alerta-resolvido .v2-alerta-desc { color: var(--t2); }
     .v2-alerta-resolvido .v2-alerta-desc::after {
       content: " · ✓ resolvido";
       font-size: 11px; color: var(--ds-success); font-weight: 700;

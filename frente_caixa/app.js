@@ -629,10 +629,23 @@ function renderAlertasV2() {
     </div>`;
   };
 
+  // Conta resolvidos (decisao registrada nesta sessao)
+  const allKeys = [
+    ...ma.map((m)  => _alertaKey("match_aproximado", { rid: m.planilha_record_id, pdv_id: m.pdv_id })),
+    ...dup.map((d) => _alertaKey("duplicata", { placa: d.placa, servico: d.servico, valor: d.valor })),
+    ...sav.map((s) => _alertaKey("sem_pdv_av", { rid: s.id })),
+  ];
+  const resolvedCount = allKeys.filter((k) => state.decisoesV2.has(k)).length;
+  const allResolved = total > 0 && resolvedCount === total;
+  const titleText = allResolved
+    ? `✓ Tudo revisado (${resolvedCount}/${total})`
+    : `⚠ Alertas a revisar`;
+
+  host.className = "v2-alertas" + (allResolved ? " is-all-resolved" : "");
   host.innerHTML = `
     <div class="v2-alertas-header" id="v2AlertasHeader">
       <div>
-        <span class="v2-alertas-title">⚠ Alertas a revisar<span class="v2-alertas-count">${total}</span></span>
+        <span class="v2-alertas-title">${titleText}${!allResolved ? `<span class="v2-alertas-count">${total - resolvedCount}</span>` : ""}</span>
       </div>
       <button class="v2-alertas-toggle" type="button">${open ? "ocultar ▴" : "mostrar ▾"}</button>
     </div>
