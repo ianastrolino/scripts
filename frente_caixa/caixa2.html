@@ -1552,6 +1552,76 @@
       .wiz-hint { display: none; }
     }
 
+    /* ─── Painel "Planilha do dia" (Conferência Antecipada) ───────── */
+    .planilha-dia-panel {
+      background: var(--ds-surface, #fff);
+      border: 1px solid var(--ds-line, #e2e8f0);
+      border-radius: var(--ds-radius-lg, 8px);
+      margin: 0 0 var(--ds-space-4, 16px);
+      overflow: hidden;
+    }
+    .pd-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--ds-surface-alt, #f8fafc);
+      border-bottom: 1px solid var(--ds-line, #e2e8f0);
+    }
+    .pd-title { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .pd-emoji { font-size: 16px; }
+    .pd-title-text { font-size: 13px; font-weight: 700; color: var(--t1, #0f172a); letter-spacing: -.01em; }
+    .pd-meta { font-size: 11.5px; color: var(--t4, #64748b); margin-left: 4px; }
+    .pd-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .pd-btn-secondary, .pd-btn-primary {
+      padding: 6px 12px;
+      font-size: 12px; font-weight: 600;
+      border-radius: var(--ds-radius-sm, 4px);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all .12s;
+    }
+    .pd-btn-secondary {
+      background: transparent; color: var(--t4, #64748b);
+      border: 1px solid var(--ds-line, #e2e8f0);
+      min-width: 32px;
+    }
+    .pd-btn-secondary:hover { background: var(--ds-surface-alt, #f8fafc); color: var(--t2, #334155); }
+    .pd-btn-primary {
+      background: var(--ds-primary, #0f172a); color: #fff;
+      border: 1px solid var(--ds-primary, #0f172a);
+    }
+    .pd-btn-primary:hover { filter: brightness(1.1); }
+    .pd-body { padding: 12px 16px; }
+    .pd-stats {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .pd-stats:empty { display: none; }
+    .pd-stat {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px;
+      background: var(--ds-surface-alt, #f8fafc);
+      border: 1px solid var(--ds-line, #e2e8f0);
+      border-radius: 12px;
+      font-size: 11.5px; font-weight: 600;
+      color: var(--t3, #475569);
+    }
+    .pd-stat strong { color: var(--t1, #0f172a); font-variant-numeric: tabular-nums; }
+    .pd-stat.pd-stat-ok      strong { color: var(--ds-success, #059669); }
+    .pd-stat.pd-stat-warn    strong { color: var(--ds-warning, #d97706); }
+    .pd-stat.pd-stat-bad     strong { color: var(--ds-danger, #dc2626); }
+    .pd-stat.pd-stat-info    strong { color: var(--ds-info, #0891b2); }
+    .pd-empty {
+      font-size: 12px; color: var(--t4, #64748b); font-style: italic;
+      text-align: center; padding: 4px 0;
+    }
+    .pd-empty[hidden] { display: none; }
+    .pd-stats:not(:empty) + .pd-empty { display: none; }
+    @media (max-width: 720px) {
+      .pd-header { flex-wrap: wrap; }
+      .pd-actions { width: 100%; }
+      .pd-btn-primary { flex: 1; }
+    }
+
     /* ─── Caixa fechado (tarja + estado travado) ─────────── */
     .fech-tarja {
       display: flex;
@@ -1712,6 +1782,28 @@
           adicione abaixo — ao concluir, <a href="fechamento">retorne ao fechamento</a> para enviar ao Tiny.
         </div>
       </div>
+
+      <!-- Painel "Planilha do dia" (Conferência Antecipada) -->
+      <section class="planilha-dia-panel" id="planilhaDiaPanel">
+        <div class="pd-header">
+          <div class="pd-title">
+            <span class="pd-emoji">📊</span>
+            <span class="pd-title-text">Planilha do dia</span>
+            <span class="pd-meta" id="pdMeta">Nenhuma planilha carregada</span>
+          </div>
+          <div class="pd-actions">
+            <button type="button" class="pd-btn-secondary" id="pdRefreshBtn" title="Recalcular cruzamento com PDV">↻</button>
+            <button type="button" class="pd-btn-primary" id="pdUploadBtn">📤 Importar / atualizar</button>
+            <input type="file" id="pdFileInput" hidden accept=".xls,.html,.htm">
+          </div>
+        </div>
+        <div class="pd-body">
+          <div class="pd-stats" id="pdStats"></div>
+          <div class="pd-empty" id="pdEmpty">
+            Nenhuma planilha do dia carregada. Faça upload pra ver status em tempo real.
+          </div>
+        </div>
+      </section>
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════ -->
   <div class="workspace">
 
@@ -2162,5 +2254,6 @@
   <script src="caixa.js?v=19"></script>
   <script src="caixa2-init.js?v=19"></script>
   <script src="caixa2.js?v=19"></script>
+  <script src="planilha-dia.js?v=1"></script>
 </body>
 </html>
