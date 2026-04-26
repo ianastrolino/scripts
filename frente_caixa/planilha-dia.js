@@ -85,18 +85,53 @@
     };
   }
 
+  // Diagnóstico: armazena as primeiras headers candidatas pra mostrar no alert
+  // se nenhuma bater com o esperado
+  let _debugHeaders = [];
+
   function parseExportedHtml(text, sourceFile) {
     const doc = new DOMParser().parseFromString(text, "text/html");
     const rows = [...doc.querySelectorAll("tr")].map((tr) =>
       [...tr.children].map((cell) => cleanText(cell.textContent))
     );
-    const headerIndex = rows.findIndex((row) => {
+    console.log(`[planilha-dia] ${sourceFile}: ${rows.length} rows totais`);
+
+    // Tenta primeiro o header completo (compatibilidade com fechamento)
+    const REQUIRED_FULL = ["DATA", "MODELO", "PLACA", "CLIENTE", "SERVICO", "FP", "PRECO"];
+    // Fallback flexível: mínimo pra um lançamento útil — DATA + PLACA + SERVICO + valor
+    const REQUIRED_MIN  = ["DATA", "PLACA", "SERVICO"];
+    const VALOR_KEYS = ["PRECO", "VALOR", "PRECO BRL", "VALOR R", "TOTAL"];
+
+    let headerIndex = rows.findIndex((row) => {
       const keys = row.map(normalizeKey);
-      return ["DATA", "MODELO", "PLACA", "CLIENTE", "SERVICO", "FP", "PRECO"].every((k) => keys.includes(k));
+      return REQUIRED_FULL.every((k) => keys.includes(k));
     });
-    if (headerIndex < 0) return [];
+    let usingMinimal = false;
+    if (headerIndex < 0) {
+      headerIndex = rows.findIndex((row) => {
+        const keys = row.map(normalizeKey);
+        const hasMin = REQUIRED_MIN.every((k) => keys.includes(k));
+        const hasValor = VALOR_KEYS.some((k) => keys.includes(k));
+        return hasMin && hasValor;
+      });
+      usingMinimal = headerIndex >= 0;
+    }
+
+    if (headerIndex < 0) {
+      // Coleta headers candidatas (rows com pelo menos 4 células de texto curto)
+      const candidates = rows
+        .map((row, i) => ({ i, row, keys: row.map(normalizeKey) }))
+        .filter(({ row }) => row.length >= 4 && row.every((c) => c && c.length < 30))
+        .slice(0, 5);
+      _debugHeaders = candidates.map(({ i, keys }) => `[row ${i}] ${keys.join(" | ")}`);
+      console.warn(`[planilha-dia] ${sourceFile}: nenhum header reconhecido. Candidatos:`, _debugHeaders);
+      return [];
+    }
 
     const headers = rows[headerIndex].map(normalizeKey);
+    console.log(`[planilha-dia] ${sourceFile}: header em row ${headerIndex} (${usingMinimal ? "minimal" : "full"}):`, headers);
+
+    const valorIdx = VALOR_KEYS.map((k) => headers.indexOf(k)).find((i) => i >= 0);
     const col = {
       data:    headers.indexOf("DATA"),
       modelo:  headers.indexOf("MODELO"),
@@ -104,15 +139,20 @@
       cliente: headers.indexOf("CLIENTE"),
       servico: headers.indexOf("SERVICO"),
       fp:      headers.indexOf("FP"),
-      preco:   headers.indexOf("PRECO"),
+      preco:   valorIdx != null ? valorIdx : -1,
     };
 
     return rows.slice(headerIndex + 1).reduce((records, row, rowIndex) => {
       const data = row[col.data] || "";
       if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(data)) return records;
       const parsedRow = [
-        row[col.data], row[col.modelo], row[col.placa],
-        row[col.cliente], row[col.servico], row[col.fp], row[col.preco],
+        row[col.data],
+        col.modelo  >= 0 ? row[col.modelo]  : "",
+        row[col.placa],
+        col.cliente >= 0 ? row[col.cliente] : "",
+        row[col.servico],
+        col.fp      >= 0 ? row[col.fp]      : "AV",
+        col.preco   >= 0 ? row[col.preco]   : "0",
       ];
       records.push(makeRecord(parsedRow, rowIndex, sourceFile));
       return records;
@@ -193,9 +233,15 @@
       }
 
       if (!allRecords.length) {
-        const msg = arquivosFalha.length
-          ? `Nenhuma vistoria encontrada nos ${arquivosFalha.length} arquivo(s).\n\nVerifique se são arquivos exportados do Sispevi (formato HTML).`
-          : "Nenhuma vistoria encontrada na planilha.";
+        let msg = `Nenhuma vistoria encontrada nos ${arquivosFalha.length} arquivo(s).\n\n`;
+        msg += "Verifique se são arquivos exportados do Sispevi (formato HTML).\n\n";
+        if (_debugHeaders.length) {
+          msg += "Headers detectados (primeiras tabelas):\n";
+          msg += _debugHeaders.slice(0, 3).map((h) => "• " + h).join("\n");
+          msg += "\n\nEsperado: DATA | MODELO | PLACA | CLIENTE | SERVICO | FP | PRECO";
+          msg += "\n(ou minimo: DATA | PLACA | SERVICO | VALOR)";
+          console.log("[planilha-dia] Headers detectados:", _debugHeaders);
+        }
         alert(msg);
         return;
       }
