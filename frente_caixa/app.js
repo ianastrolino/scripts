@@ -121,10 +121,10 @@ function hydrateFromPayload(payload) {
 const knownTinyClients = new Map();
 
 let _csrfToken = null;
-async function getCsrfToken() {
-  if (!_csrfToken) {
+async function getCsrfToken(force = false) {
+  if (force || !_csrfToken) {
     try {
-      const data = await fetch("/api/csrf-token").then(r => r.json());
+      const data = await fetch("/api/csrf-token", { cache: "no-store" }).then(r => r.json());
       _csrfToken = data.token || "";
     } catch { _csrfToken = ""; }
   }
@@ -158,7 +158,7 @@ function promptReauthTiny(contextMsg) {
   }
 }
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(path, options = {}, _retry = false) {
   const method = (options.method || "GET").toUpperCase();
   if (method !== "GET") {
     const token = await getCsrfToken();
@@ -174,6 +174,12 @@ async function apiFetch(path, options = {}) {
     data = JSON.parse(text);
   } catch (e) {
     throw new Error(`Resposta invalida do servidor (HTTP ${response.status}): ${text.substring(0, 200)}`);
+  }
+  // CSRF token velho: força refresh e tenta UMA vez. Cobre logout/login em
+  // outra aba, sessão renovada, etc.
+  if (!_retry && response.status === 403 && data && /csrf/i.test(data.error || "")) {
+    await getCsrfToken(true);
+    return apiFetch(path, options, true);
   }
   if (data.session_expired) {
     alert("Sua sessao expirou. Voce sera redirecionado para o login.");
