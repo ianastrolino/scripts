@@ -638,8 +638,8 @@ function renderAlertasV2() {
   const resolvedCount = allKeys.filter((k) => state.decisoesV2.has(k)).length;
   const allResolved = total > 0 && resolvedCount === total;
   const titleText = allResolved
-    ? `✓ Tudo revisado (${resolvedCount}/${total})`
-    : `⚠ Alertas a revisar`;
+    ? `✓ Tudo conferido (${resolvedCount}/${total})`
+    : `⚠ Pendências de conferência`;
 
   host.className = "v2-alertas" + (allResolved ? " is-all-resolved" : "");
   host.innerHTML = `
