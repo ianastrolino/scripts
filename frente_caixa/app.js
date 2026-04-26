@@ -742,17 +742,15 @@ function renderAlertasV2() {
       let alvo;
       try { alvo = JSON.parse(btn.dataset.alvo || "{}"); } catch { alvo = {}; }
       let motivo = "", pin = "";
-      const requerPin = (tipo === "marcar_cortesia" || tipo === "marcar_faturado");
+      // Regra Ian: operadora resolve qualquer problema (com log), so cortesia exige PIN
+      const requerPin = (tipo === "marcar_cortesia");
       if (requerPin) {
         // Loop ate PIN OK ou cancel — backend retorna 403 com code:pin_invalid
         let lastError = "";
         while (true) {
-          const desc = tipo === "marcar_cortesia"
-            ? "Esta ação dispensa o pagamento. Requer PIN gerencial da unidade."
-            : "Esta ação converte o lançamento em conta a receber. Requer PIN gerencial.";
           const result = await pedirPinModal({
-            titulo: tipo === "marcar_cortesia" ? "Marcar como cortesia" : "Marcar como faturado",
-            descricao: desc,
+            titulo: "Marcar como cortesia",
+            descricao: "Esta ação dispensa o pagamento. Requer PIN gerencial da unidade.",
             errorMsg: lastError,
           });
           if (!result) return; // cancelou

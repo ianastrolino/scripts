@@ -5553,12 +5553,11 @@ _DECISAO_TIPOS = {
     "marcar_faturado",            # AV vira FA (REQUER PIN — converte dinheiro em conta a receber)
 }
 
-# Tipos que exigem PIN da unidade pra serem registrados (decisoes "fortes"
-# que mudam o regime do lancamento — cortesia dispensa pagamento, marcar
-# faturado converte em conta a receber)
+# Tipos que exigem PIN da unidade. Regra do Ian (2026-04-26): operadora
+# resolve qualquer problema (sempre com log), mas SO cortesia exige PIN
+# porque dispensa o pagamento — decisao financeira sensivel.
 _DECISAO_TIPOS_REQUER_PIN = {
     "marcar_cortesia",
-    "marcar_faturado",
 }
 
 
@@ -5579,6 +5578,8 @@ def api_fechamento_decisao(unit: str):
             return _json({"success": False, "error": "data invalida (YYYY-MM-DD)"}, 400)
         if tipo not in _DECISAO_TIPOS:
             return _json({"success": False, "error": f"tipo invalido. Aceitos: {sorted(_DECISAO_TIPOS)}"}, 400)
+        # Cortesia e Faturado exigem motivo (Faturado nao tem PIN, mas precisa
+        # justificar conversao AV→FA pra rastreabilidade)
         if tipo in ("marcar_cortesia", "marcar_faturado") and not motivo:
             return _json({"success": False, "error": "motivo obrigatorio pra esse tipo"}, 400)
 
