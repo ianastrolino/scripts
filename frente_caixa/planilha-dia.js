@@ -85,8 +85,39 @@
     };
   }
 
-  // Diagnóstico: armazena as primeiras headers candidatas pra mostrar no alert
-  // se nenhuma bater com o esperado
+  // Heuristicas de detecção (Sispevi exporta SEM header — só dados)
+  const RE_DATA = /^\d{1,2}[\/\-\. ]\d{1,2}[\/\-\. ]\d{4}$/;
+  const RE_PLACA_OLD = /^[A-Z]{3}[\s-]?\d{4}$/;          // antiga: ABC-1234
+  const RE_PLACA_MERCOSUL = /^[A-Z]{3}\d[A-Z]\d{2}$/;    // mercosul: ABC1D23
+  function isData(s) {
+    return RE_DATA.test(cleanText(s).replace(/\s+/g, " "));
+  }
+  function normalizeDataInput(s) {
+    // converte "25 04 2026" / "25.04.2026" / "25-04-2026" pra "25/04/2026"
+    const t = cleanText(s).replace(/[\.\-\s]+/g, "/");
+    return /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t) ? t : "";
+  }
+  function isPlaca(s) {
+    const t = cleanText(s).replace(/[\s-]/g, "").toUpperCase();
+    return RE_PLACA_OLD.test(t) || RE_PLACA_MERCOSUL.test(t);
+  }
+  function lastValor(cells, fromIdx) {
+    // Procura último valor monetário > 0 nas células a partir de fromIdx
+    for (let i = cells.length - 1; i >= fromIdx; i--) {
+      const v = parseMoney(cells[i]);
+      if (v > 0) return v;
+    }
+    return 0;
+  }
+  function detectFp(cells, fromIdx) {
+    for (let i = cells.length - 1; i >= fromIdx; i--) {
+      const c = cleanText(cells[i]).toUpperCase();
+      if (c === "AV" || c === "FA" || c === "DETRAN") return c;
+      if (c === "FATURADO" || c === "BOLETO") return "FA";
+    }
+    return "AV";
+  }
+
   let _debugHeaders = [];
 
   function parseExportedHtml(text, sourceFile) {
@@ -96,67 +127,64 @@
     );
     console.log(`[planilha-dia] ${sourceFile}: ${rows.length} rows totais`);
 
-    // Tenta primeiro o header completo (compatibilidade com fechamento)
+    // Tentativa 1: parser POR HEADER (compatibilidade com planilhas que têm header)
     const REQUIRED_FULL = ["DATA", "MODELO", "PLACA", "CLIENTE", "SERVICO", "FP", "PRECO"];
-    // Fallback flexível: mínimo pra um lançamento útil — DATA + PLACA + SERVICO + valor
-    const REQUIRED_MIN  = ["DATA", "PLACA", "SERVICO"];
-    const VALOR_KEYS = ["PRECO", "VALOR", "PRECO BRL", "VALOR R", "TOTAL"];
-
     let headerIndex = rows.findIndex((row) => {
       const keys = row.map(normalizeKey);
       return REQUIRED_FULL.every((k) => keys.includes(k));
     });
-    let usingMinimal = false;
-    if (headerIndex < 0) {
-      headerIndex = rows.findIndex((row) => {
-        const keys = row.map(normalizeKey);
-        const hasMin = REQUIRED_MIN.every((k) => keys.includes(k));
-        const hasValor = VALOR_KEYS.some((k) => keys.includes(k));
-        return hasMin && hasValor;
-      });
-      usingMinimal = headerIndex >= 0;
+    if (headerIndex >= 0) {
+      console.log(`[planilha-dia] ${sourceFile}: header completo encontrado em row ${headerIndex}`);
+      const headers = rows[headerIndex].map(normalizeKey);
+      const col = {
+        data: headers.indexOf("DATA"), modelo: headers.indexOf("MODELO"),
+        placa: headers.indexOf("PLACA"), cliente: headers.indexOf("CLIENTE"),
+        servico: headers.indexOf("SERVICO"), fp: headers.indexOf("FP"),
+        preco: headers.indexOf("PRECO"),
+      };
+      return rows.slice(headerIndex + 1).reduce((acc, row, i) => {
+        const d = row[col.data] || "";
+        if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) return acc;
+        acc.push(makeRecord([
+          d, row[col.modelo], row[col.placa], row[col.cliente],
+          row[col.servico], row[col.fp], row[col.preco],
+        ], i, sourceFile));
+        return acc;
+      }, []);
     }
 
-    if (headerIndex < 0) {
-      // Coleta headers candidatas (rows com pelo menos 4 células de texto curto)
-      const candidates = rows
-        .map((row, i) => ({ i, row, keys: row.map(normalizeKey) }))
-        .filter(({ row }) => row.length >= 4 && row.every((c) => c && c.length < 30))
-        .slice(0, 5);
-      _debugHeaders = candidates.map(({ i, keys }) => `[row ${i}] ${keys.join(" | ")}`);
-      console.warn(`[planilha-dia] ${sourceFile}: nenhum header reconhecido. Candidatos:`, _debugHeaders);
-      return [];
+    // Tentativa 2: parser SEM header (Sispevi) — detecta linhas que contêm
+    // data válida + placa válida em qualquer posição
+    const out = [];
+    let idx = 0;
+    for (const row of rows) {
+      if (row.length < 6) continue;
+      let dataIdx = -1, placaIdx = -1;
+      for (let i = 0; i < row.length; i++) {
+        if (dataIdx < 0 && isData(row[i])) dataIdx = i;
+        if (placaIdx < 0 && isPlaca(row[i])) placaIdx = i;
+        if (dataIdx >= 0 && placaIdx >= 0) break;
+      }
+      if (dataIdx < 0 || placaIdx < 0) continue;
+
+      const dataNorm = normalizeDataInput(row[dataIdx]);
+      const placaRaw = row[placaIdx];
+      // Layout típico Sispevi: ... PLACA | CLIENTE_TIPO | SERVICO | ... | FP | VALOR | VALOR
+      const cliente = row[placaIdx + 1] || "";
+      const servico = row[placaIdx + 2] || "";
+      const fp      = detectFp(row, placaIdx + 3);
+      const valor   = lastValor(row, placaIdx + 3);
+
+      out.push(makeRecord([dataNorm, "", placaRaw, cliente, servico, fp, valor], idx++, sourceFile));
     }
+    console.log(`[planilha-dia] ${sourceFile}: parser sem-header detectou ${out.length} vistorias`);
 
-    const headers = rows[headerIndex].map(normalizeKey);
-    console.log(`[planilha-dia] ${sourceFile}: header em row ${headerIndex} (${usingMinimal ? "minimal" : "full"}):`, headers);
-
-    const valorIdx = VALOR_KEYS.map((k) => headers.indexOf(k)).find((i) => i >= 0);
-    const col = {
-      data:    headers.indexOf("DATA"),
-      modelo:  headers.indexOf("MODELO"),
-      placa:   headers.indexOf("PLACA"),
-      cliente: headers.indexOf("CLIENTE"),
-      servico: headers.indexOf("SERVICO"),
-      fp:      headers.indexOf("FP"),
-      preco:   valorIdx != null ? valorIdx : -1,
-    };
-
-    return rows.slice(headerIndex + 1).reduce((records, row, rowIndex) => {
-      const data = row[col.data] || "";
-      if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(data)) return records;
-      const parsedRow = [
-        row[col.data],
-        col.modelo  >= 0 ? row[col.modelo]  : "",
-        row[col.placa],
-        col.cliente >= 0 ? row[col.cliente] : "",
-        row[col.servico],
-        col.fp      >= 0 ? row[col.fp]      : "AV",
-        col.preco   >= 0 ? row[col.preco]   : "0",
-      ];
-      records.push(makeRecord(parsedRow, rowIndex, sourceFile));
-      return records;
-    }, []);
+    if (out.length === 0) {
+      // Coleta amostra das primeiras 5 rows pra debug
+      _debugHeaders = rows.slice(0, 5).map((row, i) => `[row ${i}] ${row.slice(0, 12).join(" | ")}`);
+      console.warn(`[planilha-dia] ${sourceFile}: nada detectado. Primeiras rows:`, _debugHeaders);
+    }
+    return out;
   }
 
   // ── UI ────────────────────────────────────────────────────────────────
