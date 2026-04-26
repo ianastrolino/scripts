@@ -5810,6 +5810,8 @@ def api_caixa_conferir(unit: str):
         extras_av = [p for p in pdv_sem_planilha if (p.get("fp") or "").lower() not in ("faturado", "detran")]
         extras_fa = [p for p in pdv_sem_planilha if (p.get("fp") or "").lower() in ("faturado", "detran")]
 
+        # FA "sem_pdv" e o caso NORMAL — FA vira boleto, nao passa pelo PDV.
+        # So vira alerta se for AV (potencial receita perdida).
         v2 = {
             "av": records_av,
             "fa": records_fa,
@@ -5818,14 +5820,19 @@ def api_caixa_conferir(unit: str):
             "alertas": {
                 "match_aproximado": match_aproximado,
                 "duplicatas":       duplicatas,
-                "sem_pdv_av":       sem_pdv_av,
-                "sem_pdv_fa":       sem_pdv_fa,
+                "sem_pdv_av":       sem_pdv_av,    # ALERTA real (receita perdida)
+            },
+            "info": {
+                # FA aguardando mapeamento Tiny — fluxo normal, nao e alerta
+                "fa_aguardando_mapeamento": sem_pdv_fa,
             },
             "totais": {
                 "pdv":             len(lancamentos),
                 "planilha":        len(records),
                 "auto_conferidos": auto_conferidos,
                 "extras_pdv":      len(pdv_sem_planilha),
+                "av_planilha":     len(records_av),
+                "fa_planilha":     len(records_fa),
             },
         }
 
