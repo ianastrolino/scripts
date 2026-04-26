@@ -747,8 +747,18 @@ function renderAlertasV2() {
     renderAlertasV2();
   });
 
+  // Marker de auditoria: registra que a linha foi tocada pelo operador
+  function _marcarEditado(rec, tipo, motivo) {
+    if (!rec) return;
+    rec.editadoOperador = {
+      tipo,                                          // ex: "adicionar_pagamento"
+      ts:    new Date().toISOString(),
+      motivo: motivo || null,
+    };
+  }
+
   // Helper: aplica efeitos visuais + acoplamentos apos POST decisao com sucesso
-  function _aplicarDecisao(btn, tipo, alvo) {
+  function _aplicarDecisao(btn, tipo, alvo, motivo) {
     const item = btn.closest(".v2-alerta-item");
     if (item) {
       state.decisoesV2.add(item.dataset.key);
@@ -760,7 +770,7 @@ function renderAlertasV2() {
         .map((l) => state.records.find((rec) => rec.id === `pdv-${l.id}` && !rec.ignorar))
         .filter(Boolean);
       if (candidatos.length > 1) {
-        candidatos.slice(1).forEach((rec) => { rec.ignorar = true; });
+        candidatos.slice(1).forEach((rec) => { rec.ignorar = true; _marcarEditado(rec, tipo, motivo); });
         render();
       }
     }
@@ -770,7 +780,7 @@ function renderAlertasV2() {
       if (rec) {
         rec.fp = "FA";
         rec.avPagamento = "faturado";
-        rec.editadoOperador = true; // marker pra Fase D
+        _marcarEditado(rec, tipo, motivo);
         render();
       }
     }
@@ -779,9 +789,19 @@ function renderAlertasV2() {
       const rec = state.records.find((r) => r.id === alvo.rid);
       if (rec) {
         rec.avPagamento = alvo.forma_pagamento;
-        rec.editadoOperador = true;
+        _marcarEditado(rec, tipo, `FP: ${alvo.forma_pagamento}`);
         render();
       }
+    }
+    // Acoplamento marcar_cortesia → marca o registro AV mas mantem na lista (cortesia visivel)
+    if (tipo === "marcar_cortesia" && alvo.rid) {
+      const rec = state.records.find((r) => r.id === alvo.rid);
+      if (rec) { _marcarEditado(rec, tipo, motivo); render(); }
+    }
+    // Acoplamento marcar_ignorar → so registra a edicao (sem mudar fp/pagto)
+    if (tipo === "marcar_ignorar" && alvo.rid) {
+      const rec = state.records.find((r) => r.id === alvo.rid);
+      if (rec) { _marcarEditado(rec, tipo, motivo); render(); }
     }
     carregarRelatorioV2();
     renderAlertasV2(); // re-renderiza pra atualizar o "tudo conferido"
@@ -849,7 +869,7 @@ function renderAlertasV2() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ data, tipo, alvo, motivo }),
           });
-          if (r && r.success) { _aplicarDecisao(btn, tipo, alvo); }
+          if (r && r.success) { _aplicarDecisao(btn, tipo, alvo, motivo); }
           else {
             alert("Falha: " + (r?.error || "desconhecida"));
             if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -880,7 +900,7 @@ function renderAlertasV2() {
             body: JSON.stringify({ data, tipo, alvo, motivo, pin }),
           });
           if (r2 && r2.success) {
-            return _aplicarDecisao(btn, tipo, alvo, r2);
+            return _aplicarDecisao(btn, tipo, alvo, motivo);
           }
           if (r2 && r2.code === "pin_invalid") {
             lastError = "PIN inválido — tente novamente."; continue;
@@ -907,7 +927,7 @@ function renderAlertasV2() {
           body: JSON.stringify({ data, tipo, alvo, motivo: motivo || null }),
         });
         if (r && r.success) {
-          _aplicarDecisao(btn, tipo, alvo);
+          _aplicarDecisao(btn, tipo, alvo, motivo);
         } else {
           alert("Falha ao registrar decisão: " + (r?.error || "desconhecida"));
           if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -918,6 +938,24 @@ function renderAlertasV2() {
       }
     });
   });
+}
+
+// Marker visual de auditoria — linha tocada pelo operador
+function renderEditadoChip(record) {
+  const e = record.editadoOperador;
+  if (!e) return "";
+  const tipoLabel = {
+    adicionar_pagamento: "adicionou pagamento",
+    marcar_faturado:     "marcou como faturado",
+    marcar_cortesia:     "marcou cortesia",
+    marcar_ignorar:      "marcou ignorar",
+    duplicata_remover:   "removido (duplicata)",
+    ignorar_manual:      "ignorou manualmente",
+  }[e.tipo] || (e.tipo || "editado");
+  let when = "";
+  try { when = new Date(e.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); } catch {}
+  const tip = `Editado por operador: ${tipoLabel}${e.motivo ? ` — ${e.motivo}` : ""}${when ? ` · ${when}` : ""}`;
+  return `<span class="row-edited" title="${escHtml(tip)}">✏ tocado</span>`;
 }
 
 function renderStatusChip(record, conf) {
@@ -967,7 +1005,8 @@ function renderTable() {
     if (record.pdvExtra) tr.classList.add("row-pdv-extra");
     if (record.ignorar) tr.classList.add("row-ignorada");
     if (conf && conf.status) tr.dataset.confStatus = conf.status;
-    const statusChip = renderStatusChip(record, conf);
+    const statusChip  = renderStatusChip(record, conf);
+    const editadoChip = renderEditadoChip(record);
     // Botao "Ignorar" so pra pdvExtra — evita enviar duplicata por engano
     const ignoreBtn = record.pdvExtra
       ? (record.ignorar
@@ -982,7 +1021,7 @@ function renderTable() {
       </td>
       <td>
         <strong>${escHtml(record.tipoServico)}</strong>
-        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}${statusChip}${ignoreBtn}</div>
+        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}${statusChip}${editadoChip}${ignoreBtn}</div>
       </td>
       <td><span class="placa-tag">${escHtml(record.placa)}</span></td>
       <td>${escHtml(record.servico)}</td>
@@ -1002,6 +1041,11 @@ function renderTable() {
       const rec = state.records.find((r) => r.id === id);
       if (rec) {
         rec.ignorar = !rec.ignorar;
+        if (rec.ignorar) {
+          rec.editadoOperador = { tipo: "ignorar_manual", ts: new Date().toISOString(), motivo: null };
+        } else {
+          rec.editadoOperador = null; // operador reverteu
+        }
         render();
       }
     });

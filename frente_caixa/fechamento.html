@@ -344,6 +344,17 @@
     .row-status.divergencia { background: #fef9c3; color: #854d0e; }
     .row-status.orfa        { background: #fee2e2; color: #991b1b; }
     .row-status.aguardando  { background: #f1f5f9; color: #475569; }
+    /* Marker auditoria — linha tocada pelo operador (Fase D) */
+    .row-edited {
+      display: inline-flex; align-items: center; gap: 3px;
+      margin-left: 6px;
+      padding: 1px 7px;
+      font-size: 10px; font-weight: 700; letter-spacing: -.005em;
+      border-radius: 10px; white-space: nowrap;
+      vertical-align: middle;
+      background: #ede9fe; color: #6b21a8;
+      cursor: help;
+    }
     .conf-ledger tbody tr[data-conf-status="ok"]                td:first-child { box-shadow: inset 3px 0 0 #16a34a; }
     .conf-ledger tbody tr[data-conf-status="ok_fallback"]       td:first-child { box-shadow: inset 3px 0 0 #10b981; }
     .conf-ledger tbody tr[data-conf-status="divergencia_valor"] td:first-child,
