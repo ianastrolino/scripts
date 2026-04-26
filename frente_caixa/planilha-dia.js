@@ -8,15 +8,43 @@
  * - GET  /u/<unit>/api/planilha/status — stats + cruzamento PDV
  *
  * Isolado de caixa.js/caixa2.js — zero risco no caminho crítico.
+ * Parser HTML do Sispevi copiado de app.js (parseExportedHtml) — mesma
+ * lógica que funciona em produção no Fechamento.
  */
 (function () {
   "use strict";
 
   const _pathMatch = window.location.pathname.match(/^(\/u\/[^/]+)/);
   const apiBase = _pathMatch ? _pathMatch[1] : "";
-  if (!apiBase) return; // só roda em /u/<unidade>/
+  if (!apiBase) return;
 
-  // ── Helpers ──────────────────────────────────────────────────────────
+  // ── Helpers (cópia de app.js) ─────────────────────────────────────────
+  function cleanText(value) {
+    return String(value || "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
+  }
+  function removeAccents(value) {
+    return cleanText(value).normalize("NFD").replace(/[̀-ͯ]/g, "");
+  }
+  function normalizeKey(value) {
+    return removeAccents(value).toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+  }
+  function parseMoney(value) {
+    const cleaned = cleanText(value).replace(/[^\d,.-]/g, "");
+    if (!cleaned) return 0;
+    if (cleaned.includes(",")) return Number(cleaned.replace(/\./g, "").replace(",", "."));
+    return Number(cleaned);
+  }
+  function parseDateBr(value) {
+    const text = cleanText(value);
+    const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return "";
+    const day = match[1].padStart(2, "0");
+    const month = match[2].padStart(2, "0");
+    return `${match[3]}-${month}-${day}`;
+  }
+  function normalizePlate(value) {
+    return removeAccents(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
   function _escHtml(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -41,84 +69,73 @@
     });
   }
 
-  // ── Parser de planilha Sispevi (HTML/XLS antigo) ──────────────────────
-  // Cópia local do parseExportedHtml de app.js — duplicação consciente
-  // pra não acoplar caixa2 ao bundle do fechamento.
-  function _normalizeKey(s) {
-    return String(s || "").toUpperCase().replace(/[ÁÀÂÃÄ]/g,"A").replace(/[ÉÈÊË]/g,"E")
-      .replace(/[ÍÌÎÏ]/g,"I").replace(/[ÓÒÔÕÖ]/g,"O").replace(/[ÚÙÛÜ]/g,"U")
-      .replace(/Ç/g,"C").replace(/[^A-Z0-9]/g,"");
-  }
-  function _cleanText(s) {
-    return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
-  }
-  function _parsePreco(s) {
-    if (s == null) return 0;
-    const t = String(s).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
-    const v = parseFloat(t);
-    return isNaN(v) ? 0 : v;
-  }
-  function _parseDataBr(s) {
-    const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    const iso = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) return iso[0];
-    return "";
-  }
-  function _parseSispeviHtml(text, sourceFile) {
-    const doc = new DOMParser().parseFromString(text, "text/html");
-    const rows = [...doc.querySelectorAll("tr")].map((tr) =>
-      [...tr.children].map((cell) => _cleanText(cell.textContent))
-    );
-    const headerIdx = rows.findIndex((row) => {
-      const keys = row.map(_normalizeKey);
-      return ["DATA", "PLACA", "CLIENTE", "SERVICO"].every((k) => keys.includes(k));
-    });
-    if (headerIdx < 0) return [];
-    const header = rows[headerIdx].map(_normalizeKey);
-    const idxOf = (k) => header.indexOf(k);
-    const out = [];
-    for (let i = headerIdx + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || !row.length) continue;
-      const placa = row[idxOf("PLACA")];
-      if (!placa) continue;
-      const fpRaw = (row[idxOf("FP")] || "").toUpperCase();
-      const fp = fpRaw.includes("FA") ? "FA" : fpRaw.includes("DET") ? "detran" : "AV";
-      out.push({
-        id:        `pln-${i}-${placa}`,
-        data:      _parseDataBr(row[idxOf("DATA")]),
-        placa:     placa,
-        cliente:   row[idxOf("CLIENTE")] || "",
-        servico:   row[idxOf("SERVICO")] || "",
-        fp:        fp,
-        preco:     _parsePreco(row[idxOf("PRECO")] || row[idxOf("VALOR")] || "0"),
-        origemArquivo: sourceFile || "",
-      });
-    }
-    return out;
+  function makeRecord(row, index, sourceFile) {
+    const [data, modelo, placa, cliente, servico, fp, preco] = row;
+    return {
+      id:        `${sourceFile}-${index}`,
+      data:      parseDateBr(data),
+      modelo:    cleanText(modelo).toUpperCase(),
+      placa:     normalizePlate(placa),
+      cliente:   cleanText(cliente).toUpperCase(),
+      servico:   cleanText(servico).toUpperCase(),
+      fp:        cleanText(fp).toUpperCase(),
+      preco:     parseMoney(preco),
+      origemArquivo: sourceFile,
+      linhaOrigem: index + 2,
+    };
   }
 
-  // ── Estado e UI ──────────────────────────────────────────────────────
+  function parseExportedHtml(text, sourceFile) {
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    const rows = [...doc.querySelectorAll("tr")].map((tr) =>
+      [...tr.children].map((cell) => cleanText(cell.textContent))
+    );
+    const headerIndex = rows.findIndex((row) => {
+      const keys = row.map(normalizeKey);
+      return ["DATA", "MODELO", "PLACA", "CLIENTE", "SERVICO", "FP", "PRECO"].every((k) => keys.includes(k));
+    });
+    if (headerIndex < 0) return [];
+
+    const headers = rows[headerIndex].map(normalizeKey);
+    const col = {
+      data:    headers.indexOf("DATA"),
+      modelo:  headers.indexOf("MODELO"),
+      placa:   headers.indexOf("PLACA"),
+      cliente: headers.indexOf("CLIENTE"),
+      servico: headers.indexOf("SERVICO"),
+      fp:      headers.indexOf("FP"),
+      preco:   headers.indexOf("PRECO"),
+    };
+
+    return rows.slice(headerIndex + 1).reduce((records, row, rowIndex) => {
+      const data = row[col.data] || "";
+      if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(data)) return records;
+      const parsedRow = [
+        row[col.data], row[col.modelo], row[col.placa],
+        row[col.cliente], row[col.servico], row[col.fp], row[col.preco],
+      ];
+      records.push(makeRecord(parsedRow, rowIndex, sourceFile));
+      return records;
+    }, []);
+  }
+
+  // ── UI ────────────────────────────────────────────────────────────────
   const els = {
-    panel:    document.getElementById("planilhaDiaPanel"),
-    meta:     document.getElementById("pdMeta"),
-    stats:    document.getElementById("pdStats"),
-    empty:    document.getElementById("pdEmpty"),
+    panel:     document.getElementById("planilhaDiaPanel"),
+    meta:      document.getElementById("pdMeta"),
+    stats:     document.getElementById("pdStats"),
+    empty:     document.getElementById("pdEmpty"),
     btnUpload: document.getElementById("pdUploadBtn"),
     btnRefresh: document.getElementById("pdRefreshBtn"),
     fileInput: document.getElementById("pdFileInput"),
   };
-  if (!els.panel) return; // pagina nao tem o painel
-
-  let lastStatus = null;
+  if (!els.panel) return;
 
   function _statChip(label, value, cls = "") {
     return `<span class="pd-stat ${cls}"><span>${_escHtml(label)}</span> <strong>${value}</strong></span>`;
   }
 
   function renderStatus(status) {
-    lastStatus = status;
     if (!status || !status.exists) {
       els.meta.textContent = "Nenhuma planilha carregada";
       els.stats.innerHTML = "";
@@ -137,7 +154,8 @@
     els.stats.innerHTML = parts.join("");
     const upTime = status.uploaded_at ? status.uploaded_at.slice(11, 16) : "—";
     const versao = status.versao || 1;
-    els.meta.textContent = `v${versao} · atualizada ${upTime}`;
+    const arquivos = status.arquivo ? ` · ${status.arquivo}` : "";
+    els.meta.textContent = `v${versao} · atualizada ${upTime}${arquivos}`;
     els.empty.hidden = true;
   }
 
@@ -152,55 +170,85 @@
     }
   }
 
-  async function uploadPlanilha(file) {
+  // Multi-upload: parseia N arquivos, combina records, manda 1 POST
+  async function uploadPlanilhas(files) {
     try {
-      const text = await _readFileText(file);
-      const records = _parseSispeviHtml(text, file.name);
-      if (!records.length) {
-        alert("Nenhuma vistoria encontrada na planilha. Verifique se é o arquivo correto do Sispevi.");
+      const allRecords = [];
+      const arquivosOk = [];
+      const arquivosFalha = [];
+
+      for (const file of files) {
+        try {
+          const text = await _readFileText(file);
+          const recs = parseExportedHtml(text, file.name);
+          if (recs.length) {
+            allRecords.push(...recs);
+            arquivosOk.push(`${file.name} (${recs.length})`);
+          } else {
+            arquivosFalha.push(file.name);
+          }
+        } catch (err) {
+          arquivosFalha.push(`${file.name} (erro: ${err.message})`);
+        }
+      }
+
+      if (!allRecords.length) {
+        const msg = arquivosFalha.length
+          ? `Nenhuma vistoria encontrada nos ${arquivosFalha.length} arquivo(s).\n\nVerifique se são arquivos exportados do Sispevi (formato HTML).`
+          : "Nenhuma vistoria encontrada na planilha.";
+        alert(msg);
         return;
       }
-      // Data alvo: usa data dos próprios records (planilha pode vir com vistorias de dias diferentes;
-      // pra simplicidade usamos a primeira data válida ou hoje)
-      let dataIso = _todayIso();
-      for (const r of records) { if (r.data) { dataIso = r.data; break; } }
-      // Mas se a planilha for do dia anterior inteira, ainda salvamos como "hoje" pra
-      // operadora ver no painel — vistorias de outro dia ganham flag dia_anterior
-      // no GET /status. Decisão: salvar com data de HOJE sempre.
-      dataIso = _todayIso();
+
+      // Salva como data de HOJE — vistorias com data diferente ganham flag
+      // dia_anterior automaticamente no GET /status
+      const dataIso = _todayIso();
+      const arquivosLabel = arquivosOk.join(" + ");
 
       const csrf = await _csrf();
       const r = await fetch(`${apiBase}/api/planilha/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-        body: JSON.stringify({ data: dataIso, arquivo: file.name, records }),
+        body: JSON.stringify({ data: dataIso, arquivo: arquivosLabel, records: allRecords }),
       });
       const j = await r.json();
       if (!j.success) {
         alert("Falha no upload: " + (j.error || "desconhecida"));
         return;
       }
+
+      // Monta resumo do upload
+      const linhas = [
+        `✓ ${allRecords.length} vistoria(s) importada(s)`,
+        `Arquivos: ${arquivosOk.length}/${files.length}`,
+      ];
+      if (arquivosFalha.length) {
+        linhas.push(`Falharam: ${arquivosFalha.slice(0, 3).join(", ")}`);
+      }
       // Aviso se placas sumiram desde o upload anterior (decisão 3 — diff inteligente)
       if (Array.isArray(j.placas_removidas) && j.placas_removidas.length > 0) {
-        alert(`Aviso: ${j.placas_removidas.length} placa(s) sumiu/sumiram da planilha:\n\n` +
-              j.placas_removidas.slice(0, 10).join(", ") +
-              (j.placas_removidas.length > 10 ? `\n…e mais ${j.placas_removidas.length - 10}` : ""));
+        linhas.push("");
+        linhas.push(`⚠ ${j.placas_removidas.length} placa(s) sumiu/sumiram da versão anterior:`);
+        linhas.push(j.placas_removidas.slice(0, 10).join(", ") +
+                    (j.placas_removidas.length > 10 ? `, …+${j.placas_removidas.length - 10}` : ""));
+      }
+      if (arquivosFalha.length || j.placas_removidas?.length > 0) {
+        alert(linhas.join("\n"));
       }
       await fetchStatus();
     } catch (e) {
-      alert("Erro ao processar planilha: " + e.message);
+      alert("Erro ao processar planilha(s): " + e.message);
     }
   }
 
-  // ── Wire ──────────────────────────────────────────────────────────────
+  // Wire
   els.btnUpload.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) uploadPlanilha(file);
-    e.target.value = ""; // permite re-upload do mesmo arquivo
+    const files = Array.from(e.target.files || []);
+    if (files.length) uploadPlanilhas(files);
+    e.target.value = "";
   });
   els.btnRefresh.addEventListener("click", fetchStatus);
 
-  // Carga inicial
   fetchStatus();
 })();
