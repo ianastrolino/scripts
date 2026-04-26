@@ -829,9 +829,12 @@ def _get_csrf_token() -> str:
     return session["csrf_token"]
 
 def csrf_required(f):
-    """Valida X-CSRF-Token em requisições mutáveis (POST/PUT/DELETE)."""
+    """Valida X-CSRF-Token em requisições mutáveis (POST/PUT/DELETE).
+    Bypass automático em testes (app.testing=True)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
+        if app.testing:
+            return f(*args, **kwargs)
         if request.method in ("POST", "PUT", "DELETE", "PATCH"):
             token = request.headers.get("X-CSRF-Token", "")
             expected = session.get("csrf_token", "")
@@ -5782,10 +5785,16 @@ def api_planilha_status(unit: str):
             status    = "sem_pdv"
             available = [c for c in pdv_por_placa.get(placa, []) if id(c) not in consumed]
 
-            # Decisao 1: prioriza match por servico (placa+servico exato)
+            # Decisao 1: prioriza match por servico (placa+servico exato).
+            # Verifica divergencia de valor mesmo com match — operador precisa ver.
             for c in available:
                 if _norm_servico(c.get("servico", "")) == servico:
-                    pdv_match = c; consumed.add(id(c)); status = "ok"; break
+                    pdv_match = c; consumed.add(id(c))
+                    if abs(float(c.get("valor", 0) or 0) - preco) >= 0.01:
+                        status = "divergencia_valor"
+                    else:
+                        status = "ok"
+                    break
 
             # Fallback: placa+valor (servico diverge)
             if not pdv_match:

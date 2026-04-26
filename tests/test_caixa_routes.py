@@ -260,10 +260,12 @@ class TestConferir:
         body = self._conferir(client, records).get_json()
         assert body["conferencia"]["r1"]["status"] == "sem_pdv"
 
-    def test_ignora_fp_nao_av(self, client):
+    def test_processa_todos_fps(self, client):
+        """Wizard v2 (commit 6f51413): backend processa records de qualquer FP
+        (UI filtra). Antes /conferir ignorava nao-AV silenciosamente."""
         records = [{"id": "r1", "placa": "ABC1234", "servico": "LAUDO", "preco": 150.0, "fp": "PIX"}]
         body = self._conferir(client, records).get_json()
-        assert "r1" not in body["conferencia"]
+        assert body["conferencia"]["r1"]["status"] == "sem_pdv"
 
     def test_pdv_sem_planilha_retornado(self, client):
         _lancar(client, placa="ZZZ0001", servico="PESQUISA AVULSA", valor=50.0, fp="dinheiro")
