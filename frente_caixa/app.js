@@ -550,6 +550,55 @@ function renderConservacao() {
   card.style.display = "block";
 }
 
+// ─── Modal de PIN (Wizard v2 Fase A — decisoes que mudam regime do lancamento) ───
+// Retorna Promise<{motivo, pin} | null>. null = cancelou.
+function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg }) {
+  return new Promise((resolve) => {
+    const modal  = document.getElementById("pinModal");
+    const tEl    = document.getElementById("pinModalTitle");
+    const dEl    = document.getElementById("pinModalDesc");
+    const mEl    = document.getElementById("pinModalMotivo");
+    const pEl    = document.getElementById("pinModalPin");
+    const errEl  = document.getElementById("pinModalError");
+    const okBtn  = document.getElementById("pinModalOk");
+    const canBtn = document.getElementById("pinModalCancel");
+    if (!modal || !tEl || !dEl || !mEl || !pEl || !okBtn || !canBtn) {
+      resolve(null); return;
+    }
+    tEl.textContent = titulo || "Confirmar com PIN";
+    dEl.textContent = descricao || "Esta ação requer o PIN gerencial da unidade.";
+    mEl.placeholder = motivoPlaceholder || "Ex: cliente VIP, política do mês...";
+    mEl.value = "";
+    pEl.value = "";
+    errEl.textContent = errorMsg || "";
+    modal.hidden = false;
+    setTimeout(() => mEl.focus(), 50);
+
+    const cleanup = () => {
+      modal.hidden = true;
+      okBtn.onclick = null; canBtn.onclick = null;
+      mEl.onkeydown = null; pEl.onkeydown = null;
+    };
+    const onCancel = () => { cleanup(); resolve(null); };
+    const onOk = () => {
+      const motivo = mEl.value.trim();
+      const pin    = pEl.value.trim();
+      if (!motivo) { errEl.textContent = "Motivo obrigatório"; mEl.focus(); return; }
+      if (!pin)    { errEl.textContent = "PIN obrigatório"; pEl.focus(); return; }
+      cleanup();
+      resolve({ motivo, pin });
+    };
+    okBtn.onclick  = onOk;
+    canBtn.onclick = onCancel;
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel();
+      if (e.key === "Enter")  onOk();
+    };
+    mEl.onkeydown = onKey;
+    pEl.onkeydown = onKey;
+  });
+}
+
 // ─── Banner de alertas v2 (match aproximado / duplicatas / AV sem PDV) ─────
 function _alertaKey(tipo, alvo) {
   // chave determinista pra marcar resolvido (sobrevive a re-render)
@@ -621,8 +670,8 @@ function renderAlertasV2() {
         <em style="color:var(--t5)">(receita potencialmente perdida)</em>
       </div>
       <div class="v2-alerta-acoes">
-        <button class="v2-btn primary" data-v2-decisao="marcar_cortesia" data-needs-motivo="1"
-          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}'>Cortesia</button>
+        <button class="v2-btn primary" data-v2-decisao="marcar_cortesia"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Requer PIN gerencial">🔒 Cortesia</button>
         <button class="v2-btn ghost" data-v2-decisao="marcar_ignorar"
           data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}'>Ignorar</button>
       </div>
@@ -663,6 +712,27 @@ function renderAlertasV2() {
     renderAlertasV2();
   });
 
+  // Helper: aplica efeitos visuais + acoplamentos apos POST decisao com sucesso
+  function _aplicarDecisao(btn, tipo, alvo) {
+    const item = btn.closest(".v2-alerta-item");
+    if (item) {
+      state.decisoesV2.add(item.dataset.key);
+      item.classList.add("v2-alerta-resolvido");
+    }
+    // Acoplamento duplicata_remover → ignora pdvExtras (preserva o 1o)
+    if (tipo === "duplicata_remover" && Array.isArray(alvo.lancamentos)) {
+      const candidatos = alvo.lancamentos
+        .map((l) => state.records.find((rec) => rec.id === `pdv-${l.id}` && !rec.ignorar))
+        .filter(Boolean);
+      if (candidatos.length > 1) {
+        candidatos.slice(1).forEach((rec) => { rec.ignorar = true; });
+        render();
+      }
+    }
+    carregarRelatorioV2();
+    renderAlertasV2(); // re-renderiza pra atualizar o "tudo conferido"
+  }
+
   // Botoes de decisao
   host.querySelectorAll("[data-v2-decisao]").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
@@ -671,9 +741,44 @@ function renderAlertasV2() {
       const data  = btn.dataset.data;
       let alvo;
       try { alvo = JSON.parse(btn.dataset.alvo || "{}"); } catch { alvo = {}; }
-      let motivo = "";
+      let motivo = "", pin = "";
+      const requerPin = (tipo === "marcar_cortesia" || tipo === "marcar_faturado");
+      if (requerPin) {
+        // Loop ate PIN OK ou cancel — backend retorna 403 com code:pin_invalid
+        let lastError = "";
+        while (true) {
+          const desc = tipo === "marcar_cortesia"
+            ? "Esta ação dispensa o pagamento. Requer PIN gerencial da unidade."
+            : "Esta ação converte o lançamento em conta a receber. Requer PIN gerencial.";
+          const result = await pedirPinModal({
+            titulo: tipo === "marcar_cortesia" ? "Marcar como cortesia" : "Marcar como faturado",
+            descricao: desc,
+            errorMsg: lastError,
+          });
+          if (!result) return; // cancelou
+          motivo = result.motivo; pin = result.pin;
+          // Tenta enviar
+          const r2 = await apiFetch(`${apiBase}/api/fechamento/decisao`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data, tipo, alvo, motivo, pin }),
+          });
+          if (r2 && r2.success) {
+            return _aplicarDecisao(btn, tipo, alvo, r2);
+          }
+          if (r2 && r2.code === "pin_invalid") {
+            lastError = "PIN inválido — tente novamente."; continue;
+          }
+          if (r2 && r2.code === "pin_required") {
+            lastError = "PIN obrigatório."; continue;
+          }
+          alert("Falha: " + (r2?.error || "desconhecida"));
+          return;
+        }
+      }
+      // Caminho sem PIN (match aprox, duplicata, ignorar)
       if (btn.dataset.needsMotivo === "1") {
-        motivo = (prompt("Motivo da cortesia? (obrigatório)") || "").trim();
+        motivo = (prompt("Motivo? (obrigatório)") || "").trim();
         if (!motivo) return;
       }
       const item = btn.closest(".v2-alerta-item");
@@ -686,20 +791,7 @@ function renderAlertasV2() {
           body: JSON.stringify({ data, tipo, alvo, motivo: motivo || null }),
         });
         if (r && r.success) {
-          state.decisoesV2.add(item.dataset.key);
-          item.classList.add("v2-alerta-resolvido");
-          // Acoplamento: duplicata_remover → marca pdvExtras correspondentes como ignorar=true
-          // (preserva o 1o lancamento, ignora os demais — operador pode reverter via ↺ Voltar)
-          if (tipo === "duplicata_remover" && Array.isArray(alvo.lancamentos)) {
-            const candidatos = alvo.lancamentos
-              .map((l) => state.records.find((rec) => rec.id === `pdv-${l.id}` && !rec.ignorar))
-              .filter(Boolean);
-            if (candidatos.length > 1) {
-              candidatos.slice(1).forEach((rec) => { rec.ignorar = true; });
-              render();
-            }
-          }
-          carregarRelatorioV2(); // refresca card de conservacao
+          _aplicarDecisao(btn, tipo, alvo);
         } else {
           alert("Falha ao registrar decisão: " + (r?.error || "desconhecida"));
           if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));

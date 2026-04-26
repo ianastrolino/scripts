@@ -5548,8 +5548,17 @@ _DECISAO_TIPOS = {
     "match_aproximado_rejeitar",  # manteve separado
     "duplicata_remover",          # confirmou que e duplicada e removeu uma
     "duplicata_manter",           # confirmou que sao 2 vistorias diferentes
-    "marcar_cortesia",            # AV sem PDV marcado como cortesia
+    "marcar_cortesia",            # AV sem PDV marcado como cortesia (REQUER PIN)
     "marcar_ignorar",             # alerta ignorado conscientemente
+    "marcar_faturado",            # AV vira FA (REQUER PIN — converte dinheiro em conta a receber)
+}
+
+# Tipos que exigem PIN da unidade pra serem registrados (decisoes "fortes"
+# que mudam o regime do lancamento — cortesia dispensa pagamento, marcar
+# faturado converte em conta a receber)
+_DECISAO_TIPOS_REQUER_PIN = {
+    "marcar_cortesia",
+    "marcar_faturado",
 }
 
 
@@ -5565,12 +5574,23 @@ def api_fechamento_decisao(unit: str):
         tipo     = (body.get("tipo") or "").strip()
         alvo     = body.get("alvo") or {}
         motivo   = (body.get("motivo") or "").strip()
+        pin      = (body.get("pin") or "").strip()
         if not data_iso or len(data_iso) != 10:
             return _json({"success": False, "error": "data invalida (YYYY-MM-DD)"}, 400)
         if tipo not in _DECISAO_TIPOS:
             return _json({"success": False, "error": f"tipo invalido. Aceitos: {sorted(_DECISAO_TIPOS)}"}, 400)
-        if tipo in ("marcar_cortesia",) and not motivo:
+        if tipo in ("marcar_cortesia", "marcar_faturado") and not motivo:
             return _json({"success": False, "error": "motivo obrigatorio pra esse tipo"}, 400)
+
+        # Decisoes "fortes" exigem PIN da unidade
+        if tipo in _DECISAO_TIPOS_REQUER_PIN:
+            ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+            if not _pin_rate_check(unit, ip):
+                return _json({"success": False, "error": "muitas tentativas, aguarde alguns minutos"}, 429)
+            if not pin:
+                return _json({"success": False, "error": "PIN obrigatorio pra esse tipo", "code": "pin_required"}, 403)
+            if not _verify_unit_pin(unit, pin):
+                return _json({"success": False, "error": "PIN invalido", "code": "pin_invalid"}, 403)
 
         all_dec = _load_decisoes(unit)
         dia = all_dec.setdefault(data_iso, {"decisoes": []})
@@ -5581,6 +5601,7 @@ def api_fechamento_decisao(unit: str):
             "tipo":   tipo,
             "alvo":   alvo,
             "motivo": motivo or None,
+            "pin_ok": tipo in _DECISAO_TIPOS_REQUER_PIN,  # marca decisao validada por PIN
         }
         dia["decisoes"].append(entry)
         _save_decisoes(unit, all_dec)

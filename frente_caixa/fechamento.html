@@ -481,6 +481,92 @@
     .panel-tag.tag-warn { background: var(--ds-warning-soft); color: var(--ds-warning-strong); }
     .panel-tag.tag-bad  { background: var(--ds-danger-soft); color: var(--ds-danger); }
 
+    /* ─── Modal de PIN gerencial (Wizard v2 Fase A) ─── */
+    .pin-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .pin-modal[hidden] { display: none; }
+    .pin-modal-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(15, 23, 42, .55);
+      backdrop-filter: blur(2px);
+      animation: pinModalFadeIn .15s ease;
+    }
+    .pin-modal-card {
+      position: relative;
+      width: 100%; max-width: 380px; margin: 16px;
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 22px 22px 18px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.25);
+      animation: pinModalSlideIn .18s ease;
+    }
+    @keyframes pinModalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pinModalSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+    .pin-modal-title {
+      font-size: 15px; font-weight: 700; color: var(--t1);
+      letter-spacing: -.01em; margin-bottom: 4px;
+    }
+    .pin-modal-desc {
+      font-size: 12px; color: var(--t4); line-height: 1.4;
+      margin-bottom: 14px;
+    }
+    .pin-modal-label {
+      display: block;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--t4);
+      margin-bottom: 4px; margin-top: 10px;
+    }
+    .pin-modal-input {
+      width: 100%; box-sizing: border-box;
+      padding: 9px 11px;
+      font-size: 13px; font-family: inherit;
+      color: var(--t1);
+      background: var(--ds-surface-alt);
+      border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-sm);
+      outline: none;
+      transition: border-color .15s ease;
+    }
+    .pin-modal-input:focus {
+      border-color: var(--ds-info);
+      background: var(--ds-surface);
+    }
+    #pinModalPin {
+      letter-spacing: .35em;
+      font-size: 16px; font-weight: 700;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .pin-modal-error {
+      font-size: 11.5px; color: var(--ds-danger);
+      min-height: 16px; margin-top: 8px;
+      font-weight: 600;
+    }
+    .pin-modal-acoes {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 14px;
+    }
+    .pin-modal-btn {
+      padding: 8px 16px;
+      font-size: 12.5px; font-weight: 600;
+      border-radius: var(--ds-radius-sm);
+      cursor: pointer;
+      font-family: inherit;
+      border: 1px solid transparent;
+      transition: all .12s;
+    }
+    .pin-modal-btn-cancel {
+      background: transparent; color: var(--t4);
+      border-color: var(--ds-line);
+    }
+    .pin-modal-btn-cancel:hover { background: var(--ds-surface-alt); color: var(--t2); }
+    .pin-modal-btn-ok {
+      background: var(--ds-primary, var(--t1)); color: #fff;
+    }
+    .pin-modal-btn-ok:hover { filter: brightness(1.1); }
+    .pin-modal-btn-ok:disabled { opacity: .5; cursor: default; }
+
     .table-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
     table.conf-ledger { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     .conf-ledger th {
@@ -1422,6 +1508,24 @@
       <div class="modal-footer">
         <button id="draftRestoreDiscard" class="btn-secondary" type="button">Descartar rascunho</button>
         <button id="draftRestoreConfirm" type="button">Restaurar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de PIN (Wizard v2 — decisoes que precisam de autorizacao gerencial) -->
+  <div id="pinModal" class="pin-modal" hidden>
+    <div class="pin-modal-backdrop"></div>
+    <div class="pin-modal-card" role="dialog" aria-modal="true">
+      <div class="pin-modal-title" id="pinModalTitle">Confirmar com PIN</div>
+      <div class="pin-modal-desc" id="pinModalDesc">Esta ação requer o PIN gerencial da unidade.</div>
+      <label class="pin-modal-label" for="pinModalMotivo">Motivo</label>
+      <input type="text" id="pinModalMotivo" class="pin-modal-input" placeholder="Ex: cliente VIP, política do mês..." autocomplete="off">
+      <label class="pin-modal-label" for="pinModalPin">PIN gerencial</label>
+      <input type="password" id="pinModalPin" class="pin-modal-input" placeholder="••••" maxlength="8" inputmode="numeric" autocomplete="off">
+      <div class="pin-modal-error" id="pinModalError"></div>
+      <div class="pin-modal-acoes">
+        <button type="button" class="pin-modal-btn pin-modal-btn-cancel" id="pinModalCancel">Cancelar</button>
+        <button type="button" class="pin-modal-btn pin-modal-btn-ok" id="pinModalOk">Confirmar</button>
       </div>
     </div>
   </div>
