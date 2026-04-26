@@ -602,6 +602,34 @@ function pedirPinModal({ titulo, descricao, motivoPlaceholder, errorMsg, requerP
   });
 }
 
+// Modal de escolha de FP (Fase C — adicionar pagamento esquecido)
+// Retorna Promise<"dinheiro"|"debito"|"credito"|"pix"|null>
+function pedirFpModal({ titulo, descricao }) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("fpModal");
+    const tEl   = document.getElementById("fpModalTitle");
+    const dEl   = document.getElementById("fpModalDesc");
+    const canBtn = document.getElementById("fpModalCancel");
+    if (!modal || !tEl || !dEl || !canBtn) { resolve(null); return; }
+    tEl.textContent = titulo || "Adicionar pagamento";
+    dEl.textContent = descricao || "Escolha a forma de pagamento que o cliente usou.";
+    modal.hidden = false;
+
+    const fpBtns = modal.querySelectorAll("[data-fp]");
+    const cleanup = () => {
+      modal.hidden = true;
+      fpBtns.forEach((b) => (b.onclick = null));
+      canBtn.onclick = null;
+      modal.onkeydown = null;
+    };
+    fpBtns.forEach((b) => {
+      b.onclick = () => { const fp = b.dataset.fp; cleanup(); resolve(fp); };
+    });
+    canBtn.onclick = () => { cleanup(); resolve(null); };
+    modal.onkeydown = (e) => { if (e.key === "Escape") { cleanup(); resolve(null); } };
+  });
+}
+
 // ─── Banner de alertas v2 (match aproximado / duplicatas / AV sem PDV) ─────
 function _alertaKey(tipo, alvo) {
   // chave determinista pra marcar resolvido (sobrevive a re-render)
@@ -673,7 +701,9 @@ function renderAlertasV2() {
         <em style="color:var(--t5)">(receita potencialmente perdida)</em>
       </div>
       <div class="v2-alerta-acoes">
-        <button class="v2-btn primary" data-v2-decisao="marcar_faturado"
+        <button class="v2-btn primary" data-v2-decisao="adicionar_pagamento"
+          data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Operador esqueceu de lançar — adicionar pagamento">+ Pagamento</button>
+        <button class="v2-btn ghost" data-v2-decisao="marcar_faturado"
           data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Converter para conta a receber">→ Faturar</button>
         <button class="v2-btn ghost" data-v2-decisao="marcar_cortesia"
           data-data="${dataIso}" data-alvo='${escHtml(JSON.stringify({rid:s.id, placa:s.placa, servico:s.servico, valor:s.preco}))}' title="Requer PIN gerencial">🔒 Cortesia</button>
@@ -744,6 +774,15 @@ function renderAlertasV2() {
         render();
       }
     }
+    // Acoplamento adicionar_pagamento → registro AV ganha FP escolhida (vira "Pronto")
+    if (tipo === "adicionar_pagamento" && alvo.rid && alvo.forma_pagamento) {
+      const rec = state.records.find((r) => r.id === alvo.rid);
+      if (rec) {
+        rec.avPagamento = alvo.forma_pagamento;
+        rec.editadoOperador = true;
+        render();
+      }
+    }
     carregarRelatorioV2();
     renderAlertasV2(); // re-renderiza pra atualizar o "tudo conferido"
   }
@@ -760,6 +799,36 @@ function renderAlertasV2() {
       // Regra Ian: operadora resolve qualquer problema (com log), so cortesia exige PIN
       const requerPin = (tipo === "marcar_cortesia");
       const requerMotivoSemPin = (tipo === "marcar_faturado");
+      const requerFp = (tipo === "adicionar_pagamento");
+
+      // Caminho 0: adicionar_pagamento — modal de FP (sem PIN, sem motivo)
+      if (requerFp) {
+        const fp = await pedirFpModal({
+          titulo: "Adicionar pagamento esquecido",
+          descricao: `Vistoria ${alvo.placa || ""} (${_fmtMoneyShort(alvo.valor)}) sem registro no PDV. Qual FP o cliente usou?`,
+        });
+        if (!fp) return;
+        const alvoComFp = { ...alvo, forma_pagamento: fp };
+        const item  = btn.closest(".v2-alerta-item");
+        const acoes = item?.querySelector(".v2-alerta-acoes");
+        if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        try {
+          const r = await apiFetch(`${apiBase}/api/fechamento/decisao`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data, tipo, alvo: alvoComFp, motivo: null }),
+          });
+          if (r && r.success) { _aplicarDecisao(btn, tipo, alvoComFp); }
+          else {
+            alert("Falha: " + (r?.error || "desconhecida"));
+            if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          }
+        } catch (err) {
+          if (err && err.message !== "session_expired") alert("Erro: " + err.message);
+          if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        }
+        return;
+      }
 
       // Caminho A: faturar — modal so com motivo (sem PIN)
       if (requerMotivoSemPin) {

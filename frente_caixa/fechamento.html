@@ -540,6 +540,30 @@
     }
     .pin-modal-card.no-pin label[for="pinModalPin"],
     .pin-modal-card.no-pin #pinModalPin { display: none; }
+    /* Grid de FPs (modal "Adicionar pagamento") */
+    .fp-modal-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-top: 14px;
+    }
+    .fp-modal-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px;
+      padding: 16px 10px;
+      font-size: 13px; font-weight: 600;
+      color: var(--t1);
+      background: var(--ds-surface-alt);
+      border: 2px solid var(--ds-line);
+      border-radius: var(--ds-radius-sm);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all .15s;
+    }
+    .fp-modal-btn span { font-weight: 700; }
+    .fp-modal-btn:hover {
+      border-color: var(--ds-info);
+      background: var(--ds-info-soft);
+      transform: translateY(-1px);
+    }
     .pin-modal-error {
       font-size: 11.5px; color: var(--ds-danger);
       min-height: 16px; margin-top: 8px;
@@ -1510,6 +1534,24 @@
       <div class="modal-footer">
         <button id="draftRestoreDiscard" class="btn-secondary" type="button">Descartar rascunho</button>
         <button id="draftRestoreConfirm" type="button">Restaurar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de escolha de FP (Wizard v2 Fase C — adicionar pagamento esquecido) -->
+  <div id="fpModal" class="pin-modal" hidden>
+    <div class="pin-modal-backdrop"></div>
+    <div class="pin-modal-card" role="dialog" aria-modal="true">
+      <div class="pin-modal-title" id="fpModalTitle">Adicionar pagamento</div>
+      <div class="pin-modal-desc" id="fpModalDesc">Escolha a forma de pagamento que o cliente usou.</div>
+      <div class="fp-modal-grid">
+        <button type="button" class="fp-modal-btn" data-fp="dinheiro">💵<span>Dinheiro</span></button>
+        <button type="button" class="fp-modal-btn" data-fp="debito">💳<span>Débito</span></button>
+        <button type="button" class="fp-modal-btn" data-fp="credito">💳<span>Crédito</span></button>
+        <button type="button" class="fp-modal-btn" data-fp="pix">📱<span>PIX</span></button>
+      </div>
+      <div class="pin-modal-acoes">
+        <button type="button" class="pin-modal-btn pin-modal-btn-cancel" id="fpModalCancel">Cancelar</button>
       </div>
     </div>
   </div>

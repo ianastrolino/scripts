@@ -5550,7 +5550,8 @@ _DECISAO_TIPOS = {
     "duplicata_manter",           # confirmou que sao 2 vistorias diferentes
     "marcar_cortesia",            # AV sem PDV marcado como cortesia (REQUER PIN)
     "marcar_ignorar",             # alerta ignorado conscientemente
-    "marcar_faturado",            # AV vira FA (REQUER PIN — converte dinheiro em conta a receber)
+    "marcar_faturado",            # AV vira FA (com motivo, sem PIN)
+    "adicionar_pagamento",        # operador esqueceu de lancar — registra FP escolhida
 }
 
 # Tipos que exigem PIN da unidade. Regra do Ian (2026-04-26): operadora
@@ -5582,6 +5583,11 @@ def api_fechamento_decisao(unit: str):
         # justificar conversao AV→FA pra rastreabilidade)
         if tipo in ("marcar_cortesia", "marcar_faturado") and not motivo:
             return _json({"success": False, "error": "motivo obrigatorio pra esse tipo"}, 400)
+        # adicionar_pagamento: alvo.forma_pagamento obrigatoria
+        if tipo == "adicionar_pagamento":
+            fp_escolhida = (alvo.get("forma_pagamento") or "").strip().lower()
+            if fp_escolhida not in ("dinheiro", "debito", "credito", "pix"):
+                return _json({"success": False, "error": "forma_pagamento invalida (dinheiro/debito/credito/pix)"}, 400)
 
         # Decisoes "fortes" exigem PIN da unidade
         if tipo in _DECISAO_TIPOS_REQUER_PIN:
