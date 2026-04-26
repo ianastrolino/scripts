@@ -5700,13 +5700,147 @@ def api_caixa_conferir(unit: str):
                 "timestamp": lc.get("timestamp"),
             })
 
+        # ── v2: separacao AV/FA + alertas (match aproximado, duplicata) ────
+        # Implementacao do novo wizard de fechamento. Mantem campos antigos
+        # acima pra compat — frontend antigo continua funcionando.
+        def _levenshtein(a: str, b: str) -> int:
+            if len(a) < len(b):
+                a, b = b, a
+            if not b:
+                return len(a)
+            prev = list(range(len(b) + 1))
+            for i, ca in enumerate(a, 1):
+                curr = [i]
+                for j, cb in enumerate(b, 1):
+                    curr.append(min(curr[j-1] + 1, prev[j] + 1, prev[j-1] + (ca != cb)))
+                prev = curr
+            return prev[-1]
+
+        # Match aproximado: pra cada planilha ainda em sem_pdv, procura PDV nao
+        # consumido com placa Levenshtein <= 2 + valor igual. Sugere correcao,
+        # nao consome (operadora decide aplicar ou ignorar).
+        match_aproximado: list[dict] = []
+        for r in records:
+            rec_id = r.get("id", "")
+            if conferencia.get(rec_id, {}).get("status") != "sem_pdv":
+                continue
+            placa_p = _norm_placa(r.get("placa", ""))
+            preco_p = float(r.get("preco", 0))
+            for pdv_key, lc in pdv_map.items():
+                if pdv_key in consumed_pdv_keys:
+                    continue
+                pdv_placa = pdv_key[0]
+                if not pdv_placa or not placa_p:
+                    continue
+                if pdv_placa == placa_p:
+                    continue  # match exato ja foi tratado
+                pdv_valor = float(lc.get("valor", 0))
+                if abs(pdv_valor - preco_p) >= 0.01:
+                    continue
+                dist = _levenshtein(placa_p, pdv_placa)
+                if dist > 2:
+                    continue
+                match_aproximado.append({
+                    "planilha_record_id": rec_id,
+                    "planilha_placa": r.get("placa", ""),
+                    "planilha_servico": r.get("servico", ""),
+                    "planilha_valor": preco_p,
+                    "pdv_id": lc.get("id"),
+                    "pdv_placa": lc.get("placa", ""),
+                    "pdv_servico": lc.get("servico", ""),
+                    "pdv_valor": pdv_valor,
+                    "pdv_hora": lc.get("hora"),
+                    "pdv_fp": lc.get("fp"),
+                    "distancia": dist,
+                })
+                break  # 1 sugestao por record
+
+        # Detecta duplicatas no PDV: mesma (placa, servico, valor) em 2+ lancamentos.
+        # Auxilia a operadora a identificar cobranca dupla por engano.
+        from collections import defaultdict
+        dup_groups: dict[tuple, list[dict]] = defaultdict(list)
+        for lc in lancamentos:
+            placa_n = _norm_placa(lc.get("placa", ""))
+            serv_n  = _norm_servico(lc.get("servico", ""))
+            valor_r = round(float(lc.get("valor", 0) or 0), 2)
+            if placa_n and serv_n:
+                dup_groups[(placa_n, serv_n, valor_r)].append(lc)
+        duplicatas: list[dict] = []
+        for (placa_n, serv_n, valor_r), lcs in dup_groups.items():
+            if len(lcs) < 2:
+                continue
+            duplicatas.append({
+                "placa":   lcs[0].get("placa", ""),
+                "servico": lcs[0].get("servico", ""),
+                "valor":   valor_r,
+                "qtd":     len(lcs),
+                "lancamentos": [{
+                    "id":   lc.get("id"),
+                    "hora": lc.get("hora"),
+                    "fp":   lc.get("fp"),
+                    "cliente": lc.get("cliente"),
+                    "timestamp": lc.get("timestamp"),
+                } for lc in lcs],
+            })
+
+        # Separacao AV/FA: agrupa records pela origem (planilha_fp) e adiciona
+        # status. PDV avulsos (extras) entram como AV (FP do proprio PDV define).
+        records_av: list[dict] = []
+        records_fa: list[dict] = []
+        sem_pdv_av: list[dict] = []
+        sem_pdv_fa: list[dict] = []
+        auto_conferidos = 0
+        for r in records:
+            rec_id = r.get("id", "")
+            conf = conferencia.get(rec_id, {})
+            entry = {**r, "conf": conf}
+            tipo = (r.get("fp") or "AV").upper()
+            if conf.get("status") in ("ok", "ok_fallback"):
+                auto_conferidos += 1
+            if tipo == "FA":
+                records_fa.append(entry)
+                if conf.get("status") == "sem_pdv":
+                    sem_pdv_fa.append(entry)
+            else:
+                records_av.append(entry)
+                if conf.get("status") == "sem_pdv":
+                    sem_pdv_av.append(entry)
+
+        # Extras PDV (sem planilha) — separamos por FP tambem
+        extras_av = [p for p in pdv_sem_planilha if (p.get("fp") or "").lower() not in ("faturado", "detran")]
+        extras_fa = [p for p in pdv_sem_planilha if (p.get("fp") or "").lower() in ("faturado", "detran")]
+
+        v2 = {
+            "av": records_av,
+            "fa": records_fa,
+            "extras_av": extras_av,
+            "extras_fa": extras_fa,
+            "alertas": {
+                "match_aproximado": match_aproximado,
+                "duplicatas":       duplicatas,
+                "sem_pdv_av":       sem_pdv_av,
+                "sem_pdv_fa":       sem_pdv_fa,
+            },
+            "totais": {
+                "pdv":             len(lancamentos),
+                "planilha":        len(records),
+                "auto_conferidos": auto_conferidos,
+                "extras_pdv":      len(pdv_sem_planilha),
+            },
+        }
+
         # Marca etapa 2 do ciclo do dia (conferencia iniciada) — idempotente.
         # Se ja fechado, _iniciar_conferencia nao faz nada.
         if target_date and records:
             user = _current_user() or {}
             _iniciar_conferencia(unit, target_date, session.get("email", "") or user.get("email", ""))
 
-        return _json({"success": True, "conferencia": conferencia, "pdv_sem_planilha": pdv_sem_planilha})
+        return _json({
+            "success": True,
+            "conferencia": conferencia,           # legacy
+            "pdv_sem_planilha": pdv_sem_planilha,  # legacy
+            "v2": v2,                              # novo wizard
+        })
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
         if isinstance(exc, HTTPException):
