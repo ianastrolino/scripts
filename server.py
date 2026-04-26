@@ -5519,6 +5519,108 @@ def api_caixa_excluir(unit: str, lancamento_id: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# ── Fechamento v2: decisoes manuais e relatorio do dia ────────────────────
+def _decisoes_path(unit: str) -> Path:
+    return _unit_state_dir(unit) / "fechamento_decisoes.json"
+
+
+def _load_decisoes(unit: str) -> dict:
+    p = _decisoes_path(unit)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_decisoes(unit: str, data: dict) -> None:
+    p = _decisoes_path(unit)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+# Tipos validos de decisao no wizard de fechamento
+_DECISAO_TIPOS = {
+    "match_aproximado_aplicar",   # operadora aceitou correcao de placa
+    "match_aproximado_rejeitar",  # manteve separado
+    "duplicata_remover",          # confirmou que e duplicada e removeu uma
+    "duplicata_manter",           # confirmou que sao 2 vistorias diferentes
+    "marcar_cortesia",            # AV sem PDV marcado como cortesia
+    "marcar_ignorar",             # alerta ignorado conscientemente
+}
+
+
+@app.route("/u/<unit>/api/fechamento/decisao", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_fechamento_decisao(unit: str):
+    """Registra uma decisao manual da operadora durante o fechamento.
+    Body: {data: YYYY-MM-DD, tipo: str, alvo: dict, motivo?: str}"""
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data_iso = (body.get("data") or "").strip()
+        tipo     = (body.get("tipo") or "").strip()
+        alvo     = body.get("alvo") or {}
+        motivo   = (body.get("motivo") or "").strip()
+        if not data_iso or len(data_iso) != 10:
+            return _json({"success": False, "error": "data invalida (YYYY-MM-DD)"}, 400)
+        if tipo not in _DECISAO_TIPOS:
+            return _json({"success": False, "error": f"tipo invalido. Aceitos: {sorted(_DECISAO_TIPOS)}"}, 400)
+        if tipo in ("marcar_cortesia",) and not motivo:
+            return _json({"success": False, "error": "motivo obrigatorio pra esse tipo"}, 400)
+
+        all_dec = _load_decisoes(unit)
+        dia = all_dec.setdefault(data_iso, {"decisoes": []})
+        user = _current_user() or {}
+        entry = {
+            "ts":     dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "user":   session.get("email", "") or user.get("email", "") or "?",
+            "tipo":   tipo,
+            "alvo":   alvo,
+            "motivo": motivo or None,
+        }
+        dia["decisoes"].append(entry)
+        _save_decisoes(unit, all_dec)
+        return _json({"success": True, "decisao": entry, "total_decisoes_dia": len(dia["decisoes"])})
+    except Exception as exc:
+        app.logger.exception("[fechamento.decisao] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/fechamento/relatorio")
+@unit_access_required
+def api_fechamento_relatorio(unit: str):
+    """Retorna o relatorio do dia: decisoes manuais + agregados.
+    Query: ?data=YYYY-MM-DD (default: hoje)."""
+    try:
+        data_iso = (request.args.get("data") or "").strip()
+        if not data_iso:
+            data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+
+        all_dec = _load_decisoes(unit)
+        dia = all_dec.get(data_iso) or {"decisoes": []}
+        decisoes = dia["decisoes"]
+
+        # Agrega por tipo
+        por_tipo: dict[str, list[dict]] = {}
+        for d in decisoes:
+            por_tipo.setdefault(d["tipo"], []).append(d)
+
+        return _json({
+            "success": True,
+            "data":    data_iso,
+            "total_decisoes": len(decisoes),
+            "por_tipo": {k: len(v) for k, v in por_tipo.items()},
+            "decisoes": decisoes,
+        })
+    except Exception as exc:
+        app.logger.exception("[fechamento.relatorio] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/caixa/conferir", methods=["POST"])
 @unit_access_required
 @csrf_required
