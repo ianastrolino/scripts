@@ -53,6 +53,7 @@ const state = {
   confV2: null,        // payload v2: { av, fa, alertas: { match_aproximado, duplicatas, sem_pdv_av }, ... }
   decisoesV2: new Set(), // IDs de alertas ja resolvidos nesta sessao (chave = tipo+alvo serializado)
   alertasOpen: true,    // estado colapsavel do banner
+  relatorioV2: null,    // cache do GET /api/fechamento/relatorio
 };
 
 // ── Snapshot/autosave: persistencia contra perda de dados ────────────────────
@@ -442,6 +443,111 @@ function render() {
   renderSummary();
   renderIssues();
   renderAlertasV2();
+  renderConservacao();
+}
+
+// ─── Conservação do dia (Wizard v2 — Commit 5) ──────────────────────────
+// Calcula se a planilha esta 100% identificada (cruzou ou tem decisao manual).
+// Regra do Ian: total final >= total planilha (planilha eh fonte da verdade,
+// extras do PDV podem somar mas nada da planilha pode "sumir").
+async function carregarRelatorioV2() {
+  if (!apiBase) return;
+  const dataIso = (state.records[0]?.data) || new Date().toISOString().slice(0, 10);
+  try {
+    const r = await apiFetch(`${apiBase}/api/fechamento/relatorio?data=${encodeURIComponent(dataIso)}`);
+    if (r && r.success) {
+      state.relatorioV2 = r;
+      renderConservacao();
+    }
+  } catch { /* silencioso — endpoint opcional */ }
+}
+
+function renderConservacao() {
+  const card  = document.getElementById("conservacaoCard");
+  const tag   = document.getElementById("conservacaoTag");
+  const lines = document.getElementById("conservacaoLines");
+  const decis = document.getElementById("conservacaoDecisoes");
+  if (!card || !tag || !lines || !decis) return;
+  if (!state.confV2) { card.style.display = "none"; return; }
+
+  const v2 = state.confV2;
+  const planilha = state.records.filter((r) => !r.pdvExtra);
+  const extras   = state.records.filter((r) =>  r.pdvExtra);
+
+  // Identificado = cruzou (ok/ok_fallback) OU operador resolveu via decisao
+  let identificadosCount = 0;
+  let aguardandoCount = 0;
+  let totalPlanilha = 0;
+  let totalIdentificado = 0;
+  for (const r of planilha) {
+    totalPlanilha += Number(r.preco) || 0;
+    const conf = state.conferencia[r.id];
+    const status = conf?.status;
+    const decidida = state.decisoesV2.has(_alertaKey("sem_pdv_av", { rid: r.id }))
+                  || state.decisoesV2.has(_alertaKey("match_aproximado", { rid: r.id, pdv_id: conf?.pdv_id }))
+                  || state.conferido.has(r.id);
+    const cruzada = status === "ok" || status === "ok_fallback";
+    if (cruzada || decidida) {
+      identificadosCount++;
+      totalIdentificado += Number(r.preco) || 0;
+    } else if (r.fp === "FA") {
+      // FA nao precisa cruzar PDV — eh boleto. Conta como identificado.
+      identificadosCount++;
+      totalIdentificado += Number(r.preco) || 0;
+    } else {
+      aguardandoCount++;
+    }
+  }
+  const totalExtras = extras.filter((r) => !r.ignorar).reduce((a, r) => a + (Number(r.preco) || 0), 0);
+  const extrasAtivos = extras.filter((r) => !r.ignorar).length;
+  const extrasIgnorados = extras.filter((r) =>  r.ignorar).length;
+  const totalFinal = totalIdentificado + totalExtras;
+
+  // Status global
+  let tagText, tagCls;
+  if (planilha.length === 0) { tagText = "—"; tagCls = ""; }
+  else if (aguardandoCount === 0) { tagText = "✓ identificado"; tagCls = "tag-ok"; }
+  else { tagText = `⚠ ${aguardandoCount} pendente${aguardandoCount > 1 ? "s" : ""}`; tagCls = "tag-warn"; }
+  tag.className = "panel-tag " + tagCls;
+  tag.textContent = tagText;
+
+  // Linhas
+  const linhas = [
+    { label: "Planilha (linhas)",      value: `${identificadosCount}/${planilha.length}`, cls: aguardandoCount === 0 ? "is-ok" : "is-warn" },
+    { label: "Total planilha",         value: _fmtMoneyShort(totalPlanilha) },
+    { label: "Extras do PDV",          value: extrasAtivos > 0 ? `+${_fmtMoneyShort(totalExtras)} (${extrasAtivos})` : "—" },
+    extrasIgnorados > 0 ? { label: "Ignorados (duplicata)", value: `${extrasIgnorados}`, cls: "is-warn" } : null,
+    { label: "Total final",            value: _fmtMoneyShort(totalFinal), cls: totalFinal >= totalPlanilha ? "is-ok" : "is-bad" },
+  ].filter(Boolean);
+  lines.innerHTML = linhas.map((l) => `
+    <div class="cons-line ${l.cls || ""}">
+      <span class="cons-label">${l.label}</span>
+      <span class="cons-value">${l.value}</span>
+    </div>`).join("");
+
+  // Decisoes do dia (do endpoint /api/fechamento/relatorio)
+  const rel = state.relatorioV2;
+  if (rel && rel.success && rel.total_decisoes > 0) {
+    const tipoLabel = {
+      match_aproximado_aplicar:  "Placas corrigidas",
+      match_aproximado_rejeitar: "Match rejeitado",
+      duplicata_remover:         "Duplicatas removidas",
+      duplicata_manter:          "Duplicatas mantidas",
+      marcar_cortesia:           "Cortesias",
+      marcar_ignorar:            "Ignorados",
+    };
+    const linhasDec = Object.entries(rel.por_tipo || {})
+      .filter(([, n]) => n > 0)
+      .map(([tipo, n]) => `<div class="cons-decisao-line">
+        <span>${tipoLabel[tipo] || tipo}</span>
+        <span class="cons-dec-count">${n}</span>
+      </div>`).join("");
+    decis.innerHTML = `<div class="cons-decisao-titulo">Decisões registradas hoje</div>${linhasDec}`;
+  } else {
+    decis.innerHTML = "";
+  }
+
+  card.style.display = "block";
 }
 
 // ─── Banner de alertas v2 (match aproximado / duplicatas / AV sem PDV) ─────
@@ -569,6 +675,18 @@ function renderAlertasV2() {
         if (r && r.success) {
           state.decisoesV2.add(item.dataset.key);
           item.classList.add("v2-alerta-resolvido");
+          // Acoplamento: duplicata_remover → marca pdvExtras correspondentes como ignorar=true
+          // (preserva o 1o lancamento, ignora os demais — operador pode reverter via ↺ Voltar)
+          if (tipo === "duplicata_remover" && Array.isArray(alvo.lancamentos)) {
+            const candidatos = alvo.lancamentos
+              .map((l) => state.records.find((rec) => rec.id === `pdv-${l.id}` && !rec.ignorar))
+              .filter(Boolean);
+            if (candidatos.length > 1) {
+              candidatos.slice(1).forEach((rec) => { rec.ignorar = true; });
+              render();
+            }
+          }
+          carregarRelatorioV2(); // refresca card de conservacao
         } else {
           alert("Falha ao registrar decisão: " + (r?.error || "desconhecida"));
           if (acoes) acoes.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -981,6 +1099,7 @@ async function conferirComPDV() {
     if (!result.success) return;
     state.conferencia = result.conferencia;
     state.confV2 = result.v2 || null;
+    carregarRelatorioV2(); // assincrono — atualiza card de conservacao quando chegar
 
     // Auto-preenche avPagamento para registros confirmados no PDV
     // ("ok" = match por placa+servico, "ok_fallback" = match por placa+valor

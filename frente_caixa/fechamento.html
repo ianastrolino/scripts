@@ -419,6 +419,43 @@
       font-size: 11px; color: var(--ds-success); font-weight: 700;
     }
 
+    /* ─── Conservacao do dia ─── */
+    .cons-lines { display: flex; flex-direction: column; gap: 6px; }
+    .cons-line {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 0; font-size: 12px;
+      border-bottom: 1px dashed var(--border2);
+    }
+    .cons-line:last-child { border-bottom: none; }
+    .cons-line .cons-label { color: var(--t4); }
+    .cons-line .cons-value { font-weight: 700; color: var(--t1); font-variant-numeric: tabular-nums; }
+    .cons-line.is-warn .cons-value { color: var(--ds-warning-strong); }
+    .cons-line.is-ok   .cons-value { color: var(--ds-success); }
+    .cons-line.is-bad  .cons-value { color: var(--ds-danger); }
+    .cons-decisoes {
+      margin-top: 8px; padding-top: 8px;
+      border-top: 1px solid var(--border2);
+      font-size: 11.5px;
+    }
+    .cons-decisoes:empty { display: none; }
+    .cons-decisao-titulo {
+      font-size: 9.5px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--t5); margin-bottom: 6px;
+    }
+    .cons-decisao-line {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 3px 0; color: var(--t3);
+    }
+    .cons-decisao-line .cons-dec-count {
+      font-weight: 700; color: var(--t1);
+      background: var(--sf2); padding: 1px 7px; border-radius: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .panel-tag.tag-ok   { background: var(--ds-success-soft); color: var(--ds-success); }
+    .panel-tag.tag-warn { background: var(--ds-warning-soft); color: var(--ds-warning-strong); }
+    .panel-tag.tag-bad  { background: var(--ds-danger-soft); color: var(--ds-danger); }
+
     .table-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
     table.conf-ledger { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     .conf-ledger th {
@@ -1136,6 +1173,18 @@
 
             <!-- valor auxiliar (não mostrado, usado por JS antigo) -->
             <span id="netTotal" style="display:none;">R$ 0,00</span>
+          </div>
+        </div>
+
+        <!-- Conservação do dia (Wizard v2) -->
+        <div class="action-card" id="conservacaoCard" style="display:none">
+          <div class="action-card-header">
+            <h3>Conservação do dia</h3>
+            <span class="panel-tag" id="conservacaoTag">—</span>
+          </div>
+          <div class="action-card-body" style="padding-top:10px;padding-bottom:10px;">
+            <div class="cons-lines" id="conservacaoLines"></div>
+            <div class="cons-decisoes" id="conservacaoDecisoes"></div>
           </div>
         </div>
 
