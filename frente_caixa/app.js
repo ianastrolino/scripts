@@ -436,14 +436,54 @@ function render() {
   renderIssues();
 }
 
+function renderStatusChip(record, conf) {
+  // FA nao tem cruzamento PDV (vai por boleto/cobranca, sem registro no caixa)
+  if (record.fp === "FA") return "";
+  if (!conf || !conf.status) {
+    // Sem dado de cruzamento ainda — só marca AV como aguardando se tem planilha
+    if (record.fp === "AV" && !record.pdvExtra) return '<span class="row-status aguardando" title="Aguardando cruzamento">⏳ aguarda</span>';
+    return "";
+  }
+  switch (conf.status) {
+    case "ok":               return '<span class="row-status ok" title="PDV cruzado">✓ PDV</span>';
+    case "ok_fallback":      return '<span class="row-status ok-fallback" title="Match por placa+valor (servico divergiu)">✓ PDV*</span>';
+    case "divergencia_valor":return '<span class="row-status divergencia" title="Valor divergente do PDV">⚠ valor</span>';
+    case "divergencia_fp":   return '<span class="row-status divergencia" title="FP divergente do PDV">⚠ FP</span>';
+    case "sem_pdv":          return record.pdvExtra
+                                  ? '<span class="row-status orfa" title="Vistoria do PDV sem correspondencia na planilha">🔴 orfa planilha</span>'
+                                  : '<span class="row-status orfa" title="Sem registro no PDV">🔴 sem PDV</span>';
+    default: return "";
+  }
+}
+
+function updateFilterCounts() {
+  const counts = {
+    todos:      state.records.length,
+    FA:         state.records.filter((r) => r.fp === "FA").length,
+    detran:     state.records.filter((r) => r.fp === "detran").length,
+    AV:         state.records.filter((r) => r.fp === "AV").length,
+    pendencias: state.records.filter((r) => recordIssues(r).length > 0).length,
+  };
+  document.querySelectorAll(".filter-count").forEach((el) => {
+    const k = el.dataset.count;
+    if (k in counts) {
+      el.textContent = counts[k];
+      el.classList.toggle("is-warn", k === "pendencias" && counts[k] > 0);
+    }
+  });
+}
+
 function renderTable() {
   const rows = recordsForFilter();
   els.recordsBody.innerHTML = "";
   rows.forEach((record) => {
     const tr = document.createElement("tr");
     const issues = recordIssues(record);
+    const conf = state.conferencia[record.id];
     if (record.pdvExtra) tr.classList.add("row-pdv-extra");
     if (record.ignorar) tr.classList.add("row-ignorada");
+    if (conf && conf.status) tr.dataset.confStatus = conf.status;
+    const statusChip = renderStatusChip(record, conf);
     // Botao "Ignorar" so pra pdvExtra — evita enviar duplicata por engano
     const ignoreBtn = record.pdvExtra
       ? (record.ignorar
@@ -458,7 +498,7 @@ function renderTable() {
       </td>
       <td>
         <strong>${escHtml(record.tipoServico)}</strong>
-        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}${ignoreBtn}</div>
+        <div class="cell-muted">${record.pdvExtra ? `<span class="pdv-origin-badge">&#128242; PDV ${escHtml(record.origemArquivo.replace("PDV ", ""))}</span>` : escHtml(record.origemArquivo)}${statusChip}${ignoreBtn}</div>
       </td>
       <td><span class="placa-tag">${escHtml(record.placa)}</span></td>
       <td>${escHtml(record.servico)}</td>
@@ -545,6 +585,7 @@ function renderTable() {
   });
 
   els.tableSubtitle.textContent = `${rows.length} linha(s) em exibicao`;
+  updateFilterCounts();
 }
 
 function paymentControl(record) {

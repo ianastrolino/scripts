@@ -318,6 +318,37 @@
     }
     .filter:hover { background: var(--sf3); color: var(--t3); }
     .filter.active { background: var(--t1); color: #fff; border-color: var(--t1); }
+    .filter-count {
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-left: 6px; min-width: 18px; padding: 0 5px;
+      font-size: 10px; font-weight: 700;
+      background: var(--ds-neutral-150); color: var(--ds-ink-subtle);
+      border-radius: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .filter.active .filter-count { background: rgba(255,255,255,.22); color: #fff; }
+    .filter-count.is-warn { background: var(--ds-warning-soft); color: var(--ds-warning-strong); }
+    .filter.active .filter-count.is-warn { background: rgba(255,255,255,.22); color: #fff; }
+
+    /* Status visual da linha (cruzamento PDV) */
+    .row-status {
+      display: inline-flex; align-items: center; gap: 3px;
+      margin-left: 6px;
+      padding: 1px 7px;
+      font-size: 10px; font-weight: 700; letter-spacing: -.005em;
+      border-radius: 10px; white-space: nowrap;
+      vertical-align: middle;
+    }
+    .row-status.ok          { background: #dcfce7; color: #14532d; }
+    .row-status.ok-fallback { background: #ecfdf5; color: #047857; }
+    .row-status.divergencia { background: #fef9c3; color: #854d0e; }
+    .row-status.orfa        { background: #fee2e2; color: #991b1b; }
+    .row-status.aguardando  { background: #f1f5f9; color: #475569; }
+    .conf-ledger tbody tr[data-conf-status="ok"]                td:first-child { box-shadow: inset 3px 0 0 #16a34a; }
+    .conf-ledger tbody tr[data-conf-status="ok_fallback"]       td:first-child { box-shadow: inset 3px 0 0 #10b981; }
+    .conf-ledger tbody tr[data-conf-status="divergencia_valor"] td:first-child,
+    .conf-ledger tbody tr[data-conf-status="divergencia_fp"]    td:first-child { box-shadow: inset 3px 0 0 #d97706; }
+    .conf-ledger tbody tr[data-conf-status="sem_pdv"]           td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
 
     .table-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
     table.conf-ledger { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -922,11 +953,11 @@
             <span class="table-subtitle" id="tableSubtitle">Importe a planilha ou carregue o exemplo.</span>
           </div>
           <div class="filters" role="group">
-            <button class="filter active" data-filter="todos" type="button">Todos</button>
-            <button class="filter" data-filter="FA" type="button">FA</button>
-            <button class="filter" data-filter="detran" type="button">DETRAN</button>
-            <button class="filter" data-filter="AV" type="button">AV</button>
-            <button class="filter" data-filter="pendencias" type="button">Pendências</button>
+            <button class="filter active" data-filter="todos" type="button">Todos<span class="filter-count" data-count="todos">0</span></button>
+            <button class="filter" data-filter="AV" type="button">À Vista<span class="filter-count" data-count="AV">0</span></button>
+            <button class="filter" data-filter="FA" type="button">Faturado<span class="filter-count" data-count="FA">0</span></button>
+            <button class="filter" data-filter="detran" type="button">DETRAN<span class="filter-count" data-count="detran">0</span></button>
+            <button class="filter" data-filter="pendencias" type="button">Pendências<span class="filter-count" data-count="pendencias">0</span></button>
           </div>
         </div>
         <div class="table-scroll">
