@@ -5714,6 +5714,149 @@ def api_planilha_upload(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/planilha/status")
+@unit_access_required
+def api_planilha_status(unit: str):
+    """Status agregado da planilha do dia cruzada com PDV em tempo real.
+    Query: ?data=YYYY-MM-DD (default hoje).
+
+    Retorna stats agregadas + linha-a-linha enriquecida com status de
+    cruzamento. Usado pela Conferencia Antecipada (painel no Caixa)."""
+    import re
+    import unicodedata as _ud
+
+    try:
+        data_iso = (request.args.get("data") or "").strip()
+        if not data_iso:
+            data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+
+        p = _planilha_dia_path(unit, data_iso)
+        if not p.exists():
+            return _json({
+                "success": True, "data": data_iso, "exists": False,
+                "stats": {"total": 0, "cruzadas": 0, "divergencias": 0,
+                          "orfas_planilha": 0, "orfas_pdv": 0, "dia_anterior": 0},
+                "linhas": [], "orfas_pdv": [],
+            })
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            app.logger.exception("[planilha.status] %s — JSON corrompido", unit)
+            return _json({"success": True, "data": data_iso, "exists": False, "warning": "arquivo corrompido", "stats": {}, "linhas": [], "orfas_pdv": []})
+
+        records = payload.get("records") or []
+        config  = _build_unit_config(unit)
+
+        unit_dir = _unit_state_dir(unit)
+        try:
+            lancamentos = _db_load(unit, unit_dir, data_iso)
+        except Exception:
+            lancamentos = []
+
+        def _norm_placa(v):
+            return re.sub(r"[^A-Z0-9]", "", clean_text(v).upper())
+        def _norm_servico(v):
+            v = clean_text(v).upper()
+            v = apply_alias(config, "servico", v)
+            v = _ud.normalize("NFD", v)
+            v = "".join(c for c in v if _ud.category(c) != "Mn")
+            return " ".join(v.split())
+
+        # Indice PDV por placa (lista — uma placa pode ter varios servicos)
+        pdv_por_placa: dict[str, list[dict]] = {}
+        for lc in lancamentos:
+            placa = _norm_placa(lc.get("placa", ""))
+            if placa:
+                pdv_por_placa.setdefault(placa, []).append(lc)
+
+        consumed: set[int] = set()
+        linhas_out: list[dict] = []
+        for r in records:
+            placa   = _norm_placa(r.get("placa", ""))
+            servico = _norm_servico(r.get("servico", ""))
+            preco   = float(r.get("preco", 0) or 0)
+            data_r  = (r.get("data") or "").strip()[:10]
+            dia_anterior = bool(data_r and data_r != data_iso)
+
+            pdv_match = None
+            status    = "sem_pdv"
+            available = [c for c in pdv_por_placa.get(placa, []) if id(c) not in consumed]
+
+            # Decisao 1: prioriza match por servico (placa+servico exato)
+            for c in available:
+                if _norm_servico(c.get("servico", "")) == servico:
+                    pdv_match = c; consumed.add(id(c)); status = "ok"; break
+
+            # Fallback: placa+valor (servico diverge)
+            if not pdv_match:
+                for c in available:
+                    if abs(float(c.get("valor", 0) or 0) - preco) < 0.01:
+                        pdv_match = c; consumed.add(id(c)); status = "ok_fallback"; break
+
+            # Divergencia: placa bate mas valor diferente
+            if not pdv_match and available:
+                pdv_match = available[0]; consumed.add(id(pdv_match))
+                if abs(float(pdv_match.get("valor", 0) or 0) - preco) >= 0.01:
+                    status = "divergencia_valor"
+                else:
+                    status = "ok_fallback"
+
+            linhas_out.append({
+                "id":      r.get("id", ""),
+                "placa":   r.get("placa", ""),
+                "servico": r.get("servico", ""),
+                "preco":   preco,
+                "fp":      r.get("fp", ""),
+                "data":    data_r,
+                "status":  status,
+                "dia_anterior": dia_anterior,
+                "pdv_match": {
+                    "id":    pdv_match.get("id"),
+                    "hora":  pdv_match.get("hora"),
+                    "fp":    pdv_match.get("fp"),
+                    "valor": pdv_match.get("valor"),
+                } if pdv_match else None,
+            })
+
+        # Vistorias no PDV sem correspondencia na planilha
+        orfas_pdv = []
+        for lc in lancamentos:
+            if id(lc) in consumed:
+                continue
+            orfas_pdv.append({
+                "id":      lc.get("id"),
+                "placa":   lc.get("placa"),
+                "servico": lc.get("servico"),
+                "valor":   lc.get("valor"),
+                "fp":      lc.get("fp"),
+                "hora":    lc.get("hora"),
+            })
+
+        stats = {
+            "total":          len(linhas_out),
+            "cruzadas":       sum(1 for l in linhas_out if l["status"] in ("ok", "ok_fallback") and not l["dia_anterior"]),
+            "divergencias":   sum(1 for l in linhas_out if l["status"] == "divergencia_valor"),
+            "orfas_planilha": sum(1 for l in linhas_out if l["status"] == "sem_pdv" and not l["dia_anterior"]),
+            "orfas_pdv":      len(orfas_pdv),
+            "dia_anterior":   sum(1 for l in linhas_out if l["dia_anterior"]),
+        }
+
+        return _json({
+            "success":     True,
+            "data":        data_iso,
+            "exists":      True,
+            "uploaded_at": payload.get("uploaded_at"),
+            "uploaded_by": payload.get("uploaded_by"),
+            "versao":      payload.get("versao", 1),
+            "stats":       stats,
+            "linhas":      linhas_out,
+            "orfas_pdv":   orfas_pdv,
+        })
+    except Exception as exc:
+        app.logger.exception("[planilha.status] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/planilha/dia")
 @unit_access_required
 def api_planilha_dia(unit: str):
