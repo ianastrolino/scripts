@@ -196,18 +196,30 @@
     btnUpload: document.getElementById("pdUploadBtn"),
     btnRefresh: document.getElementById("pdRefreshBtn"),
     fileInput: document.getElementById("pdFileInput"),
+    toggleDetails: document.getElementById("pdToggleDetails"),
+    toggleLabel:   document.getElementById("pdToggleLabel"),
+    details:   document.getElementById("pdDetails"),
   };
   if (!els.panel) return;
+  let _detailsOpen = false;
+  let _lastStatus = null;
 
   function _statChip(label, value, cls = "") {
     return `<span class="pd-stat ${cls}"><span>${_escHtml(label)}</span> <strong>${value}</strong></span>`;
   }
 
+  function _fmtBrl(v) {
+    return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   function renderStatus(status) {
+    _lastStatus = status;
     if (!status || !status.exists) {
       els.meta.textContent = "Nenhuma planilha carregada";
       els.stats.innerHTML = "";
       els.empty.hidden = false;
+      els.toggleDetails.hidden = true;
+      els.details.hidden = true;
       return;
     }
     const s = status.stats || {};
@@ -225,6 +237,137 @@
     const arquivos = status.arquivo ? ` · ${status.arquivo}` : "";
     els.meta.textContent = `v${versao} · atualizada ${upTime}${arquivos}`;
     els.empty.hidden = true;
+
+    // Toggle "Mostrar detalhes" se houver algo pra mostrar
+    const linhas = status.linhas || [];
+    const orfasPdv = status.orfas_pdv || [];
+    const semPdv = linhas.filter((l) => l.status === "sem_pdv" && !l.dia_anterior);
+    const divergencias = linhas.filter((l) => l.status === "divergencia_valor");
+    const diaAnterior = linhas.filter((l) => l.dia_anterior);
+    const totalDetalhes = orfasPdv.length + semPdv.length + divergencias.length + diaAnterior.length;
+    els.toggleDetails.hidden = totalDetalhes === 0;
+    els.toggleLabel.textContent = `${_detailsOpen ? "Ocultar" : "Mostrar"} detalhes (${totalDetalhes})`;
+    els.toggleDetails.classList.toggle("is-open", _detailsOpen);
+
+    if (_detailsOpen) renderDetails({ orfasPdv, semPdv, divergencias, diaAnterior });
+    else els.details.hidden = true;
+  }
+
+  function _itemSemPdv(l) {
+    const valor = _fmtBrl(l.preco);
+    return `<div class="pd-item tipo-sem-pdv">
+      <div class="pd-item-desc">
+        <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
+        <em>(${_escHtml(l.fp || "AV")})</em>
+      </div>
+      <button type="button" class="pd-item-acao" data-fill='${_escHtml(JSON.stringify({placa: l.placa, servico: l.servico, valor: l.preco, fp: l.fp}))}'>+ Lançar agora</button>
+    </div>`;
+  }
+
+  function _itemDiaAnterior(l) {
+    const valor = _fmtBrl(l.preco);
+    const fa = (l.fp || "").toUpperCase() === "FA";
+    const acao = fa
+      ? `<button type="button" class="pd-item-acao ghost" disabled title="FA = boleto, fica em contas a receber">FA — sem ação</button>`
+      : `<button type="button" class="pd-item-acao" data-fill='${_escHtml(JSON.stringify({placa: l.placa, servico: l.servico, valor: l.preco, fp: l.fp}))}'>+ Lançar hoje</button>`;
+    return `<div class="pd-item tipo-anterior">
+      <div class="pd-item-desc">
+        📅 <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
+        <em>(${_escHtml(l.fp || "AV")} · ${_escHtml(l.data || "")})</em>
+      </div>
+      ${acao}
+    </div>`;
+  }
+
+  function _itemDivergencia(l) {
+    const valor = _fmtBrl(l.preco);
+    const pdvVal = l.pdv_match ? _fmtBrl(l.pdv_match.valor) : "—";
+    return `<div class="pd-item tipo-div">
+      <div class="pd-item-desc">
+        <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} ·
+        planilha <strong>${valor}</strong> ↔ PDV <strong>${pdvVal}</strong>
+      </div>
+    </div>`;
+  }
+
+  function _itemOrfaPdv(o) {
+    const valor = _fmtBrl(o.valor);
+    return `<div class="pd-item tipo-orfa-pdv">
+      <div class="pd-item-desc">
+        <span class="pd-mono">${_escHtml(o.placa || "—")}</span> · ${_escHtml(o.servico || "—")} · <strong>${valor}</strong>
+        <em>(${_escHtml(o.fp || "AV")} · ${_escHtml(o.hora || "")})</em>
+      </div>
+    </div>`;
+  }
+
+  function renderDetails({ orfasPdv, semPdv, divergencias, diaAnterior }) {
+    const blocks = [];
+    if (semPdv.length) {
+      blocks.push(`<div class="pd-grupo-titulo tipo-sem-pdv">À Vista na planilha sem PDV (${semPdv.length})</div>`);
+      blocks.push(...semPdv.map(_itemSemPdv));
+    }
+    if (orfasPdv.length) {
+      blocks.push(`<div class="pd-grupo-titulo tipo-orfa-pdv">Vistorias no PDV sem planilha (${orfasPdv.length})</div>`);
+      blocks.push(...orfasPdv.map(_itemOrfaPdv));
+    }
+    if (divergencias.length) {
+      blocks.push(`<div class="pd-grupo-titulo tipo-div">Divergências de valor (${divergencias.length})</div>`);
+      blocks.push(...divergencias.map(_itemDivergencia));
+    }
+    if (diaAnterior.length) {
+      blocks.push(`<div class="pd-grupo-titulo tipo-anterior">Vistorias de dia anterior (${diaAnterior.length})</div>`);
+      blocks.push(...diaAnterior.map(_itemDiaAnterior));
+    }
+    els.details.innerHTML = blocks.join("");
+    els.details.hidden = false;
+    // Wire botões de fill
+    els.details.querySelectorAll("[data-fill]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        try {
+          const data = JSON.parse(btn.dataset.fill);
+          fillFormPdv(data);
+        } catch (e) {
+          console.warn("[planilha-dia] fill payload inválido", e);
+        }
+      });
+    });
+  }
+
+  // Pré-preenche o form #formCard do PDV com os dados da vistoria selecionada
+  function fillFormPdv({ placa, servico, valor, fp }) {
+    const fPlaca = document.getElementById("fPlaca");
+    const fCliente = document.getElementById("fCliente");
+    const fServico = document.getElementById("fServico");
+    const fValor = document.getElementById("fValor");
+    if (!fPlaca || !fServico || !fValor) {
+      alert("Form de novo lançamento não encontrado nesta tela.");
+      return;
+    }
+    fPlaca.value = (placa || "").toUpperCase();
+    fPlaca.dispatchEvent(new Event("input", { bubbles: true }));
+    fValor.value = Number(valor || 0).toFixed(2);
+    fValor.dispatchEvent(new Event("input", { bubbles: true }));
+
+    // Tenta selecionar serviço por matching de texto
+    if (servico && fServico.tagName === "SELECT") {
+      const target = String(servico).toUpperCase().trim();
+      let match = null;
+      for (const opt of fServico.options) {
+        const t = (opt.text || "").toUpperCase();
+        if (t.includes(target) || target.includes(t.trim())) { match = opt; break; }
+      }
+      if (match) {
+        fServico.value = match.value;
+        fServico.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+
+    // Scroll suave + foco no FP
+    document.getElementById("formCard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => {
+      const fpBtn = document.querySelector(`#fpGrid [data-fp="${fp || "dinheiro"}"]`);
+      (fpBtn || fValor).focus();
+    }, 350);
   }
 
   async function fetchStatus() {
@@ -323,6 +466,10 @@
     e.target.value = "";
   });
   els.btnRefresh.addEventListener("click", fetchStatus);
+  els.toggleDetails.addEventListener("click", () => {
+    _detailsOpen = !_detailsOpen;
+    if (_lastStatus) renderStatus(_lastStatus);
+  });
 
   fetchStatus();
 })();

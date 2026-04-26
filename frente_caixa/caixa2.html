@@ -1621,6 +1621,74 @@
       .pd-actions { width: 100%; }
       .pd-btn-primary { flex: 1; }
     }
+    /* Detalhes expansíveis */
+    .pd-toggle-details {
+      margin-top: 12px;
+      padding: 6px 0;
+      background: transparent; border: none;
+      color: var(--ds-info, #0891b2);
+      font-size: 12px; font-weight: 600;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      font-family: inherit;
+    }
+    .pd-toggle-details:hover { text-decoration: underline; }
+    .pd-toggle-details[hidden] { display: none; }
+    .pd-toggle-arrow { transition: transform .15s; }
+    .pd-toggle-details.is-open .pd-toggle-arrow { transform: rotate(180deg); }
+    .pd-details[hidden] { display: none; }
+    .pd-details {
+      margin-top: 8px;
+      display: flex; flex-direction: column; gap: 12px;
+      max-height: 420px; overflow-y: auto;
+    }
+    .pd-grupo-titulo {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .07em; text-transform: uppercase;
+      color: var(--t4, #64748b);
+      padding-top: 4px;
+      border-top: 1px dashed var(--ds-line, #e2e8f0);
+    }
+    .pd-grupo-titulo:first-child { border-top: none; padding-top: 0; }
+    .pd-grupo-titulo.tipo-orfa-pdv  { color: var(--ds-info, #0891b2); }
+    .pd-grupo-titulo.tipo-sem-pdv   { color: var(--ds-danger, #dc2626); }
+    .pd-grupo-titulo.tipo-div       { color: var(--ds-warning, #d97706); }
+    .pd-grupo-titulo.tipo-anterior  { color: var(--ds-info, #0891b2); }
+    .pd-item {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px;
+      padding: 6px 10px;
+      background: var(--ds-surface-alt, #f8fafc);
+      border: 1px solid var(--ds-line, #e2e8f0);
+      border-left: 3px solid var(--ds-line, #e2e8f0);
+      border-radius: var(--ds-radius-sm, 4px);
+      font-size: 11.5px;
+    }
+    .pd-item.tipo-orfa-pdv  { border-left-color: var(--ds-info, #0891b2); }
+    .pd-item.tipo-sem-pdv   { border-left-color: var(--ds-danger, #dc2626); }
+    .pd-item.tipo-div       { border-left-color: var(--ds-warning, #d97706); }
+    .pd-item.tipo-anterior  { border-left-color: var(--ds-info, #0891b2); }
+    .pd-item-desc { flex: 1; min-width: 0; color: var(--t2, #334155); line-height: 1.45; }
+    .pd-item-desc strong { color: var(--t1, #0f172a); font-weight: 700; }
+    .pd-item-desc .pd-mono {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 11px; font-weight: 700; color: var(--t1, #0f172a);
+    }
+    .pd-item-desc em { color: var(--t5, #94a3b8); font-style: normal; }
+    .pd-item-acao {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      font-size: 11px; font-weight: 600;
+      background: var(--ds-primary, #0f172a); color: #fff;
+      border: 1px solid var(--ds-primary, #0f172a);
+      border-radius: 4px; cursor: pointer; font-family: inherit;
+      transition: all .12s;
+    }
+    .pd-item-acao:hover { filter: brightness(1.15); }
+    .pd-item-acao.ghost {
+      background: transparent; color: var(--t4, #64748b);
+      border-color: var(--ds-line, #e2e8f0);
+    }
+    .pd-item-acao.ghost:hover { background: var(--ds-surface, #fff); color: var(--t2, #334155); }
 
     /* ─── Caixa fechado (tarja + estado travado) ─────────── */
     .fech-tarja {
@@ -1802,6 +1870,11 @@
           <div class="pd-empty" id="pdEmpty">
             Nenhuma planilha do dia carregada. Faça upload pra ver status em tempo real.
           </div>
+          <button type="button" class="pd-toggle-details" id="pdToggleDetails" hidden>
+            <span id="pdToggleLabel">Mostrar detalhes</span>
+            <span class="pd-toggle-arrow">▾</span>
+          </button>
+          <div class="pd-details" id="pdDetails" hidden></div>
         </div>
       </section>
   <!-- ═══ WORKSPACE ═══════════════════════════════════════════ -->
@@ -2254,6 +2327,6 @@
   <script src="caixa.js?v=19"></script>
   <script src="caixa2-init.js?v=19"></script>
   <script src="caixa2.js?v=19"></script>
-  <script src="planilha-dia.js?v=4"></script>
+  <script src="planilha-dia.js?v=5"></script>
 </body>
 </html>
