@@ -1868,6 +1868,39 @@ def master_api_js_errors():
     return _json({"errors": list(reversed(out))})
 
 
+@app.route("/master/api/tokens/refresh-now", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_tokens_refresh_now():
+    """Dispara renovacao manual dos tokens Tiny (mesmo fluxo do cron 7h+15h).
+    Util quando deploy do Railway dropou o cron e os tokens ja expiraram.
+    Retorna resultado por unidade pra UI mostrar."""
+    out = []
+    for uid in UNITS:
+        unit_cfg = UNITS.get(uid, {})
+        if (unit_cfg.get("erp") or "tiny") != "tiny":
+            out.append({"unit": uid, "skipped": True, "reason": "erp_nao_tiny"})
+            continue
+        try:
+            config    = _build_unit_config(uid)
+            state_dir = _unit_state_dir(uid)
+            _seed_tokens(uid, config)
+            importer  = TinyImporter(config, state_dir)
+            importer.refresh_access_token()
+            tokens = importer.client._load_tokens()
+            out.append({
+                "unit": uid,
+                "ok": True,
+                "expires_in": int(tokens.get("expires_in", 0)),
+            })
+        except Exception as exc:
+            out.append({"unit": uid, "ok": False, "error": str(exc)})
+    user = _current_user() or {}
+    _write_audit_log(user, "tokens.refresh_now", target="all",
+                     payload={"resultado": out})
+    return _json({"success": True, "resultado": out})
+
+
 @app.route("/master/api/diag/tokens")
 @master_view_required
 def master_api_diag_tokens():
