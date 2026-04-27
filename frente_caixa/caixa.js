@@ -81,22 +81,23 @@ async function init() {
   // Info da unidade (nome, servicos, pin_configurado)
   try {
     const info = await apiFetch(`${apiBase}/api/info`);
-    document.getElementById("unidadeLabel").textContent = info.unidade || "";
-    document.getElementById("userLabel").textContent = info.usuario || "";
+    // unidadeLabel ainda existe (visivel no hero); userLabel/linkFechamento
+    // foram stubs ocultos removidos na migracao pro shell v2.1
+    const ul = document.getElementById("unidadeLabel");
+    if (ul) ul.textContent = info.unidade || "";
 
     state.servicos = info.servicos || [];
     state.pinConfigurado = !!info.pin_configurado;
 
     // Preenche dropdowns de servico
     const opts = state.servicos.map(s => `<option value="${s}">${s}</option>`).join("");
-    document.getElementById("fServico").innerHTML = '<option value="">Selecione...</option>' + opts;
-    document.getElementById("eServico").innerHTML = '<option value="">Selecione...</option>' + opts;
+    const fServ = document.getElementById("fServico");
+    const eServ = document.getElementById("eServico");
+    if (fServ) fServ.innerHTML = '<option value="">Selecione...</option>' + opts;
+    if (eServ) eServ.innerHTML = '<option value="">Selecione...</option>' + opts;
   } catch (e) {
     if (e.message !== "session_expired") console.error("Erro ao carregar info:", e);
   }
-
-  // Configura links de navegacao
-  document.getElementById("linkFechamento").href = `${apiBase}/`;
 
   // Carrega lancamentos do dia
   await carregarEstado();

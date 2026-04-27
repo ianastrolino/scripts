@@ -401,62 +401,17 @@ function confirmarConferencia() {
   window.location.href = `${apiBase}/fechamento`;
 }
 
-// ── Status bar ────────────────────────────────────────────────────────────────
-
-function atualizarStatusBar() {
-  const el = document.getElementById("statusDate");
-  if (!el) return;
-  const hoje = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long", day: "2-digit", month: "long", year: "numeric"
-  });
-  el.textContent = hoje.charAt(0).toUpperCase() + hoje.slice(1);
-}
-
 // ── Init layout 2 ─────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
-  atualizarStatusBar();
-
-  // Avatar do usuário (inicial do nome)
-  const avatarEl = document.getElementById("userAvatar");
-  const labelEl  = document.getElementById("userLabel");
-  if (avatarEl && labelEl) {
-    fetch(`${apiBase}/api/info`).then(r => r.json()).then(info => {
-      if (info.unidade) {
-        document.getElementById("unidadeLabel").textContent = info.unidade;
-        document.getElementById("statusUnit").textContent   = info.unidade;
-      }
-      if (info.usuario) {
-        labelEl.textContent   = info.usuario;
-        avatarEl.textContent  = info.usuario.charAt(0).toUpperCase();
-      }
-      if (apiBase) {
-        const set = (id, href) => { const el = document.getElementById(id); if (el) el.href = href; };
-        set("linkFechamento", `${apiBase}/fechamento`);
-        set("linkCaixaL2",    `${apiBase}/caixa2`);
-        set("ddHome",         `${apiBase}/home`);
-        set("ddCaixa",        `${apiBase}/caixa2`);
-        set("ddFechamento",   `${apiBase}/fechamento`);
-        set("ddManual",       `${apiBase}/manual`);
-        set("ddReauthTiny",   `${apiBase}/auth`);
-        if (info.gerencial) {
-          const el = document.getElementById("ddGerencial");
-          if (el) { el.href = `${apiBase}/gerencial`; el.style.display = ""; }
-        }
-        if (info.master) {
-          const el = document.getElementById("ddRede");
-          if (el) el.style.display = "";
-        }
-      }
-
-      // Toggle hamburger menu
-      const hamMenu = document.getElementById("hamMenu");
-      const hamBtn  = document.getElementById("hamBtn");
-      if (hamMenu && hamBtn) {
-        hamBtn.addEventListener("click", e => { e.stopPropagation(); hamMenu.classList.toggle("open"); });
-        document.addEventListener("click", () => hamMenu.classList.remove("open"));
-      }
-    }).catch(() => {});
+  // Popula o label da unidade no hero (único elemento visível que ainda
+  // depende de fetch /api/info — o resto vem do AstroShell via /api/me).
+  const unidadeLabel = document.getElementById("unidadeLabel");
+  if (unidadeLabel) {
+    fetch(`${apiBase}/api/info`)
+      .then(r => r.json())
+      .then(info => { if (info.unidade) unidadeLabel.textContent = info.unidade; })
+      .catch(() => {});
   }
 
   // Conferência
