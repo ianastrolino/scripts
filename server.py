@@ -1886,7 +1886,7 @@ def master_api_tokens_refresh_now():
             state_dir = _unit_state_dir(uid)
             _seed_tokens(uid, config)
             importer  = TinyImporter(config, state_dir)
-            importer.refresh_access_token()
+            importer.client.refresh_access_token()
             tokens = importer.client._load_tokens()
             out.append({
                 "unit": uid,
@@ -8489,7 +8489,7 @@ def _verificar_saude_tokens() -> None:
             _seed_tokens(uid, config)
             importer  = TinyImporter(config, state_dir)
             # 1. Forca renovacao; se funcionar, access_token fica valido 4h+
-            importer.refresh_access_token()
+            importer.client.refresh_access_token()
             # 2. Valida acesso real — token pode renovar mas estar em empresa
             # errada. test_call pega isso.
             import requests as _rq
