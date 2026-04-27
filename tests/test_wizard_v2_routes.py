@@ -13,12 +13,19 @@ Estrategia: Flask test client, DATA_DIR em tmp_path, sem rede.
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Data "hoje" do PDV — usada nos tests pra evitar dependencia de data
+# do calendario real. Tests que cruzam planilha+PDV precisam usar a
+# mesma data, e _lancar grava no PDV do dia atual real.
+HOJE = dt.date.today().isoformat()
+ONTEM = (dt.date.today() - dt.timedelta(days=1)).isoformat()
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-pytest")
 os.environ.setdefault("USERS_CONFIG", "{}")
@@ -249,9 +256,9 @@ class TestPlanilhaStatus:
     def test_status_match_exato_quando_pdv_existe(self, client):
         _lancar(client, placa="ABC1234", servico="CAUTELAR", valor=80.0, fp="dinheiro")
         self._upload(client, [
-            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 80.0, "fp": "AV", "data": "2026-04-26"},
-        ])
-        r = client.get(f"/u/{UNIT}/api/planilha/status?data=2026-04-26")
+            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 80.0, "fp": "AV", "data": HOJE},
+        ], data_iso=HOJE)
+        r = client.get(f"/u/{UNIT}/api/planilha/status?data={HOJE}")
         body = r.get_json()
         assert body["stats"]["cruzadas"] == 1
         assert body["stats"]["orfas_planilha"] == 0
@@ -261,11 +268,11 @@ class TestPlanilhaStatus:
         assert linha["dia_anterior"] is False
 
     def test_status_dia_anterior_eh_flagado(self, client):
-        # Vistoria com data diferente da query
+        # Vistoria com data diferente da query (ontem na planilha, hoje na query)
         self._upload(client, [
-            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 80.0, "fp": "AV", "data": "2026-04-25"},
-        ])
-        r = client.get(f"/u/{UNIT}/api/planilha/status?data=2026-04-26")
+            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 80.0, "fp": "AV", "data": ONTEM},
+        ], data_iso=HOJE)
+        r = client.get(f"/u/{UNIT}/api/planilha/status?data={HOJE}")
         body = r.get_json()
         assert body["stats"]["dia_anterior"] == 1
         assert body["linhas"][0]["dia_anterior"] is True
@@ -273,7 +280,7 @@ class TestPlanilhaStatus:
     def test_status_orfa_pdv_quando_lancamento_sem_planilha(self, client):
         _lancar(client, placa="ZZZ0001", servico="PESQUISA AVULSA", valor=50.0, fp="dinheiro")
         # Nao faz upload de planilha
-        r = client.get(f"/u/{UNIT}/api/planilha/status?data=2026-04-26")
+        r = client.get(f"/u/{UNIT}/api/planilha/status?data={HOJE}")
         body = r.get_json()
         # exists=False mas orfas_pdv ainda eh stats={}
         assert body["exists"] is False
@@ -281,9 +288,9 @@ class TestPlanilhaStatus:
     def test_status_divergencia_valor_detectada(self, client):
         _lancar(client, placa="ABC1234", servico="CAUTELAR", valor=100.0, fp="pix")
         self._upload(client, [
-            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 150.0, "fp": "AV", "data": "2026-04-26"},
-        ])
-        r = client.get(f"/u/{UNIT}/api/planilha/status?data=2026-04-26")
+            {"id": "p1", "placa": "ABC1234", "servico": "CAUTELAR", "preco": 150.0, "fp": "AV", "data": HOJE},
+        ], data_iso=HOJE)
+        r = client.get(f"/u/{UNIT}/api/planilha/status?data={HOJE}")
         body = r.get_json()
         # placa bate mas valor difere → divergencia
         assert body["stats"]["divergencias"] == 1
