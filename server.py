@@ -8468,7 +8468,10 @@ def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#0f1117;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Envio Tiny</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="28" height="28" style="display:block;border-radius:6px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5)">Astrovistorias · Envio Tiny</div>
+      </div>
       <div style="font-size:20px;font-weight:800;color:#fff">{unit_nome} — {data_fmt}</div>
       <div style="font-size:13px;color:{cor_status};margin-top:6px;font-weight:700">{status_txt}</div>
     </div>
