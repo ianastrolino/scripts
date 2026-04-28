@@ -18,3 +18,11 @@ def reset_rate_limits():
     yield
     server._pin_attempts.clear()
     server._login_attempts.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_health_cache():
+    """Limpa cache do healthcheck pra evitar contaminacao entre testes."""
+    server._HEALTH_CACHE.update({"ts": 0.0, "payload": None, "code": 200})
+    yield
+    server._HEALTH_CACHE.update({"ts": 0.0, "payload": None, "code": 200})

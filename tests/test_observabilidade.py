@@ -66,9 +66,11 @@ class TestHealth:
         r = anon_client.get("/health")
         assert r.status_code == 200
 
-    def test_status_ok(self, anon_client):
+    def test_status_ok_ou_degraded(self, anon_client):
+        # Aceita "ok" (sem warnings) ou "degraded" (warnings nao-criticos como
+        # tokens Tiny faltando). Ambos retornam HTTP 200. "unhealthy" = 503.
         body = anon_client.get("/health").get_json()
-        assert body["status"] == "ok"
+        assert body["status"] in ("ok", "degraded")
 
     def test_retorna_contagem_de_unidades(self, anon_client):
         body = anon_client.get("/health").get_json()
@@ -78,6 +80,66 @@ class TestHealth:
         body = anon_client.get("/health").get_json()
         assert "ts" in body
         assert "T" in body["ts"]  # formato ISO
+
+    def test_inclui_checks_estruturados(self, anon_client):
+        body = anon_client.get("/health").get_json()
+        for k in ("app", "db", "disk", "fs_write", "tokens"):
+            assert k in body["checks"], f"check {k} faltando"
+            assert "ok" in body["checks"][k]
+
+    def test_check_db_mede_latencia(self, anon_client):
+        body = anon_client.get("/health").get_json()
+        db = body["checks"]["db"]
+        assert db["ok"] is True
+        # latency_ms presente quando db check passou
+        assert "latency_ms" in db
+        assert db["latency_ms"] >= 0
+
+    def test_check_disk_inclui_metrics(self, anon_client):
+        body = anon_client.get("/health").get_json()
+        disk = body["checks"]["disk"]
+        assert "free_pct" in disk
+        assert "free_mb" in disk
+        assert "total_mb" in disk
+
+    def test_uptime_em_segundos(self, anon_client):
+        body = anon_client.get("/health").get_json()
+        assert "uptime_s" in body
+        assert isinstance(body["uptime_s"], (int, float))
+        assert body["uptime_s"] >= 0
+
+    def test_cache_funciona(self, anon_client):
+        # 1a chamada — calcula
+        body1 = anon_client.get("/health").get_json()
+        assert body1.get("cached") in (False, None)
+        # 2a chamada imediata — usa cache
+        body2 = anon_client.get("/health").get_json()
+        assert body2.get("cached") is True
+
+    def test_db_inacessivel_retorna_503(self, anon_client, monkeypatch):
+        from unittest.mock import patch
+        # Forca _health_check_db a retornar erro
+        with patch.object(server, "_health_check_db", return_value={"ok": False, "error": "simulated"}):
+            r = anon_client.get("/health")
+            body = r.get_json()
+            assert r.status_code == 503
+            assert body["status"] == "unhealthy"
+            assert body["checks"]["db"]["ok"] is False
+
+    def test_disco_lotado_retorna_503(self, anon_client):
+        from unittest.mock import patch
+        with patch.object(server, "_health_check_disk", return_value={"ok": False, "free_pct": 1.0, "warning": True}):
+            r = anon_client.get("/health")
+            assert r.status_code == 503
+
+    def test_warning_em_tokens_nao_derruba_health(self, anon_client):
+        from unittest.mock import patch
+        # tokens warning (warning=True, ok=True) → degraded, mas 200
+        with patch.object(server, "_health_check_tokens", return_value={"ok": True, "warning": True, "ativos": 0, "total_tiny": 1}):
+            r = anon_client.get("/health")
+            body = r.get_json()
+            assert r.status_code == 200
+            assert body["status"] in ("ok", "degraded")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

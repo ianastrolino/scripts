@@ -1197,14 +1197,139 @@ def api_csrf_token():
     return _json({"token": _get_csrf_token()})
 
 
+# Healthcheck pro Railway — cache curto pra reduzir overhead quando ha
+# multiplas chamadas (Railway healthcheck + monitoramento externo).
+_HEALTH_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None, "code": 200}
+_HEALTH_CACHE_TTL = 10.0  # segundos
+
+
+def _health_check_disk(path: Path) -> dict:
+    """Verifica espaco livre. Critico se < 5%, warning < 10%."""
+    import shutil as _shutil
+    try:
+        target = path if path.exists() else path.parent
+        du = _shutil.disk_usage(str(target))
+        free_pct = (du.free / du.total * 100) if du.total else 0
+        ok = free_pct >= 5.0  # critico abaixo de 5% (Railway tem volumes pequenos)
+        return {
+            "ok":         ok,
+            "free_pct":   round(free_pct, 1),
+            "free_mb":    round(du.free / (1024 * 1024), 1),
+            "total_mb":   round(du.total / (1024 * 1024), 1),
+            "warning":    not ok or free_pct < 10.0,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:120]}
+
+
+def _health_check_db() -> dict:
+    """Tenta abrir SQLite de uma unidade ativa. Mede latencia."""
+    if not UNITS:
+        return {"ok": True, "note": "sem unidades configuradas"}
+    try:
+        # Pega primeira unidade ativa
+        uid = next(iter(UNITS))
+        unit_dir = _unit_state_dir(uid)
+        t0 = time.monotonic()
+        conn = _db_connect(unit_dir)
+        try:
+            conn.execute("SELECT 1").fetchone()
+        finally:
+            conn.close()
+        latency_ms = round((time.monotonic() - t0) * 1000, 2)
+        return {"ok": True, "latency_ms": latency_ms, "checked_unit": uid}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:120]}
+
+
+def _health_check_fs_write(base: Path) -> dict:
+    """Garante que filesystem aceita writes (volume montado, sem read-only fs)."""
+    try:
+        target = base if base.exists() else base.parent
+        target.mkdir(parents=True, exist_ok=True)
+        tmp = target / f".healthz_{os.getpid()}"
+        tmp.write_text("ok", encoding="utf-8")
+        tmp.unlink()
+        return {"ok": True}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:120]}
+
+
+def _health_check_tokens() -> dict:
+    """Conta tokens Tiny ativos (warning, nao critico)."""
+    total_tiny = 0
+    com_token = 0
+    for uid, ucfg in UNITS.items():
+        if (ucfg.get("erp") or "tiny") != "tiny":
+            continue
+        total_tiny += 1
+        token_file = _unit_state_dir(uid) / "tiny_tokens.json"
+        if token_file.exists():
+            com_token += 1
+    return {
+        "ok":          True,  # nunca derruba healthcheck (warning-only)
+        "ativos":      com_token,
+        "total_tiny":  total_tiny,
+        "warning":     total_tiny > 0 and com_token < total_tiny,
+    }
+
+
 @app.route("/health")
 def health():
-    """Usado pelo Railway para verificar se o processo está vivo."""
-    return _json({
-        "status": "ok",
-        "units":  len(UNITS),
-        "ts":     dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
-    })
+    """Healthcheck pro Railway. Sem auth.
+
+    Retorna 200 quando ok|degraded; 503 quando unhealthy (Railway restarta).
+
+    Checks (criticos derrubam, warning so reporta):
+    - app:        processo vivo (sempre ok se chegou aqui)
+    - db:         SQLite acessivel
+    - disk:       >= 5% livre
+    - fs_write:   filesystem writeable
+    - tokens:     warning-only (Tiny tokens podem expirar e renovar lazy)
+
+    Cache 10s pra reduzir overhead de checks pesados quando bateado
+    repetidamente (Railway + monitoramento externo).
+    """
+    now_ts = time.time()
+    if _HEALTH_CACHE["payload"] and (now_ts - _HEALTH_CACHE["ts"] < _HEALTH_CACHE_TTL):
+        return _json({**_HEALTH_CACHE["payload"], "cached": True}, _HEALTH_CACHE["code"])
+
+    tz = ZoneInfo("America/Sao_Paulo")
+    checks = {
+        "app":      {"ok": True},
+        "db":       _health_check_db(),
+        "disk":     _health_check_disk(DATA_DIR),
+        "fs_write": _health_check_fs_write(DATA_DIR),
+        "tokens":   _health_check_tokens(),  # warning-only
+    }
+
+    # Determina status global. tokens nao derruba.
+    criticos = ["app", "db", "disk", "fs_write"]
+    has_critico_falhou = any(not checks[k].get("ok") for k in criticos)
+    has_warning = any(checks[k].get("warning") for k in checks)
+
+    if has_critico_falhou:
+        status = "unhealthy"
+        code = 503
+    elif has_warning:
+        status = "degraded"
+        code = 200
+    else:
+        status = "ok"
+        code = 200
+
+    checked_at = dt.datetime.now(tz).isoformat(timespec="seconds")
+    payload = {
+        "status":     status,
+        "checks":     checks,
+        "uptime_s":   round(now_ts - _BOOT_TS, 1),
+        "units":      len(UNITS),
+        "checked_at": checked_at,
+        "ts":         checked_at,  # alias retro pra clientes antigos
+        "cached":     False,
+    }
+    _HEALTH_CACHE.update({"ts": now_ts, "payload": payload, "code": code})
+    return _json(payload, code)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

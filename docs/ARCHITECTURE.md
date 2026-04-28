@@ -263,9 +263,27 @@ operam o PDV local.
 
 ## Observabilidade
 
-- **Dashboard /master/sistema**: uptime, disco, saúde Tiny por unidade
-  (test_call real), backup last_run, JS errors recentes, crons
-  agendados
+### Healthcheck público (`GET /health`)
+
+Endpoint sem autenticação consumido pelo Railway pra decidir se restarta
+o pod (configurado em `railway.json`: `healthcheckPath: /health`,
+`timeout: 30s`, `restartPolicyType: ON_FAILURE`).
+
+Verifica:
+- **app**: processo vivo (sempre OK se chegou aqui)
+- **db**: SQLite acessível (mede `latency_ms`)
+- **disk**: ≥ 5% livre (crítico) — warning < 10%
+- **fs_write**: filesystem aceita writes (volume montado, sem read-only fs)
+- **tokens**: contagem de tokens Tiny ativos (warning-only — não derruba)
+
+Retorna:
+- `200` quando `status ∈ {"ok", "degraded"}` — Railway considera saudável
+- `503` quando `status == "unhealthy"` — Railway dispara restart
+
+Cache 10s pra reduzir overhead quando bateado por monitoramento externo +
+Railway simultaneamente.
+
+### Dashboard `/master/sistema`
 - **JS errors**: `window.error` + `unhandledrejection` capturados →
   `sendBeacon` → `/api/log/js-error` → `js_errors.jsonl`
 - **Audit log**: `audit_log.jsonl` em `/data/audit/` — toda ação
