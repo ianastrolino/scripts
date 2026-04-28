@@ -1317,7 +1317,10 @@ def esqueci_senha_page():
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#0f1117;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Seguranca</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="28" height="28" style="display:block;border-radius:6px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5)">Astrovistorias · Seguranca</div>
+      </div>
       <div style="font-size:20px;font-weight:800;color:#fff">Redefinir senha</div>
     </div>
     <div style="padding:20px 28px;font-size:14px;color:#374151;line-height:1.55">
@@ -7902,6 +7905,10 @@ def _send_invite_email(email: str, nome: str, token: str, criador_nome: str) -> 
     link = f"{base}/ativar/{token}"
     html = f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111827">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="32" height="32" style="display:block;border-radius:6px">
+        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0e7490">Astrovistorias</div>
+      </div>
       <h2 style="color:#0e7490;margin:0 0 8px">Bem-vindo à Astrovistorias</h2>
       <p style="color:#374151;font-size:15px;line-height:1.55">
         Olá <strong>{nome}</strong>,<br>
@@ -7994,7 +8001,10 @@ def _enviar_alerta_fechamento(today: str) -> None:
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#0f1117;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Alerta automático</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="28" height="28" style="display:block;border-radius:6px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5)">Astrovistorias · Alerta automático</div>
+      </div>
       <div style="font-size:20px;font-weight:800;color:#fff">Status do Caixa — {data_fmt}</div>
       <div style="font-size:13px;color:rgba(255,255,255,.4);margin-top:4px">Verificação das 18:30 — horário de Brasília</div>
     </div>
@@ -8289,6 +8299,10 @@ def _cron_test_restore_backup() -> None:
         detalhes_html += f"<p style='color:#dc2626'>Erro geral: {res['error']}</p>"
     html = f"""<!DOCTYPE html>
 <html><body style='font-family:sans-serif;max-width:520px;margin:32px auto;padding:24px;background:#fff;border-radius:8px;border:1px solid #e5e7eb'>
+<div style='display:flex;align-items:center;gap:10px;margin-bottom:14px'>
+  <img src='https://astro-v2.up.railway.app/assets/img/astro-a.png' alt='Astro' width='24' height='24' style='display:block;border-radius:5px'>
+  <div style='font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6b7280'>Astrovistorias · Test Restore</div>
+</div>
 <h2 style='color:{cor};margin:0 0 8px'>{status}</h2>
 <p style='color:#6b7280;font-size:13px;margin:0 0 16px'>Test restore mensal · {data}</p>
 <p>Arquivo: <code>{res.get('ultimo_arquivo','-')}</code></p>
@@ -8378,7 +8392,10 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f3f4f6;margin:0;padding:0">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#0f1117;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px">Astrovistorias · Backup {'Automatico' if tipo == 'auto' else 'Manual'}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="28" height="28" style="display:block;border-radius:6px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.5)">Astrovistorias · Backup {'Automatico' if tipo == 'auto' else 'Manual'}</div>
+      </div>
       <div style="font-size:20px;font-weight:800;color:#fff">Backup do Sistema — {data_fmt}</div>
     </div>
     <div style="padding:24px 28px;font-size:14px;color:#374151">
@@ -8545,7 +8562,10 @@ def _verificar_saude_tokens() -> None:
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
   <div style="max-width:520px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
     <div style="background:#991b1b;padding:24px 28px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:6px">Astrovistorias · Atencao</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <img src="https://astro-v2.up.railway.app/assets/img/astro-a.png" alt="Astro" width="28" height="28" style="display:block;border-radius:6px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.7)">Astrovistorias · Atencao</div>
+      </div>
       <div style="font-size:20px;font-weight:800;color:#fff">Token Tiny expirado — {unit_nome}</div>
     </div>
     <div style="padding:20px 28px;font-size:14px;color:#374151;line-height:1.55">
