@@ -3445,6 +3445,12 @@ def master_roadmap_page():
     return send_from_directory(UI_DIR, "roadmap.html")
 
 
+@app.route("/master/inicio")
+@master_view_required
+def master_inicio_page():
+    return send_from_directory(UI_DIR, "inicio.html")
+
+
 @app.route("/master/sistema")
 @master_only_required
 def master_sistema_page():
