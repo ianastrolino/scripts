@@ -555,6 +555,11 @@ async function lancar() {
     msg.textContent = `Lancado: ${payload.placa} — ${brl(payload.valor)} (${fpLabel(payload.fp)})`;
     setTimeout(() => { msg.textContent = ""; msg.style.color = ""; }, 3000);
 
+    // Notifica painel "Planilha do dia" pra refrescar status (Conf Antecipada)
+    window.dispatchEvent(new CustomEvent("caixa:lancamento-criado", {
+      detail: { placa: res.lancamento.placa, id: res.lancamento.id },
+    }));
+
     limparFormulario();
 
     // Renders em frame separado — evita stack overflow por cadeia de inicialização

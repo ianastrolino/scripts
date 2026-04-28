@@ -339,6 +339,13 @@
         try {
           const data = JSON.parse(btn.dataset.fill);
           fillFormPdv(data);
+          // Marca o botão como em-uso pra evitar duplo-clique e dar
+          // feedback visual. Item volta ao normal no próximo fetchStatus
+          // (auto a cada 2min ou imediato após lançamento via evento)
+          btn.disabled = true;
+          btn.textContent = "✓ Em preenchimento";
+          btn.classList.add("ghost");
+          btn.dataset.placaPendente = (data.placa || "").toUpperCase();
         } catch (e) {
           console.warn("[planilha-dia] fill payload inválido", e);
         }
@@ -536,6 +543,13 @@
         fetchStatus({ silent: true }).then(() => { _lastFetchAt = Date.now(); });
       }
     }
+  });
+
+  // Listener: lançamento criado no PDV → refresh imediato pra item sumir
+  // da lista de "AV sem PDV" (cruzou agora) sem operadora ter que esperar
+  // os 2min do auto-refresh
+  window.addEventListener("caixa:lancamento-criado", () => {
+    fetchStatus({ silent: true }).then(() => { _lastFetchAt = Date.now(); });
   });
 
   // Carga inicial + agenda auto-refresh
