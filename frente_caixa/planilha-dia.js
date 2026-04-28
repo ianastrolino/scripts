@@ -253,14 +253,27 @@
     else els.details.hidden = true;
   }
 
+  function _cliFmt(c) {
+    if (!c) return "";
+    const t = String(c).trim();
+    if (!t) return "";
+    return ` · <span class="pd-cliente">${_escHtml(t)}</span>`;
+  }
+
+  function _fillPayload(l) {
+    return _escHtml(JSON.stringify({
+      placa: l.placa, cliente: l.cliente, servico: l.servico, valor: l.preco, fp: l.fp,
+    }));
+  }
+
   function _itemSemPdv(l) {
     const valor = _fmtBrl(l.preco);
     return `<div class="pd-item tipo-sem-pdv">
       <div class="pd-item-desc">
-        <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
+        <span class="pd-mono">${_escHtml(l.placa || "—")}</span>${_cliFmt(l.cliente)} · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
         <em>(${_escHtml(l.fp || "AV")})</em>
       </div>
-      <button type="button" class="pd-item-acao" data-fill='${_escHtml(JSON.stringify({placa: l.placa, servico: l.servico, valor: l.preco, fp: l.fp}))}'>+ Lançar agora</button>
+      <button type="button" class="pd-item-acao" data-fill='${_fillPayload(l)}'>+ Lançar agora</button>
     </div>`;
   }
 
@@ -269,10 +282,10 @@
     const fa = (l.fp || "").toUpperCase() === "FA";
     const acao = fa
       ? `<button type="button" class="pd-item-acao ghost" disabled title="FA = boleto, fica em contas a receber">FA — sem ação</button>`
-      : `<button type="button" class="pd-item-acao" data-fill='${_escHtml(JSON.stringify({placa: l.placa, servico: l.servico, valor: l.preco, fp: l.fp}))}'>+ Lançar hoje</button>`;
+      : `<button type="button" class="pd-item-acao" data-fill='${_fillPayload(l)}'>+ Lançar hoje</button>`;
     return `<div class="pd-item tipo-anterior">
       <div class="pd-item-desc">
-        📅 <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
+        📅 <span class="pd-mono">${_escHtml(l.placa || "—")}</span>${_cliFmt(l.cliente)} · ${_escHtml(l.servico || "—")} · <strong>${valor}</strong>
         <em>(${_escHtml(l.fp || "AV")} · ${_escHtml(l.data || "")})</em>
       </div>
       ${acao}
@@ -284,7 +297,7 @@
     const pdvVal = l.pdv_match ? _fmtBrl(l.pdv_match.valor) : "—";
     return `<div class="pd-item tipo-div">
       <div class="pd-item-desc">
-        <span class="pd-mono">${_escHtml(l.placa || "—")}</span> · ${_escHtml(l.servico || "—")} ·
+        <span class="pd-mono">${_escHtml(l.placa || "—")}</span>${_cliFmt(l.cliente)} · ${_escHtml(l.servico || "—")} ·
         planilha <strong>${valor}</strong> ↔ PDV <strong>${pdvVal}</strong>
       </div>
     </div>`;
@@ -294,7 +307,7 @@
     const valor = _fmtBrl(o.valor);
     return `<div class="pd-item tipo-orfa-pdv">
       <div class="pd-item-desc">
-        <span class="pd-mono">${_escHtml(o.placa || "—")}</span> · ${_escHtml(o.servico || "—")} · <strong>${valor}</strong>
+        <span class="pd-mono">${_escHtml(o.placa || "—")}</span>${_cliFmt(o.cliente)} · ${_escHtml(o.servico || "—")} · <strong>${valor}</strong>
         <em>(${_escHtml(o.fp || "AV")} · ${_escHtml(o.hora || "")})</em>
       </div>
     </div>`;
@@ -334,7 +347,7 @@
   }
 
   // Pré-preenche o form #formCard do PDV com os dados da vistoria selecionada
-  function fillFormPdv({ placa, servico, valor, fp }) {
+  function fillFormPdv({ placa, cliente, servico, valor, fp }) {
     const fPlaca = document.getElementById("fPlaca");
     const fCliente = document.getElementById("fCliente");
     const fServico = document.getElementById("fServico");
@@ -345,6 +358,10 @@
     }
     fPlaca.value = (placa || "").toUpperCase();
     fPlaca.dispatchEvent(new Event("input", { bubbles: true }));
+    if (fCliente && cliente) {
+      fCliente.value = String(cliente).toUpperCase();
+      fCliente.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     fValor.value = Number(valor || 0).toFixed(2);
     fValor.dispatchEvent(new Event("input", { bubbles: true }));
 

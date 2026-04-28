@@ -5868,6 +5868,7 @@ def api_planilha_status(unit: str):
             linhas_out.append({
                 "id":      r.get("id", ""),
                 "placa":   r.get("placa", ""),
+                "cliente": r.get("cliente", ""),
                 "servico": r.get("servico", ""),
                 "preco":   preco,
                 "fp":      r.get("fp", ""),
@@ -5890,6 +5891,7 @@ def api_planilha_status(unit: str):
             orfas_pdv.append({
                 "id":      lc.get("id"),
                 "placa":   lc.get("placa"),
+                "cliente": lc.get("cliente"),
                 "servico": lc.get("servico"),
                 "valor":   lc.get("valor"),
                 "fp":      lc.get("fp"),
