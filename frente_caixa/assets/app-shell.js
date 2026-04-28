@@ -140,7 +140,8 @@
       group: "Rede — Relatórios",
       requires: "rede",
       items: [
-        { id: "master",            label: "Painel Master",        icon: "master",     href: "/master" },
+        { id: "inicio",            label: "Início",               icon: "relatorios", href: "/master/inicio", requires: "master" },
+        { id: "master",            label: "Status agora",         icon: "master",     href: "/master" },
         { id: "contas-receber",    label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
         { id: "royalties",         label: "Royalties",            icon: "relatorios", href: "/master/royalties", requires: "master" },
         { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
@@ -318,6 +319,20 @@
           </div>
         </nav>
         <div class="sb-footer">
+          <a class="sb-kpi" id="sbKpi" href="/master/inicio" hidden>
+            <div class="sb-kpi-line">
+              <span class="sb-kpi-label">Hoje</span>
+              <span class="sb-kpi-value" id="sbKpiHoje">—</span>
+            </div>
+            <div class="sb-kpi-line">
+              <span class="sb-kpi-label">7 dias</span>
+              <span class="sb-kpi-value" id="sbKpi7d">—</span>
+            </div>
+            <div class="sb-kpi-line sb-kpi-alert" id="sbKpiAlert" hidden>
+              <span class="sb-kpi-label">⚠</span>
+              <span class="sb-kpi-value" id="sbKpiAlertCount">—</span>
+            </div>
+          </a>
           <div class="sb-user">
             <div class="sb-user-avatar">${esc(initials(userName))}</div>
             <div class="sb-user-text">
@@ -684,6 +699,14 @@
     if (ctx.isMaster) {
       setInterval(refreshBadges, 30_000);
     }
+
+    // Mini-card de KPIs na sidebar (so master/matriz veem)
+    if (ctx.isMaster || ctx.isMatriz) {
+      refreshSidebarKpi();
+      setInterval(() => {
+        if (document.visibilityState === "visible") refreshSidebarKpi();
+      }, 60_000);
+    }
     const themeBtn = document.getElementById("abThemeToggle");
     if (themeBtn) {
       themeBtn.addEventListener("click", () => {
@@ -700,6 +723,40 @@
       const me = await r.json();
       updateBadge("/master/aprovacoes", me.pending_approvals || 0);
     } catch (_) {}
+  }
+
+  function _fmtBrlCompact(v) {
+    const n = Number(v || 0);
+    if (n >= 10000) return "R$ " + Math.round(n / 1000) + "k";
+    if (n >= 1000)  return "R$ " + (n / 1000).toFixed(1).replace(".", ",") + "k";
+    return "R$ " + Math.round(n);
+  }
+
+  async function refreshSidebarKpi() {
+    const card = document.getElementById("sbKpi");
+    if (!card) return;
+    try {
+      const r = await fetch("/master/api/visao-geral", { credentials: "same-origin", cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.success) return;
+      const hoje = document.getElementById("sbKpiHoje");
+      const sete = document.getElementById("sbKpi7d");
+      if (hoje) hoje.textContent = _fmtBrlCompact(d.totais.hoje.total);
+      if (sete) sete.textContent = _fmtBrlCompact(d.totais.ultimos_7d.total);
+      const alertCount = (d.alertas || []).length;
+      const alertWrap  = document.getElementById("sbKpiAlert");
+      const alertN     = document.getElementById("sbKpiAlertCount");
+      if (alertWrap && alertN) {
+        if (alertCount > 0) {
+          alertN.textContent = `${alertCount} alerta${alertCount === 1 ? "" : "s"}`;
+          alertWrap.hidden = false;
+        } else {
+          alertWrap.hidden = true;
+        }
+      }
+      card.hidden = false;
+    } catch (_) { /* falha silenciosa — card fica oculto */ }
   }
 
   function updateBadge(href, count) {
