@@ -1595,6 +1595,174 @@ def master_categorias_page():
     return _nocache(send_from_directory(UI_DIR, "categorias.html"))
 
 
+def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
+    """Resumo agregado de lançamentos de uma unidade num dia.
+
+    Combina PDV + envios_tiny com dedup (mesma logica do units/status).
+    Retorna {vistorias, total, av, fa, lancamentos_pdv}.
+    """
+    try:
+        lancamentos = _db_load(uid, unit_dir, data_iso)
+    except Exception:
+        lancamentos = []
+    try:
+        envios = _db_load_envios_range(uid, unit_dir, data_iso, data_iso)
+    except Exception:
+        envios = []
+
+    chaves_tiny: set[tuple] = set()
+    total_tiny_av = 0.0
+    total_tiny_fa = 0.0
+    for e in envios:
+        placa   = (e.get("placa") or "").upper().strip()
+        servico = (e.get("servico") or "").upper().strip()
+        valor   = float(e.get("valor", 0) or 0)
+        fp_raw  = (e.get("fp") or "").lower().strip()
+        fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
+        chaves_tiny.add((placa, servico, round(valor, 2), fp_norm))
+        if fp_norm in ("faturado", "fa"):
+            total_tiny_fa += valor
+        else:
+            total_tiny_av += valor
+
+    total_pdv_av = 0.0
+    total_pdv_fa = 0.0
+    pdv_dedupe_count = 0
+    for lc in lancamentos:
+        placa   = (lc.get("placa") or "").upper().strip()
+        servico = (lc.get("servico") or "").upper().strip()
+        valor   = float(lc.get("valor", 0) or 0)
+        fp      = (lc.get("fp") or "").lower().strip()
+        if (placa, servico, round(valor, 2), fp) in chaves_tiny:
+            continue
+        pdv_dedupe_count += 1
+        if fp == "faturado":
+            total_pdv_fa += valor
+        else:
+            total_pdv_av += valor
+
+    total_av = total_tiny_av + total_pdv_av
+    total_fa = total_tiny_fa + total_pdv_fa
+    return {
+        "vistorias":       len(envios) + pdv_dedupe_count,
+        "total":           round(total_av + total_fa, 2),
+        "av":              round(total_av, 2),
+        "fa":              round(total_fa, 2),
+        "lancamentos_pdv": len(lancamentos),
+    }
+
+
+# Cache 60s pra visao geral — calculo pesa quando ha muitas unidades x 14 dias
+_VISAO_GERAL_CACHE: dict[str, Any] = {}
+
+
+@app.route("/master/api/visao-geral")
+@master_view_required
+def master_api_visao_geral():
+    """Dashboard executivo: hoje, ontem, ultimos 7 dias + tendencias + por unidade.
+
+    Janela rolante (hoje + 6 dias anteriores). Cache 60s.
+    """
+    now_ts = time.time()
+    cached = _VISAO_GERAL_CACHE.get("data")
+    if cached and (now_ts - cached["ts"] < 60):
+        return _json({**cached["payload"], "cached": True})
+
+    tz   = ZoneInfo("America/Sao_Paulo")
+    hoje = dt.datetime.now(tz).date()
+    ontem = hoje - dt.timedelta(days=1)
+    # Janela 7d rolante (hoje + 6 anteriores)
+    sete_dias = [hoje - dt.timedelta(days=i) for i in range(7)]
+    # Janela 7d anterior (dia 7-13 atras) — pra calcular tendencia
+    sete_d_ant = [hoje - dt.timedelta(days=i) for i in range(7, 14)]
+
+    def zerado() -> dict:
+        return {"vistorias": 0, "total": 0.0, "av": 0.0, "fa": 0.0, "lancamentos_pdv": 0}
+
+    def soma(acc: dict, novo: dict) -> dict:
+        for k in ("vistorias", "lancamentos_pdv"):
+            acc[k] += novo.get(k, 0) or 0
+        for k in ("total", "av", "fa"):
+            acc[k] = round(acc[k] + (novo.get(k, 0.0) or 0.0), 2)
+        return acc
+
+    tot_hoje      = zerado()
+    tot_ontem     = zerado()
+    tot_7d        = zerado()
+    tot_7d_ant    = zerado()
+    por_unidade: list[dict] = []
+
+    for uid, ucfg in UNITS.items():
+        unit_dir = _unit_state_dir(uid)
+        h = _resumo_dia_unit(uid, unit_dir, hoje.isoformat())
+        o = _resumo_dia_unit(uid, unit_dir, ontem.isoformat())
+
+        # Sparkline 7d (mais antigo → mais recente)
+        spark_dias = [_resumo_dia_unit(uid, unit_dir, d.isoformat()) for d in reversed(sete_dias)]
+        u_7d = zerado()
+        for s in spark_dias:
+            soma(u_7d, s)
+
+        # 7d anterior so soma agregado (nao precisa por dia)
+        u_7d_ant = zerado()
+        for d in sete_d_ant:
+            soma(u_7d_ant, _resumo_dia_unit(uid, unit_dir, d.isoformat()))
+
+        por_unidade.append({
+            "id":              uid,
+            "nome":            ucfg.get("nome", uid),
+            "erp":             ucfg.get("erp", "tiny"),
+            "hoje":            h,
+            "ontem":           o,
+            "ultimos_7d":      u_7d,
+            "sparkline_7d":    [s["total"] for s in spark_dias],
+            "ativo_hoje":      h["vistorias"] > 0,
+        })
+
+        soma(tot_hoje,   h)
+        soma(tot_ontem,  o)
+        soma(tot_7d,     u_7d)
+        soma(tot_7d_ant, u_7d_ant)
+
+    def pct(novo: float, antigo: float) -> float | None:
+        if not antigo:
+            return None  # sem base de comparacao
+        return round((novo - antigo) / antigo * 100, 1)
+
+    # Alertas (tokens expirando, unidades sem operar, JS errors)
+    alertas: list[dict] = []
+    unidades_inativas = [u["nome"] for u in por_unidade
+                         if u["erp"] == "tiny" and not u["ativo_hoje"]
+                         and u["ultimos_7d"]["vistorias"] > 0]
+    if unidades_inativas:
+        alertas.append({
+            "tipo": "unidade_inativa",
+            "msg":  f"{len(unidades_inativas)} unidade(s) ativa(s) na semana sem operar hoje: {', '.join(unidades_inativas)}",
+            "severidade": "info",
+        })
+
+    payload = {
+        "success":       True,
+        "atualizado_em": dt.datetime.now(tz).isoformat(timespec="seconds"),
+        "hoje":          hoje.isoformat(),
+        "totais": {
+            "hoje":            tot_hoje,
+            "ontem":           tot_ontem,
+            "ultimos_7d":      tot_7d,
+            "ultimos_7d_ant":  tot_7d_ant,
+            "tendencias": {
+                "hoje_vs_ontem":      pct(tot_hoje["total"], tot_ontem["total"]),
+                "7d_vs_7d_anterior":  pct(tot_7d["total"], tot_7d_ant["total"]),
+            },
+        },
+        "por_unidade":   por_unidade,
+        "alertas":       alertas,
+        "cached":        False,
+    }
+    _VISAO_GERAL_CACHE["data"] = {"ts": now_ts, "payload": payload}
+    return _json(payload)
+
+
 @app.route("/master/api/units/status")
 @master_view_required
 def master_api_units_status():
