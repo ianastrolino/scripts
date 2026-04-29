@@ -1157,6 +1157,25 @@ def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
     }))
 
 
+def _unit_tiny_ready(unit: str) -> bool:
+    """True se a unidade tem erp=tiny E refresh_token salvo em tiny_tokens.json.
+
+    Evita bater no Tiny pra unidades nao-tiny (Omie) ou tiny ainda nao autorizadas
+    — cada chamada nessas condicoes queima o timeout do client (30s) sem retorno.
+    """
+    ucfg = UNITS.get(unit, {})
+    if (ucfg.get("erp") or "tiny").lower() != "tiny":
+        return False
+    p = _unit_state_dir(unit) / "tiny_tokens.json"
+    if not p.exists():
+        return False
+    try:
+        stored = json.loads(p.read_text())
+        return bool(stored.get("refresh_token"))
+    except Exception:
+        return False
+
+
 # ── Resposta JSON helper ───────────────────────────────────────────────────────
 def _json(data: Any, status: int = 200) -> Response:
     return app.response_class(
@@ -3185,6 +3204,8 @@ def master_api_contas_receber():
         atraso_clientes: dict[str, dict]   = {}
         vencendo_clientes: dict[str, dict] = {}
 
+        # Inicializa entradas zeradas pra TODAS as unidades (incluindo nao-tiny),
+        # pra UI mostrar a unidade na lista mesmo quando nao tem dados Tiny.
         for uid in units_iter:
             unit_nome = UNITS.get(uid, {}).get("nome", uid)
             por_unidade[uid] = {
@@ -3194,11 +3215,37 @@ def master_api_contas_receber():
                 "em_aberto": 0.0, "em_aberto_count": 0,
                 "atrasadas": 0.0, "atrasadas_count": 0,
             }
+
+        # Filtra unidades que tem Tiny pronto pra consulta — nao-tiny (Omie) e
+        # tiny ainda sem auth queimam 30s do client.timeout sem retornar nada.
+        tiny_iter = [uid for uid in units_iter if _unit_tiny_ready(uid)]
+        units_skipped = [uid for uid in units_iter if uid not in tiny_iter]
+
+        # Pre-fetch paralelo: 1 thread por unidade Tiny ativa. Cada thread roda
+        # os 2 fetches (mes + abertas) em sequencia. Reduz latencia total de
+        # N*(mes+abertas) pra max(mes+abertas) entre as N unidades.
+        prefetched: dict[str, dict] = {}
+        def _prefetch(uid: str) -> tuple[str, list[dict], list[dict]]:
             try:
-                contas = _fetch_contas_mes_tiny(uid, ano, mes)
+                mes_data = _fetch_contas_mes_tiny(uid, ano, mes)
             except Exception as exc:
-                app.logger.warning("[contas-receber] falha unit=%s: %s", uid, exc)
-                continue
+                app.logger.warning("[contas-receber] mes unit=%s: %s", uid, exc)
+                mes_data = []
+            try:
+                abertas_data = _fetch_contas_abertas_tiny(uid)
+            except Exception as exc:
+                app.logger.warning("[contas-abertas] unit=%s: %s", uid, exc)
+                abertas_data = []
+            return (uid, mes_data, abertas_data)
+
+        if tiny_iter:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(len(tiny_iter), 6)) as pool:
+                for uid_r, mes_data, abertas_data in pool.map(_prefetch, tiny_iter):
+                    prefetched[uid_r] = {"mes": mes_data, "abertas": abertas_data}
+
+        for uid in tiny_iter:
+            contas = prefetched.get(uid, {}).get("mes", [])
 
             for c in contas:
                 cliente_obj = c.get("cliente") or {}
@@ -3271,14 +3318,10 @@ def master_api_contas_receber():
                         por_unidade[uid]["atrasadas"]       += em_aberto
                         por_unidade[uid]["atrasadas_count"] += 1
 
-            # Segundo fetch: TODAS as contas em aberto da unidade (qualquer
+            # Segundo conjunto: TODAS as contas em aberto da unidade (qualquer
             # periodo) — pra listas "Em atraso" e "Vencendo 7d" agrupadas por
-            # cliente com indicador de outros meses.
-            try:
-                contas_abertas = _fetch_contas_abertas_tiny(uid)
-            except Exception as exc:
-                app.logger.warning("[contas-abertas] unit=%s: %s", uid, exc)
-                contas_abertas = []
+            # cliente com indicador de outros meses. Ja foi pre-buscado em paralelo.
+            contas_abertas = prefetched.get(uid, {}).get("abertas", [])
             for c in contas_abertas:
                 cliente_obj = c.get("cliente") or {}
                 cliente_nome = (cliente_obj.get("nome") or "").strip().upper() or "(sem cliente)"
@@ -3398,6 +3441,8 @@ def master_api_contas_receber():
             "por_unidade":   list(por_unidade.values()),
             "em_atraso":     em_atraso,
             "vencendo_7d":   vencendo_7d,
+            "units_consultadas": tiny_iter,
+            "units_skipped":     units_skipped,  # Omie ou tiny sem auth
             "cached":        False,
         }
         _CONTAS_RECEBER_CACHE[cache_key] = {"data": payload, "cached_at": now_ts}
@@ -6074,6 +6119,10 @@ def api_planilha_upload(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+_PLANILHA_STATUS_CACHE: dict[str, dict] = {}
+_PLANILHA_STATUS_TTL   = 5.0  # 5s — UI da Conferencia Antecipada bate com frequencia
+
+
 @app.route("/u/<unit>/api/planilha/status")
 @unit_access_required
 def api_planilha_status(unit: str):
@@ -6081,14 +6130,23 @@ def api_planilha_status(unit: str):
     Query: ?data=YYYY-MM-DD (default hoje).
 
     Retorna stats agregadas + linha-a-linha enriquecida com status de
-    cruzamento. Usado pela Conferencia Antecipada (painel no Caixa)."""
+    cruzamento. Usado pela Conferencia Antecipada (painel no Caixa).
+
+    Cache TTL=5s por (unit, data_iso); invalida quando mtime da planilha muda
+    (i.e., upload novo) ou quando ?force=1.
+    """
     import re
+    import time as _time
     import unicodedata as _ud
+
+    t_start = _time.monotonic()
+    timings: dict[str, float] = {}
 
     try:
         data_iso = (request.args.get("data") or "").strip()
         if not data_iso:
             data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
 
         p = _planilha_dia_path(unit, data_iso)
         if not p.exists():
@@ -6098,20 +6156,42 @@ def api_planilha_status(unit: str):
                           "orfas_planilha": 0, "orfas_pdv": 0, "dia_anterior": 0},
                 "linhas": [], "orfas_pdv": [],
             })
+
+        cache_key = f"{unit}:{data_iso}"
         try:
+            mtime = p.stat().st_mtime
+        except Exception:
+            mtime = 0.0
+        cached = _PLANILHA_STATUS_CACHE.get(cache_key)
+        now_ts = _time.monotonic()
+        if (cached and not force
+            and (now_ts - cached["cached_at"]) < _PLANILHA_STATUS_TTL
+            and cached.get("mtime") == mtime):
+            payload_out = dict(cached["data"])
+            payload_out["cached"] = True
+            return _json(payload_out)
+
+        try:
+            t = _time.monotonic()
             payload = json.loads(p.read_text(encoding="utf-8"))
+            timings["read_json"] = _time.monotonic() - t
         except Exception:
             app.logger.exception("[planilha.status] %s — JSON corrompido", unit)
             return _json({"success": True, "data": data_iso, "exists": False, "warning": "arquivo corrompido", "stats": {}, "linhas": [], "orfas_pdv": []})
 
         records = payload.get("records") or []
+
+        t = _time.monotonic()
         config  = _build_unit_config(unit)
+        timings["build_config"] = _time.monotonic() - t
 
         unit_dir = _unit_state_dir(unit)
+        t = _time.monotonic()
         try:
             lancamentos = _db_load(unit, unit_dir, data_iso)
         except Exception:
             lancamentos = []
+        timings["db_load"] = _time.monotonic() - t
 
         def _norm_placa(v):
             return re.sub(r"[^A-Z0-9]", "", clean_text(v).upper())
@@ -6122,6 +6202,7 @@ def api_planilha_status(unit: str):
             v = "".join(c for c in v if _ud.category(c) != "Mn")
             return " ".join(v.split())
 
+        t = _time.monotonic()
         # Indice PDV por placa (lista — uma placa pode ter varios servicos)
         pdv_por_placa: dict[str, list[dict]] = {}
         for lc in lancamentos:
@@ -6200,6 +6281,8 @@ def api_planilha_status(unit: str):
                 "hora":    lc.get("hora"),
             })
 
+        timings["loop"] = _time.monotonic() - t
+
         stats = {
             "total":          len(linhas_out),
             "cruzadas":       sum(1 for l in linhas_out if l["status"] in ("ok", "ok_fallback") and not l["dia_anterior"]),
@@ -6209,7 +6292,7 @@ def api_planilha_status(unit: str):
             "dia_anterior":   sum(1 for l in linhas_out if l["dia_anterior"]),
         }
 
-        return _json({
+        result = {
             "success":     True,
             "data":        data_iso,
             "exists":      True,
@@ -6219,7 +6302,26 @@ def api_planilha_status(unit: str):
             "stats":       stats,
             "linhas":      linhas_out,
             "orfas_pdv":   orfas_pdv,
-        })
+            "cached":      False,
+        }
+
+        # Cache pra absorver hammering da UI (Conferencia Antecipada)
+        _PLANILHA_STATUS_CACHE[cache_key] = {
+            "data": result, "cached_at": _time.monotonic(), "mtime": mtime,
+        }
+
+        # Log so quando lento (>2s) — revela onde estourou no Railway
+        elapsed = _time.monotonic() - t_start
+        if elapsed > 2.0:
+            app.logger.warning(
+                "[planilha.status] %s data=%s SLOW total=%.2fs read=%.2fs build=%.2fs db=%.2fs loop=%.2fs records=%d lancamentos=%d",
+                unit, data_iso, elapsed,
+                timings.get("read_json", 0), timings.get("build_config", 0),
+                timings.get("db_load", 0), timings.get("loop", 0),
+                len(records), len(lancamentos),
+            )
+
+        return _json(result)
     except Exception as exc:
         app.logger.exception("[planilha.status] %s", unit)
         return _json({"success": False, "error": str(exc)}, 500)
