@@ -2892,33 +2892,66 @@ def _classificar_inadimplencia_faixa(dias_atraso: int) -> str:
     return "critico"
 
 
+_CONTAS_ABERTAS_JANELA_PASSADO = 90  # dias antes de hoje
+_CONTAS_ABERTAS_JANELA_FUTURO  = 30  # dias depois de hoje
+
+
 def _fetch_contas_abertas_tiny(unit: str) -> list[dict]:
-    """Puxa do Tiny todas as contas a receber com situacao != 'pago'.
-    Faz paginacao. Retorna lista crua de contas (placa/modelo/cpf nao vem aqui — so historico).
+    """Puxa do Tiny contas a receber em aberto dentro de uma janela de vencimento.
+
+    Janela: hoje - _CONTAS_ABERTAS_JANELA_PASSADO ate hoje + _CONTAS_ABERTAS_JANELA_FUTURO.
+    Cobre os 2 casos que a tela usa: 'em atraso' (vencimento ate ~90d atras) e
+    'vencendo 7d' (vencimento nos proximos 30d). Reduz drasticamente o dataset
+    vs puxar todo o historico (5k-10k contas → ~500-1500).
+
+    Trade-off: divida muito antiga (>90d atrasada) sai da lista. Trade-off
+    aceito porque a UI ja mostra so "Top em atraso" e a recuperacao real e feita
+    direto no Tiny pelo financeiro.
     """
     config = _build_unit_config(unit)
     state_dir = _unit_state_dir(unit)
     importer = TinyImporter(config, state_dir)
     client = importer.client
+    hoje = dt.date.today()
+    venc_ini = (hoje - dt.timedelta(days=_CONTAS_ABERTAS_JANELA_PASSADO)).isoformat()
+    venc_fim = (hoje + dt.timedelta(days=_CONTAS_ABERTAS_JANELA_FUTURO)).isoformat()
     todos: list[dict] = []
     offset = 0
     limit = 100
-    # Tiny aceita 'situacao' como filtro. Valores "aberto"/"atrasado"/"recebendo" sao os em cobranca.
-    # Deixamos sem filtro e filtramos localmente pra pegar todos status != pago.
     while True:
+        params = {
+            "limit":  limit,
+            "offset": offset,
+            "situacao": "aberto",
+            "dataVencimentoInicial": venc_ini,
+            "dataVencimentoFinal":   venc_fim,
+        }
         try:
-            resp = client.request("GET", "contas-receber", params={"limit": limit, "offset": offset, "situacao": "aberto"})
+            resp = client.request("GET", "contas-receber", params=params)
         except Exception as exc:
             app.logger.warning("[inadimplencia] falha unit=%s offset=%s: %s", unit, offset, exc)
             break
         page = resp.get("itens", []) or []
+        # Fallback local: se Tiny ignorou os filtros de data, descarta o que
+        # cair fora da janela.
         for item in page:
-            if (item.get("situacao") or "").lower() != "pago":
+            if (item.get("situacao") or "").lower() == "pago":
+                continue
+            venc_str = item.get("dataVencimento") or item.get("data") or ""
+            try:
+                if "/" in venc_str:
+                    d, m, y = venc_str.split("/")
+                    venc = dt.date(int(y), int(m), int(d))
+                else:
+                    venc = dt.date.fromisoformat(venc_str[:10])
+            except Exception:
+                continue
+            if venc_ini <= venc.isoformat() <= venc_fim:
                 todos.append(item)
         if len(page) < limit:
             break
         offset += limit
-        if offset > 10_000:  # circuit breaker pra nao travar em base gigante
+        if offset > 5_000:  # circuit breaker — janela reduzida nao deve atingir
             break
     return todos
 
