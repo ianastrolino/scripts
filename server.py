@@ -3918,6 +3918,118 @@ def master_royalties_page():
     return _nocache(send_from_directory(UI_DIR, "royalties.html"))
 
 
+def _classifica_servico_relatorio(servico: str) -> str:
+    """Classifica servico em 'motor' (LAUDO DE TRANSFERENCIA) ou 'cautelar' (resto).
+
+    Decisao consolidada com Ian: mercado real e bipartido — laudo de transferencia
+    eh 'Motor' (validacao de chassi/motor pro DETRAN); todo o resto (vistoria
+    cautelar, laudo cautelar verificacao, cautelar com analise, laudo de
+    verificacao) eh agrupado como 'Cautelar'.
+    """
+    s = (servico or "").upper().strip()
+    if s == "LAUDO DE TRANSFERENCIA":
+        return "motor"
+    return "cautelar"
+
+
+@app.route("/master/api/relatorio-mensal")
+@master_view_required
+def master_api_relatorio_mensal():
+    """Relatorio consolidado por unidade × mes: qtd e valor de Motor e Cautelar.
+
+    Fonte: envios_tiny (status != 'falha'). So as 3 unidades com Tiny ativo
+    aparecem (Barueri/Mooca/Moema) — Itu (Tiny pendente) e Indianopolis/SP
+    Miguel (Omie) nao tem dados nessa fonte ainda.
+
+    Params:
+      mes=YYYY-MM (default: mes corrente)
+    """
+    try:
+        hoje = dt.date.today()
+        mes_param = (request.args.get("mes") or "").strip()
+        try:
+            ano, m = mes_param.split("-") if mes_param else (str(hoje.year), f"{hoje.month:02d}")
+            ano, m = int(ano), int(m)
+        except Exception:
+            ano, m = hoje.year, hoje.month
+        primeiro = dt.date(ano, m, 1).isoformat()
+        if m == 12:
+            ultimo = (dt.date(ano + 1, 1, 1) - dt.timedelta(days=1)).isoformat()
+        else:
+            ultimo = (dt.date(ano, m + 1, 1) - dt.timedelta(days=1)).isoformat()
+
+        por_unidade: list[dict] = []
+        tot_motor_qtd  = tot_motor_val  = 0
+        tot_caut_qtd   = tot_caut_val   = 0
+        for uid, info in UNITS.items():
+            unit_dir = _unit_state_dir(uid)
+            try:
+                envios = _db_load_envios_range(uid, unit_dir, primeiro, ultimo)
+            except Exception as exc:
+                app.logger.warning("[relatorio-mensal] %s: %s", uid, exc)
+                envios = []
+
+            motor_qtd = motor_val = 0
+            caut_qtd  = caut_val  = 0.0
+            for e in envios:
+                v = float(e.get("valor") or 0)
+                if _classifica_servico_relatorio(e.get("servico") or "") == "motor":
+                    motor_qtd += 1
+                    motor_val += v
+                else:
+                    caut_qtd  += 1
+                    caut_val  += v
+            total_qtd = motor_qtd + caut_qtd
+            total_val = motor_val + caut_val
+            ticket    = round(total_val / total_qtd, 2) if total_qtd else 0.0
+            por_unidade.append({
+                "unit":          uid,
+                "nome":          info.get("nome", uid),
+                "motor_qtd":     motor_qtd,
+                "motor_valor":   round(motor_val, 2),
+                "cautelar_qtd":  caut_qtd,
+                "cautelar_valor":round(caut_val,  2),
+                "total_qtd":     total_qtd,
+                "total_valor":   round(total_val, 2),
+                "ticket_medio":  ticket,
+            })
+            tot_motor_qtd += motor_qtd
+            tot_motor_val += motor_val
+            tot_caut_qtd  += caut_qtd
+            tot_caut_val  += caut_val
+
+        # Ordem fixa por nome pra UI estavel
+        por_unidade.sort(key=lambda x: x["nome"].lower())
+
+        total_qtd = tot_motor_qtd + tot_caut_qtd
+        total_val = tot_motor_val + tot_caut_val
+        return _json({
+            "success":      True,
+            "mes":          f"{ano:04d}-{m:02d}",
+            "periodo":      {"de": primeiro, "ate": ultimo},
+            "atualizado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "por_unidade":  por_unidade,
+            "totais": {
+                "motor_qtd":     tot_motor_qtd,
+                "motor_valor":   round(tot_motor_val, 2),
+                "cautelar_qtd":  tot_caut_qtd,
+                "cautelar_valor":round(tot_caut_val,  2),
+                "total_qtd":     total_qtd,
+                "total_valor":   round(total_val, 2),
+                "ticket_medio":  round(total_val / total_qtd, 2) if total_qtd else 0.0,
+            },
+        })
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/relatorio-mensal")
+@master_view_required
+def master_relatorio_mensal_page():
+    return _nocache(send_from_directory(UI_DIR, "relatorio-mensal.html"))
+
+
 @app.route("/master/api/unidades/<slug>/limpar-dia", methods=["POST"])
 @master_only_required
 @csrf_required

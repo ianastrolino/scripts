@@ -143,6 +143,7 @@
         { id: "inicio",            label: "Início",               icon: "relatorios", href: "/master/inicio", requires: "master" },
         { id: "master",            label: "Status agora",         icon: "master",     href: "/master" },
         { id: "contas-receber",    label: "Contas a Receber",     icon: "relatorios", href: "/master/contas-receber" },
+        { id: "relatorio-mensal",  label: "Relatório mensal",     icon: "relatorios", href: "/master/relatorio-mensal", requires: "master" },
         { id: "royalties",         label: "Royalties",            icon: "relatorios", href: "/master/royalties", requires: "master" },
         { id: "gerencial-rede",    label: "Gerencial Rede",       icon: "gerencial",  href: "/gerencial" },
         { id: "cobranca",          label: "Cobrança",             icon: "cobranca",   href: "/master/cobranca" },

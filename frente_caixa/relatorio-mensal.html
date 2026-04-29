@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Relatório Mensal</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--ds-space-3);
+      margin-bottom: var(--ds-space-4);
+    }
+    .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    select.filter-sel, input.filter-sel {
+      font: inherit; font-size: var(--ds-text-sm);
+      padding: 7px 12px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink);
+    }
+    .btn {
+      font: inherit; font-size: var(--ds-text-sm); font-weight: 600;
+      padding: 7px 14px; border-radius: var(--ds-radius-md);
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-surface-alt); }
+
+    .hero {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--ds-space-3); margin-bottom: var(--ds-space-5);
+    }
+    .kpi {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-left: 4px solid var(--ds-ink-muted);
+      border-radius: var(--ds-radius-lg);
+      padding: var(--ds-space-4) var(--ds-space-5);
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .kpi.k-total   { border-left-color: #2563eb; }
+    .kpi.k-fat     { border-left-color: #16a34a; }
+    .kpi.k-ticket  { border-left-color: #f59e0b; }
+    .kpi-label {
+      font-size: 11px; font-weight: 800; color: var(--ds-ink-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+    }
+    .kpi-val {
+      font-size: 28px; font-weight: 800; color: var(--ds-ink);
+      font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+      line-height: 1.1;
+    }
+    .kpi-sub { font-size: 12px; color: var(--ds-ink-muted); margin-top: 4px; }
+
+    .section {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      overflow: hidden;
+      margin-bottom: var(--ds-space-4);
+    }
+    .section-head {
+      padding: 14px 20px; border-bottom: 1px solid var(--ds-line);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-title { font-size: 14px; font-weight: 800; color: var(--ds-ink); }
+    .section-meta { font-size: 12px; color: var(--ds-ink-muted); }
+
+    table.tbl { width: 100%; border-collapse: collapse;
+      font-size: 13px; font-variant-numeric: tabular-nums; }
+    .tbl thead th {
+      text-align: left;
+      font-size: 11px; font-weight: 700;
+      color: var(--ds-ink-muted); text-transform: uppercase; letter-spacing: .04em;
+      padding: 10px 16px; background: var(--ds-surface-alt);
+      border-bottom: 1px solid var(--ds-line);
+      white-space: nowrap;
+    }
+    .tbl tbody td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--ds-line);
+      color: var(--ds-ink);
+    }
+    .tbl tbody tr:last-child td { border-bottom: none; }
+    .tbl tbody tr:hover td { background: var(--ds-surface-alt); }
+    .tbl tfoot td {
+      padding: 12px 16px;
+      background: var(--ds-surface-alt);
+      font-weight: 800;
+      border-top: 2px solid var(--ds-line);
+    }
+    .tbl .num { text-align: right; font-weight: 700; white-space: nowrap; }
+    .total-val { color: #2563eb; font-weight: 800; }
+    .ticket-val { color: #f59e0b; font-weight: 800; }
+    .empty {
+      padding: 30px 20px; text-align: center;
+      color: var(--ds-ink-muted); font-size: 13px;
+    }
+
+    .skel {
+      color: transparent; background: linear-gradient(90deg, var(--ds-line) 0%, var(--ds-surface-alt) 40%, var(--ds-line) 80%);
+      background-size: 200% 100%; animation: shimmer 1.2s ease-in-out infinite;
+      border-radius: 4px; height: 28px; width: 140px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Rede — Relatórios</div>
+        <h1 class="app-page-title">Relatório mensal por unidade</h1>
+        <p class="app-page-sub">Quantidades e faturamento de Motor (laudo de transferência) e Cautelar (todos os outros tipos). Fonte: envios para o Tiny — só Barueri, Mooca e Moema têm dados nessa base hoje.</p>
+      </div>
+
+      <div class="toolbar">
+        <div class="filter-bar">
+          <select id="selMes" class="filter-sel"></select>
+          <button id="btnRefresh" class="btn" type="button">Atualizar</button>
+          <button id="btnCSV" class="btn" type="button">Exportar CSV</button>
+        </div>
+        <div id="infoAtualizado" style="font-size:12px;color:var(--ds-ink-muted)">—</div>
+      </div>
+
+      <div class="hero">
+        <div class="kpi k-total">
+          <div class="kpi-label">Total de serviços</div>
+          <div class="kpi-val" id="kpiQtd">—</div>
+          <div class="kpi-sub" id="kpiQtdSub">carregando…</div>
+        </div>
+        <div class="kpi k-fat">
+          <div class="kpi-label">Faturamento bruto</div>
+          <div class="kpi-val" id="kpiFat">—</div>
+          <div class="kpi-sub" id="kpiFatSub">—</div>
+        </div>
+        <div class="kpi k-ticket">
+          <div class="kpi-label">Ticket médio</div>
+          <div class="kpi-val" id="kpiTicket">—</div>
+          <div class="kpi-sub" id="kpiTicketSub">média da rede</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Por unidade</div>
+          <div class="section-meta" id="metaPeriodo">—</div>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Unidade</th>
+              <th class="num">Motor</th>
+              <th class="num">R$ Motor</th>
+              <th class="num">Cautelar</th>
+              <th class="num">R$ Cautelar</th>
+              <th class="num">Total Serviços</th>
+              <th class="num">Total R$</th>
+              <th class="num">Ticket Médio</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="8" class="empty">carregando…</td></tr></tbody>
+          <tfoot id="tfoot" hidden></tfoot>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "relatorio-mensal",
+    breadcrumbs: [
+      { label: "Rede" },
+      { label: "Relatório mensal", current: true }
+    ]
+  });
+
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num = v => Number(v || 0).toLocaleString("pt-BR");
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function popularMeses() {
+    const sel = document.getElementById("selMes");
+    const hoje = new Date();
+    const nomes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = `${nomes[d.getMonth()]} ${d.getFullYear()}${i === 0 ? " (atual)" : ""}`;
+      sel.appendChild(opt);
+    }
+    sel.value = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`;
+  }
+
+  function fmtBr(iso) {
+    if (!iso) return "—";
+    const [y,m,d] = iso.slice(0,10).split("-");
+    return `${d}/${m}/${y}`;
+  }
+  function fmtRel(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+      if (diff < 60)   return `há ${Math.floor(diff)}s`;
+      if (diff < 3600) return `há ${Math.floor(diff/60)} min`;
+      return `às ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    } catch { return "—"; }
+  }
+
+  let _ultimoPayload = null;
+
+  async function load() {
+    const mes = document.getElementById("selMes").value;
+    document.getElementById("kpiQtd").innerHTML = '<div class="skel"></div>';
+    document.getElementById("kpiFat").innerHTML = '<div class="skel"></div>';
+    document.getElementById("kpiTicket").innerHTML = '<div class="skel"></div>';
+    document.getElementById("tbody").innerHTML = '<tr><td colspan="8" class="empty">carregando…</td></tr>';
+    document.getElementById("tfoot").hidden = true;
+    try {
+      const r = await fetch(`/master/api/relatorio-mensal?mes=${encodeURIComponent(mes)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      _ultimoPayload = j;
+      const t = j.totais;
+      const ativas = (j.por_unidade || []).filter(u => u.total_qtd > 0).length;
+      document.getElementById("kpiQtd").textContent = num(t.total_qtd);
+      document.getElementById("kpiQtdSub").textContent = `${num(t.motor_qtd)} motor · ${num(t.cautelar_qtd)} cautelar`;
+      document.getElementById("kpiFat").textContent = brl(t.total_valor);
+      document.getElementById("kpiFatSub").textContent = `${ativas} unidade(s) com movimento`;
+      document.getElementById("kpiTicket").textContent = brl(t.ticket_medio);
+      document.getElementById("kpiTicketSub").textContent = `média da rede no mês`;
+      document.getElementById("metaPeriodo").textContent = `${fmtBr(j.periodo.de)} — ${fmtBr(j.periodo.ate)}`;
+      document.getElementById("infoAtualizado").textContent = `atualizado ${fmtRel(j.atualizado_em)}`;
+
+      const tb = document.getElementById("tbody");
+      if (!j.por_unidade.length) {
+        tb.innerHTML = '<tr><td colspan="8" class="empty">Nenhuma unidade ativa</td></tr>';
+        return;
+      }
+      tb.innerHTML = j.por_unidade.map(u => `
+        <tr>
+          <td><strong>${esc(u.nome)}</strong></td>
+          <td class="num">${num(u.motor_qtd)}</td>
+          <td class="num">${brl(u.motor_valor)}</td>
+          <td class="num">${num(u.cautelar_qtd)}</td>
+          <td class="num">${brl(u.cautelar_valor)}</td>
+          <td class="num">${num(u.total_qtd)}</td>
+          <td class="num total-val">${brl(u.total_valor)}</td>
+          <td class="num ticket-val">${brl(u.ticket_medio)}</td>
+        </tr>
+      `).join("");
+
+      const tf = document.getElementById("tfoot");
+      tf.innerHTML = `
+        <tr>
+          <td>Rede</td>
+          <td class="num">${num(t.motor_qtd)}</td>
+          <td class="num">${brl(t.motor_valor)}</td>
+          <td class="num">${num(t.cautelar_qtd)}</td>
+          <td class="num">${brl(t.cautelar_valor)}</td>
+          <td class="num">${num(t.total_qtd)}</td>
+          <td class="num total-val">${brl(t.total_valor)}</td>
+          <td class="num ticket-val">${brl(t.ticket_medio)}</td>
+        </tr>`;
+      tf.hidden = false;
+    } catch (e) {
+      document.getElementById("tbody").innerHTML = `<tr><td colspan="8" class="empty" style="color:var(--ds-danger)">Erro: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function exportarCSV() {
+    if (!_ultimoPayload) return;
+    const j = _ultimoPayload;
+    const headers = ["Unidade", "Motor", "R$ Motor", "Cautelar", "R$ Cautelar", "Total Servicos", "Total R$", "Ticket Medio"];
+    const rows = j.por_unidade.map(u => [
+      u.nome, u.motor_qtd, u.motor_valor.toFixed(2).replace(".", ","),
+      u.cautelar_qtd, u.cautelar_valor.toFixed(2).replace(".", ","),
+      u.total_qtd, u.total_valor.toFixed(2).replace(".", ","),
+      u.ticket_medio.toFixed(2).replace(".", ","),
+    ]);
+    const t = j.totais;
+    rows.push(["TOTAL REDE", t.motor_qtd, t.motor_valor.toFixed(2).replace(".", ","),
+               t.cautelar_qtd, t.cautelar_valor.toFixed(2).replace(".", ","),
+               t.total_qtd, t.total_valor.toFixed(2).replace(".", ","),
+               t.ticket_medio.toFixed(2).replace(".", ",")]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `relatorio-mensal-${j.mes}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("selMes").addEventListener("change", load);
+  document.getElementById("btnRefresh").addEventListener("click", load);
+  document.getElementById("btnCSV").addEventListener("click", exportarCSV);
+
+  popularMeses();
+  load();
+</script>
+</body>
+</html>
