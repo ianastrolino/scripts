@@ -43,7 +43,19 @@
       "Bash(git commit *)",
       "WebFetch(domain:app.omie.com.br)",
       "WebFetch(domain:developer.omie.com.br)",
-      "WebFetch(domain:ajuda.omie.com.br)"
+      "WebFetch(domain:ajuda.omie.com.br)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('/home/astro/projeto/scripts/frente_caixa/app.js','utf8'\\)\\); console.log\\('JS OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('/home/astro/projeto/scripts/server.py'\\).read\\(\\)\\); print\\('PY OK'\\)\")",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('/home/astro/projeto/scripts/frente_caixa/planilha-dia.js','utf8'\\)\\); console.log\\('JS OK'\\)\")",
+      "Bash(.venv/bin/python -m pytest tests/test_caixa_routes.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_observabilidade.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_caixa_routes.py::TestConferir::test_ignora_fp_nao_av -x)",
+      "Bash(.venv/bin/python -m pytest tests/test_caixa_routes.py::TestLancar::test_ok -x)",
+      "Bash(.venv/bin/python -m pytest tests/ -q)",
+      "Bash(.venv/bin/python -m pytest tests/ -q --tb=no)",
+      "Bash(python -m pytest tests/ -x --tb=short -q)",
+      "Bash(python -m pytest tests/test_smoke_endpoints.py -x --tb=short)",
+      "Bash(python -m pytest tests/ --tb=short -q)"
     ]
   }
 }
