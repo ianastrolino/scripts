@@ -1128,6 +1128,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Exportar conferência
       </button>
+      <a id="printBtn" class="btn-ghost-sm" href="#" target="_blank" rel="noopener" style="text-decoration:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimir / PDF
+      </a>
       <div class="import-bar-spacer"></div>
       <div class="source-info">
         <strong id="sourceFile">Nenhum arquivo</strong>
@@ -1601,6 +1605,13 @@
         date: true,
         unit: slug ? { slug } : null
       });
+      // Link "Imprimir / PDF" — aponta pra tela imprimivel da unit + data atual
+      const printBtn = document.getElementById("printBtn");
+      if (printBtn && slug) {
+        const hojeISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 10);
+        printBtn.href = `/u/${slug}/fechamento/imprimir?data=${hojeISO}`;
+      }
     })();
   </script>
 

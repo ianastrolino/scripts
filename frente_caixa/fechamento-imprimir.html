@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Fechamento</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* Layout otimizado pra impressao A4. Sem dependencia de design-system */
+    :root {
+      --ink: #111827;
+      --ink-2: #374151;
+      --ink-3: #6b7280;
+      --line: #d1d5db;
+      --line-soft: #e5e7eb;
+      --bg-soft: #f9fafb;
+      --ok: #166534;
+      --warn: #92400e;
+      --bad: #991b1b;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: #f3f4f6;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .toolbar {
+      position: sticky; top: 0; z-index: 10;
+      background: #fff; border-bottom: 1px solid var(--line);
+      padding: 12px 24px;
+      display: flex; gap: 10px; align-items: center; justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .toolbar .left { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .toolbar a, .toolbar button {
+      font: inherit; font-size: 13px; font-weight: 600;
+      padding: 7px 14px; border-radius: 6px;
+      border: 1px solid var(--line); background: #fff;
+      color: var(--ink); cursor: pointer; text-decoration: none;
+    }
+    .toolbar button.primary {
+      background: #111827; color: #fff; border-color: #111827;
+    }
+    .toolbar button:hover { background: var(--bg-soft); }
+    .toolbar button.primary:hover { background: #000; }
+    .toolbar input[type="date"] {
+      font: inherit; font-size: 13px;
+      padding: 7px 10px; border-radius: 6px;
+      border: 1px solid var(--line);
+    }
+
+    .page {
+      max-width: 850px; margin: 24px auto;
+      background: #fff; padding: 32px 36px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+
+    /* HEADER */
+    .h-top {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 16px;
+    }
+    .h-brand img { height: 38px; vertical-align: middle; }
+    .h-brand .name { font-weight: 800; font-size: 16px; margin-top: 4px; color: var(--ink); letter-spacing: -.01em; }
+    .h-meta { text-align: right; font-size: 11px; color: var(--ink-3); }
+    .h-meta .doctitle { font-size: 13px; font-weight: 800; color: var(--ink); margin-bottom: 2px; }
+
+    h2.section-h {
+      font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--ink); border-bottom: 1px solid var(--ink); padding-bottom: 4px;
+      margin: 22px 0 10px;
+    }
+
+    /* SUMARIO */
+    .sumario {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      margin-bottom: 8px;
+    }
+    .sum-cell {
+      background: var(--bg-soft); padding: 8px 10px; border-left: 3px solid var(--ink);
+    }
+    .sum-cell.s-av  { border-left-color: #16a34a; }
+    .sum-cell.s-fat { border-left-color: #f59e0b; }
+    .sum-cell.s-tot { border-left-color: #2563eb; }
+    .sum-label { font-size: 9px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--ink-3); }
+    .sum-val   { font-size: 17px; font-weight: 800; color: var(--ink);
+      font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 2px; }
+    .sum-sub   { font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+
+    /* TABELAS */
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px;
+      font-variant-numeric: tabular-nums; }
+    table th {
+      text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ink-3);
+      padding: 5px 8px; background: var(--bg-soft);
+      border-bottom: 1px solid var(--line);
+    }
+    table td {
+      padding: 5px 8px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2);
+    }
+    table tfoot td {
+      font-weight: 800; color: var(--ink);
+      background: var(--bg-soft); border-top: 2px solid var(--ink);
+    }
+    .num { text-align: right; font-weight: 600; white-space: nowrap; }
+    .center { text-align: center; }
+
+    /* GRID FP À VISTA */
+    .fp-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    }
+    .fp-block {
+      border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px;
+    }
+    .fp-block .title {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-weight: 800; font-size: 12px; color: var(--ink); margin-bottom: 4px;
+    }
+    .fp-block .title .val { color: var(--ink); }
+    .fp-block .meta { font-size: 10px; color: var(--ink-3); margin-bottom: 6px; }
+    .fp-block table { font-size: 10.5px; }
+    .fp-block table th, .fp-block table td { padding: 3px 6px; }
+    .fp-empty { font-size: 10.5px; color: var(--ink-3); font-style: italic; padding: 6px 0; }
+
+    /* CONFERENCIA - status badges */
+    .badge {
+      display: inline-block; padding: 1px 7px; border-radius: 3px;
+      font-size: 9.5px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .b-ok    { background: #dcfce7; color: var(--ok); }
+    .b-warn  { background: #fef3c7; color: var(--warn); }
+    .b-bad   { background: #fee2e2; color: var(--bad); }
+    .b-info  { background: #dbeafe; color: #1e40af; }
+    .b-soft  { background: var(--bg-soft); color: var(--ink-3); }
+
+    /* ASSINATURA */
+    .signature {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 36px;
+      margin-top: 36px; padding-top: 20px;
+    }
+    .sig-line {
+      border-top: 1px solid var(--ink); padding-top: 6px;
+      text-align: center; font-size: 10.5px; color: var(--ink-2);
+    }
+    .footer-print {
+      margin-top: 28px; padding-top: 8px; border-top: 1px solid var(--line);
+      font-size: 9.5px; color: var(--ink-3); text-align: center;
+    }
+    .skel { height: 60px; background: var(--bg-soft); animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .55; } }
+
+    .conf-summary {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+      margin-bottom: 10px; font-size: 11px;
+    }
+    .conf-cell {
+      background: var(--bg-soft); padding: 6px 8px; text-align: center;
+      border-radius: 3px;
+    }
+    .conf-cell .n { font-size: 18px; font-weight: 800; color: var(--ink);
+      font-variant-numeric: tabular-nums; line-height: 1; }
+    .conf-cell .l { font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--ink-3); margin-top: 2px; }
+
+    /* IMPRESSAO: esconde toolbar, ajusta margem */
+    @media print {
+      body { background: #fff; }
+      .toolbar, .no-print { display: none !important; }
+      .page { box-shadow: none; margin: 0; padding: 0 12mm; max-width: 100%; }
+      h2.section-h { page-break-after: avoid; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      .fp-block, .signature { page-break-inside: avoid; }
+    }
+    @page {
+      size: A4;
+      margin: 12mm 10mm;
+    }
+  </style>
+</head>
+<body>
+
+<div class="toolbar no-print">
+  <div class="left">
+    <input type="date" id="selData" />
+    <button id="btnAtualizar">Atualizar</button>
+  </div>
+  <div>
+    <button id="btnImprimir" class="primary">🖨 Imprimir / Salvar PDF</button>
+  </div>
+</div>
+
+<div class="page" id="page">
+  <div class="skel"></div>
+  <div class="skel" style="margin-top:8px"></div>
+  <div class="skel" style="margin-top:8px;height:200px"></div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const unitMatch = location.pathname.match(/^\/u\/([^/]+)/);
+  const UNIT = unitMatch ? unitMatch[1] : "";
+  const dataParam = (params.get("data") || "").slice(0, 10);
+  const HOJE = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const DATA = dataParam || HOJE;
+
+  const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const num = v => Number(v || 0).toLocaleString("pt-BR");
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fmtBR = iso => {
+    if (!iso) return "—";
+    const [y, m, d] = String(iso).slice(0, 10).split("-");
+    return `${d}/${m}/${y}`;
+  };
+  const fmtHora = ts => {
+    if (!ts) return "—";
+    const m = String(ts).match(/(\d{2}:\d{2})/);
+    return m ? m[1] : "—";
+  };
+  const FP_LABELS = {
+    dinheiro: "Dinheiro",
+    pix:      "PIX",
+    debito:   "Cartão Débito",
+    credito:  "Cartão Crédito",
+  };
+  const STATUS_LABELS = {
+    ok:                 { txt: "OK",         cls: "b-ok"   },
+    ok_fallback:        { txt: "OK*",        cls: "b-ok"   },
+    divergencia_valor:  { txt: "DIVERG",     cls: "b-warn" },
+    divergencia_fp:     { txt: "DIVERG FP",  cls: "b-warn" },
+    sem_pdv:            { txt: "SEM PDV",    cls: "b-bad"  },
+  };
+
+  document.getElementById("selData").value = DATA;
+
+  function render(j) {
+    const t = j.totais;
+    const u = j.unit || {};
+    const conf = j.conferencia || { stats: {}, linhas: [], orfas_pdv: [] };
+    const cs = conf.stats || {};
+
+    let html = "";
+
+    // ── HEADER ─────────────────────────────────────────────
+    html += `
+      <div class="h-top">
+        <div class="h-brand">
+          <img src="/assets/img/astro-logo.png" alt="Astro Vistorias" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
+          <div class="name" style="display:none">ASTRO VISTORIAS</div>
+        </div>
+        <div class="h-meta">
+          <div class="doctitle">FECHAMENTO DE CAIXA</div>
+          <div>Unidade: <strong>${esc(u.nome || UNIT)}</strong></div>
+          <div>Data: <strong>${fmtBR(j.data)}</strong></div>
+          <div>Gerado em: ${fmtBR(j.gerado_em)} ${(j.gerado_em || "").slice(11, 16)}</div>
+        </div>
+      </div>`;
+
+    // ── SUMARIO ────────────────────────────────────────────
+    html += `<div class="sumario">
+      <div class="sum-cell s-av">
+        <div class="sum-label">À Vista</div>
+        <div class="sum-val">${brl(t.avista)}</div>
+        <div class="sum-sub">${num(t.avista_count)} vistoria(s)</div>
+      </div>
+      <div class="sum-cell s-fat">
+        <div class="sum-label">Faturado</div>
+        <div class="sum-val">${brl(t.faturado)}</div>
+        <div class="sum-sub">${num(t.faturado_count)} vistoria(s)</div>
+      </div>
+      <div class="sum-cell">
+        <div class="sum-label">Detran</div>
+        <div class="sum-val">${brl(t.detran)}</div>
+        <div class="sum-sub">${num(t.detran_count)} vistoria(s)</div>
+      </div>
+      <div class="sum-cell s-tot">
+        <div class="sum-label">Total Dia</div>
+        <div class="sum-val">${brl(t.total_dia)}</div>
+        <div class="sum-sub">${num(t.total_count)} · ticket ${brl(t.ticket_medio)}</div>
+      </div>
+    </div>`;
+
+    // ── À VISTA POR FP ─────────────────────────────────────
+    html += `<h2 class="section-h">Recebido à vista — por forma de pagamento</h2>`;
+    html += `<div class="fp-grid">`;
+    for (const fp of ["dinheiro", "pix", "debito", "credito"]) {
+      const blk = (j.avista_por_fp || {})[fp] || { total: 0, count: 0, lancamentos: [] };
+      const lcs = blk.lancamentos || [];
+      html += `<div class="fp-block">
+        <div class="title">
+          <span>${FP_LABELS[fp]}</span>
+          <span class="val">${brl(blk.total)} · ${num(blk.count)}</span>
+        </div>`;
+      if (lcs.length) {
+        html += `<table><thead><tr>
+          <th>Hora</th><th>Placa</th><th>Cliente</th><th class="num">Valor</th>
+        </tr></thead><tbody>`;
+        for (const lc of lcs) {
+          html += `<tr>
+            <td>${fmtHora(lc.hora)}</td>
+            <td><strong>${esc((lc.placa || "").toUpperCase())}</strong></td>
+            <td>${esc((lc.cliente || "").slice(0, 24))}</td>
+            <td class="num">${brl(lc.valor)}</td>
+          </tr>`;
+        }
+        html += `</tbody></table>`;
+      } else {
+        html += `<div class="fp-empty">Sem lançamentos.</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+
+    // ── FATURADOS ──────────────────────────────────────────
+    if ((j.faturados || []).length) {
+      html += `<h2 class="section-h">Faturados — vão para cobrança</h2>`;
+      html += `<table><thead><tr>
+        <th>Hora</th><th>Placa</th><th>Cliente</th><th>Serviço</th><th class="num">Valor</th>
+      </tr></thead><tbody>`;
+      for (const lc of j.faturados) {
+        html += `<tr>
+          <td>${fmtHora(lc.hora)}</td>
+          <td><strong>${esc((lc.placa || "").toUpperCase())}</strong></td>
+          <td>${esc(lc.cliente || "")}</td>
+          <td>${esc(lc.servico || "")}</td>
+          <td class="num">${brl(lc.valor)}</td>
+        </tr>`;
+      }
+      html += `</tbody><tfoot><tr>
+        <td colspan="4">Total Faturado (${num(t.faturado_count)})</td>
+        <td class="num">${brl(t.faturado)}</td>
+      </tr></tfoot></table>`;
+    }
+
+    // ── DETRAN ─────────────────────────────────────────────
+    if ((j.detran || []).length) {
+      html += `<h2 class="section-h">Detran</h2>`;
+      html += `<table><thead><tr>
+        <th>Hora</th><th>Placa</th><th>Cliente</th><th>Serviço</th><th class="num">Valor</th>
+      </tr></thead><tbody>`;
+      for (const lc of j.detran) {
+        html += `<tr>
+          <td>${fmtHora(lc.hora)}</td>
+          <td><strong>${esc((lc.placa || "").toUpperCase())}</strong></td>
+          <td>${esc(lc.cliente || "")}</td>
+          <td>${esc(lc.servico || "")}</td>
+          <td class="num">${brl(lc.valor)}</td>
+        </tr>`;
+      }
+      html += `</tbody><tfoot><tr>
+        <td colspan="4">Total Detran (${num(t.detran_count)})</td>
+        <td class="num">${brl(t.detran)}</td>
+      </tr></tfoot></table>`;
+    }
+
+    // ── ENVIO TINY ─────────────────────────────────────────
+    html += `<h2 class="section-h">Envio para o Tiny</h2>`;
+    if ((j.tiny || {}).enviados_ok > 0 || (j.tiny || {}).falhas > 0) {
+      const tiny = j.tiny || {};
+      html += `<div style="font-size:11.5px;margin-bottom:6px">
+        <strong>${num(tiny.enviados_ok)}</strong> envio(s) confirmados ·
+        <strong>${brl(tiny.valor_enviado)}</strong>
+        ${tiny.falhas > 0 ? `· <span class="badge b-bad">${tiny.falhas} falha(s)</span>` : ''}
+      </div>`;
+    } else {
+      html += `<div class="fp-empty">Nenhum envio registrado para o Tiny no dia.</div>`;
+    }
+
+    // ── CONFERENCIA PDV × PLANILHA ─────────────────────────
+    html += `<h2 class="section-h">Conferência PDV × Planilha (detalhada)</h2>`;
+    if (!conf.exists) {
+      html += `<div class="fp-empty">Planilha do dia não foi importada — sem conferência possível.</div>`;
+    } else {
+      html += `<div class="conf-summary">
+        <div class="conf-cell"><div class="n">${num(cs.total)}</div><div class="l">Total planilha</div></div>
+        <div class="conf-cell"><div class="n">${num(cs.cruzadas)}</div><div class="l">Cruzadas OK</div></div>
+        <div class="conf-cell"><div class="n">${num(cs.divergencias)}</div><div class="l">Divergências</div></div>
+        <div class="conf-cell"><div class="n">${num(cs.orfas_planilha)}</div><div class="l">Sem PDV</div></div>
+        <div class="conf-cell"><div class="n">${num(cs.orfas_pdv)}</div><div class="l">Só no PDV</div></div>
+      </div>`;
+
+      // Tabela detalhada — todas as linhas da planilha
+      if ((conf.linhas || []).length) {
+        html += `<table><thead><tr>
+          <th>Status</th><th>Placa</th><th>Cliente</th><th>Serviço</th><th class="num">Planilha</th>
+          <th class="num">PDV</th><th>FP</th><th>Hora</th>
+        </tr></thead><tbody>`;
+        for (const ln of conf.linhas) {
+          const st = STATUS_LABELS[ln.status] || { txt: ln.status, cls: "b-soft" };
+          const pm = ln.pdv_match || {};
+          const fpStr = pm.fp ? esc(pm.fp.toUpperCase()) : (ln.fp ? esc(ln.fp.toUpperCase()) : "—");
+          html += `<tr>
+            <td><span class="badge ${st.cls}">${st.txt}</span>${ln.dia_anterior ? ' <span class="badge b-info">D-1</span>' : ''}</td>
+            <td><strong>${esc((ln.placa || "").toUpperCase())}</strong></td>
+            <td>${esc((ln.cliente || "").slice(0, 22))}</td>
+            <td>${esc((ln.servico || "").slice(0, 28))}</td>
+            <td class="num">${brl(ln.preco)}</td>
+            <td class="num">${pm.valor != null ? brl(pm.valor) : "—"}</td>
+            <td>${fpStr}</td>
+            <td>${pm.hora ? fmtHora(pm.hora) : "—"}</td>
+          </tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+
+      // Orfas PDV — vistorias só no caixa
+      if ((conf.orfas_pdv || []).length) {
+        html += `<h2 class="section-h" style="margin-top:14px">Apenas no PDV (sem correspondência na planilha)</h2>`;
+        html += `<table><thead><tr>
+          <th>Hora</th><th>Placa</th><th>Cliente</th><th>Serviço</th><th>FP</th><th class="num">Valor</th>
+        </tr></thead><tbody>`;
+        for (const lc of conf.orfas_pdv) {
+          html += `<tr>
+            <td>${fmtHora(lc.hora)}</td>
+            <td><strong>${esc((lc.placa || "").toUpperCase())}</strong></td>
+            <td>${esc(lc.cliente || "")}</td>
+            <td>${esc(lc.servico || "")}</td>
+            <td>${esc((lc.fp || "").toUpperCase())}</td>
+            <td class="num">${brl(lc.valor)}</td>
+          </tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+    }
+
+    // ── DECISÕES ───────────────────────────────────────────
+    if ((j.decisoes || []).length) {
+      html += `<h2 class="section-h">Decisões manuais do operador</h2>`;
+      html += `<table><thead><tr>
+        <th>Hora</th><th>Tipo</th><th>Detalhes</th>
+      </tr></thead><tbody>`;
+      for (const d of j.decisoes) {
+        html += `<tr>
+          <td>${(d.timestamp || "").slice(11, 16)}</td>
+          <td><span class="badge b-soft">${esc((d.tipo || "").toUpperCase())}</span></td>
+          <td>${esc(d.motivo || d.observacao || JSON.stringify(d).slice(0, 100))}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+
+    // ── ASSINATURAS ────────────────────────────────────────
+    html += `<div class="signature">
+      <div class="sig-line">Operador<br><small>(nome, CPF e assinatura)</small></div>
+      <div class="sig-line">Conferência / Gerência<br><small>(nome e assinatura)</small></div>
+    </div>`;
+
+    html += `<div class="footer-print">
+      Astro Vistorias — Fechamento gerado pelo sistema · ${fmtBR(j.gerado_em)} às ${(j.gerado_em || "").slice(11, 16)}
+    </div>`;
+
+    document.getElementById("page").innerHTML = html;
+    document.title = `Fechamento ${fmtBR(j.data)} — ${u.nome || UNIT}`;
+  }
+
+  async function load() {
+    const data = document.getElementById("selData").value || DATA;
+    document.getElementById("page").innerHTML = '<div class="skel"></div><div class="skel" style="margin-top:8px"></div><div class="skel" style="margin-top:8px;height:200px"></div>';
+    try {
+      const r = await fetch(`/u/${UNIT}/api/fechamento/relatorio-completo?data=${encodeURIComponent(data)}`, { cache: "no-store" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha ao carregar");
+      render(j);
+    } catch (e) {
+      document.getElementById("page").innerHTML = `<div style="padding:30px;color:#991b1b">Erro: ${esc(e.message)}</div>`;
+    }
+  }
+
+  document.getElementById("btnAtualizar").addEventListener("click", load);
+  document.getElementById("btnImprimir").addEventListener("click", () => window.print());
+  document.getElementById("selData").addEventListener("change", load);
+
+  load();
+</script>
+</body>
+</html>

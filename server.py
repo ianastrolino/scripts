@@ -6168,6 +6168,125 @@ def api_fechamento_decisao(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/u/<unit>/api/fechamento/relatorio-completo")
+@unit_access_required
+def api_fechamento_relatorio_completo(unit: str):
+    """Relatorio consolidado do fechamento de caixa pra impressao/PDF.
+
+    Junta:
+    - PDV do dia agrupado por FP (dinheiro/pix/cartao/faturado/detran)
+    - Conferencia PDV x planilha detalhada (linha-a-linha)
+    - Envios feitos pro Tiny no dia (status)
+    - Decisoes manuais do fechamento
+
+    Query: ?data=YYYY-MM-DD (default: hoje).
+    """
+    try:
+        data_iso = (request.args.get("data") or "").strip()
+        if not data_iso:
+            data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+
+        unit_dir = _unit_state_dir(unit)
+        unit_info = UNITS.get(unit, {})
+
+        # PDV — lancamentos do dia
+        try:
+            lancamentos = _db_load(unit, unit_dir, data_iso)
+        except Exception:
+            lancamentos = []
+
+        fp_keys = ("dinheiro", "debito", "credito", "pix", "faturado", "detran", "avista")
+        fp_total: dict[str, float] = {fp: 0.0 for fp in fp_keys}
+        fp_count: dict[str, int]   = {fp: 0   for fp in fp_keys}
+        for lc in lancamentos:
+            fp = (lc.get("fp") or "").lower().strip()
+            v  = float(lc.get("valor", 0) or 0)
+            if fp in fp_total:
+                fp_total[fp] += v
+                fp_count[fp] += 1
+        total_dia = sum(fp_total.values())
+        avista_total = total_dia - fp_total["faturado"] - fp_total["detran"]
+        avista_count = sum(c for fp, c in fp_count.items() if fp not in ("faturado", "detran"))
+
+        # Lista detalhada por FP (so AV — faturados ficam separados)
+        avista_por_fp = {}
+        for fp in ("dinheiro", "pix", "debito", "credito"):
+            avista_por_fp[fp] = {
+                "total":  round(fp_total[fp], 2),
+                "count":  fp_count[fp],
+                "lancamentos": sorted(
+                    [lc for lc in lancamentos if (lc.get("fp") or "").lower() == fp],
+                    key=lambda x: (x.get("hora") or x.get("timestamp") or ""),
+                ),
+            }
+
+        faturados = sorted(
+            [lc for lc in lancamentos if (lc.get("fp") or "").lower() == "faturado"],
+            key=lambda x: (x.get("hora") or x.get("timestamp") or ""),
+        )
+        detran = sorted(
+            [lc for lc in lancamentos if (lc.get("fp") or "").lower() == "detran"],
+            key=lambda x: (x.get("hora") or x.get("timestamp") or ""),
+        )
+
+        # Envios Tiny do dia (todos, inclusive falhas — pra contar/mostrar)
+        try:
+            envios = _db_list_envios(unit, unit_dir, date_from=data_iso, date_to=data_iso, limit=2000)
+        except Exception:
+            envios = []
+        envios_ok    = [e for e in envios if (e.get("status") or "") != "falha"]
+        envios_falha = [e for e in envios if (e.get("status") or "") == "falha"]
+
+        # Conferencia PDV x planilha (detalhada)
+        try:
+            conferencia = _compute_planilha_status(unit, data_iso)
+        except Exception:
+            app.logger.exception("[fechamento.relatorio-completo] conferencia %s", unit)
+            conferencia = {"exists": False, "stats": {}, "linhas": [], "orfas_pdv": []}
+
+        # Decisoes manuais
+        all_dec = _load_decisoes(unit)
+        decisoes = (all_dec.get(data_iso) or {}).get("decisoes", [])
+
+        return _json({
+            "success":   True,
+            "data":      data_iso,
+            "unit":      {"slug": unit, "nome": unit_info.get("nome", unit)},
+            "gerado_em": dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+            "totais": {
+                "total_dia":     round(total_dia, 2),
+                "total_count":   len(lancamentos),
+                "avista":        round(avista_total, 2),
+                "avista_count":  avista_count,
+                "faturado":      round(fp_total["faturado"], 2),
+                "faturado_count":fp_count["faturado"],
+                "detran":        round(fp_total["detran"], 2),
+                "detran_count":  fp_count["detran"],
+                "ticket_medio":  round(total_dia / len(lancamentos), 2) if lancamentos else 0.0,
+            },
+            "avista_por_fp": avista_por_fp,
+            "faturados":     faturados,
+            "detran":        detran,
+            "tiny": {
+                "enviados_ok":    len(envios_ok),
+                "valor_enviado":  round(sum(float(e.get("valor") or 0) for e in envios_ok), 2),
+                "falhas":         len(envios_falha),
+                "envios":         envios_ok,
+            },
+            "conferencia": conferencia,
+            "decisoes":    decisoes,
+        })
+    except Exception as exc:
+        app.logger.exception("[fechamento.relatorio-completo] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/fechamento/imprimir")
+@unit_access_required
+def fechamento_imprimir_page(unit: str):
+    return _nocache(send_from_directory(UI_DIR, "fechamento-imprimir.html"))
+
+
 @app.route("/u/<unit>/api/fechamento/relatorio")
 @unit_access_required
 def api_fechamento_relatorio(unit: str):
@@ -6268,6 +6387,147 @@ _PLANILHA_STATUS_CACHE: dict[str, dict] = {}
 _PLANILHA_STATUS_TTL   = 5.0  # 5s — UI da Conferencia Antecipada bate com frequencia
 
 
+def _compute_planilha_status(unit: str, data_iso: str) -> dict:
+    """Funcao pura: calcula o cruzamento PDV x planilha pra unit/data.
+
+    Retorna o mesmo payload que o endpoint /api/planilha/status, mas sem cache
+    nem instrumentacao. Usado pelo endpoint do status (com cache em volta) e
+    pelo relatorio completo de fechamento (chamada one-shot, sem cache).
+
+    Se a planilha do dia nao existe, retorna {exists: False, ...}.
+    """
+    import re
+    import unicodedata as _ud
+
+    p = _planilha_dia_path(unit, data_iso)
+    if not p.exists():
+        return {
+            "success": True, "data": data_iso, "exists": False,
+            "stats": {"total": 0, "cruzadas": 0, "divergencias": 0,
+                      "orfas_planilha": 0, "orfas_pdv": 0, "dia_anterior": 0},
+            "linhas": [], "orfas_pdv": [],
+        }
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        app.logger.exception("[planilha.status.compute] %s — JSON corrompido", unit)
+        return {"success": True, "data": data_iso, "exists": False,
+                "warning": "arquivo corrompido", "stats": {}, "linhas": [], "orfas_pdv": []}
+
+    records = payload.get("records") or []
+    config  = _build_unit_config(unit)
+    unit_dir = _unit_state_dir(unit)
+    try:
+        lancamentos = _db_load(unit, unit_dir, data_iso)
+    except Exception:
+        lancamentos = []
+
+    def _norm_placa(v):
+        return re.sub(r"[^A-Z0-9]", "", clean_text(v).upper())
+    def _norm_servico(v):
+        v = clean_text(v).upper()
+        v = apply_alias(config, "servico", v)
+        v = _ud.normalize("NFD", v)
+        v = "".join(c for c in v if _ud.category(c) != "Mn")
+        return " ".join(v.split())
+
+    pdv_por_placa: dict[str, list[dict]] = {}
+    for lc in lancamentos:
+        placa = _norm_placa(lc.get("placa", ""))
+        if placa:
+            pdv_por_placa.setdefault(placa, []).append(lc)
+
+    consumed: set[int] = set()
+    linhas_out: list[dict] = []
+    for r in records:
+        placa   = _norm_placa(r.get("placa", ""))
+        servico = _norm_servico(r.get("servico", ""))
+        preco   = float(r.get("preco", 0) or 0)
+        data_r  = (r.get("data") or "").strip()[:10]
+        dia_anterior = bool(data_r and data_r != data_iso)
+
+        pdv_match = None
+        status    = "sem_pdv"
+        available = [c for c in pdv_por_placa.get(placa, []) if id(c) not in consumed]
+
+        # Prioriza match por placa+servico (mesmo se valor divergir)
+        for c in available:
+            if _norm_servico(c.get("servico", "")) == servico:
+                pdv_match = c; consumed.add(id(c))
+                if abs(float(c.get("valor", 0) or 0) - preco) >= 0.01:
+                    status = "divergencia_valor"
+                else:
+                    status = "ok"
+                break
+
+        # Fallback: placa+valor (servico diverge)
+        if not pdv_match:
+            for c in available:
+                if abs(float(c.get("valor", 0) or 0) - preco) < 0.01:
+                    pdv_match = c; consumed.add(id(c)); status = "ok_fallback"; break
+
+        # Divergencia: placa bate mas nem servico nem valor
+        if not pdv_match and available:
+            pdv_match = available[0]; consumed.add(id(pdv_match))
+            if abs(float(pdv_match.get("valor", 0) or 0) - preco) >= 0.01:
+                status = "divergencia_valor"
+            else:
+                status = "ok_fallback"
+
+        linhas_out.append({
+            "id":      r.get("id", ""),
+            "placa":   r.get("placa", ""),
+            "cliente": r.get("cliente", ""),
+            "servico": r.get("servico", ""),
+            "preco":   preco,
+            "fp":      r.get("fp", ""),
+            "data":    data_r,
+            "status":  status,
+            "dia_anterior": dia_anterior,
+            "pdv_match": {
+                "id":    pdv_match.get("id"),
+                "hora":  pdv_match.get("hora"),
+                "fp":    pdv_match.get("fp"),
+                "valor": pdv_match.get("valor"),
+            } if pdv_match else None,
+        })
+
+    orfas_pdv = []
+    for lc in lancamentos:
+        if id(lc) in consumed:
+            continue
+        orfas_pdv.append({
+            "id":      lc.get("id"),
+            "placa":   lc.get("placa"),
+            "cliente": lc.get("cliente"),
+            "servico": lc.get("servico"),
+            "valor":   lc.get("valor"),
+            "fp":      lc.get("fp"),
+            "hora":    lc.get("hora"),
+        })
+
+    stats = {
+        "total":          len(linhas_out),
+        "cruzadas":       sum(1 for l in linhas_out if l["status"] in ("ok", "ok_fallback") and not l["dia_anterior"]),
+        "divergencias":   sum(1 for l in linhas_out if l["status"] == "divergencia_valor"),
+        "orfas_planilha": sum(1 for l in linhas_out if l["status"] == "sem_pdv" and not l["dia_anterior"]),
+        "orfas_pdv":      len(orfas_pdv),
+        "dia_anterior":   sum(1 for l in linhas_out if l["dia_anterior"]),
+    }
+
+    return {
+        "success":     True,
+        "data":        data_iso,
+        "exists":      True,
+        "uploaded_at": payload.get("uploaded_at"),
+        "uploaded_by": payload.get("uploaded_by"),
+        "versao":      payload.get("versao", 1),
+        "stats":       stats,
+        "linhas":      linhas_out,
+        "orfas_pdv":   orfas_pdv,
+    }
+
+
 @app.route("/u/<unit>/api/planilha/status")
 @unit_access_required
 def api_planilha_status(unit: str):
@@ -6280,12 +6540,9 @@ def api_planilha_status(unit: str):
     Cache TTL=5s por (unit, data_iso); invalida quando mtime da planilha muda
     (i.e., upload novo) ou quando ?force=1.
     """
-    import re
     import time as _time
-    import unicodedata as _ud
 
     t_start = _time.monotonic()
-    timings: dict[str, float] = {}
 
     try:
         data_iso = (request.args.get("data") or "").strip()
@@ -6295,12 +6552,7 @@ def api_planilha_status(unit: str):
 
         p = _planilha_dia_path(unit, data_iso)
         if not p.exists():
-            return _json({
-                "success": True, "data": data_iso, "exists": False,
-                "stats": {"total": 0, "cruzadas": 0, "divergencias": 0,
-                          "orfas_planilha": 0, "orfas_pdv": 0, "dia_anterior": 0},
-                "linhas": [], "orfas_pdv": [],
-            })
+            return _json(_compute_planilha_status(unit, data_iso))
 
         cache_key = f"{unit}:{data_iso}"
         try:
@@ -6316,141 +6568,10 @@ def api_planilha_status(unit: str):
             payload_out["cached"] = True
             return _json(payload_out)
 
-        try:
-            t = _time.monotonic()
-            payload = json.loads(p.read_text(encoding="utf-8"))
-            timings["read_json"] = _time.monotonic() - t
-        except Exception:
-            app.logger.exception("[planilha.status] %s — JSON corrompido", unit)
-            return _json({"success": True, "data": data_iso, "exists": False, "warning": "arquivo corrompido", "stats": {}, "linhas": [], "orfas_pdv": []})
-
-        records = payload.get("records") or []
-
-        t = _time.monotonic()
-        config  = _build_unit_config(unit)
-        timings["build_config"] = _time.monotonic() - t
-
-        unit_dir = _unit_state_dir(unit)
-        t = _time.monotonic()
-        try:
-            lancamentos = _db_load(unit, unit_dir, data_iso)
-        except Exception:
-            lancamentos = []
-        timings["db_load"] = _time.monotonic() - t
-
-        def _norm_placa(v):
-            return re.sub(r"[^A-Z0-9]", "", clean_text(v).upper())
-        def _norm_servico(v):
-            v = clean_text(v).upper()
-            v = apply_alias(config, "servico", v)
-            v = _ud.normalize("NFD", v)
-            v = "".join(c for c in v if _ud.category(c) != "Mn")
-            return " ".join(v.split())
-
-        t = _time.monotonic()
-        # Indice PDV por placa (lista — uma placa pode ter varios servicos)
-        pdv_por_placa: dict[str, list[dict]] = {}
-        for lc in lancamentos:
-            placa = _norm_placa(lc.get("placa", ""))
-            if placa:
-                pdv_por_placa.setdefault(placa, []).append(lc)
-
-        consumed: set[int] = set()
-        linhas_out: list[dict] = []
-        for r in records:
-            placa   = _norm_placa(r.get("placa", ""))
-            servico = _norm_servico(r.get("servico", ""))
-            preco   = float(r.get("preco", 0) or 0)
-            data_r  = (r.get("data") or "").strip()[:10]
-            dia_anterior = bool(data_r and data_r != data_iso)
-
-            pdv_match = None
-            status    = "sem_pdv"
-            available = [c for c in pdv_por_placa.get(placa, []) if id(c) not in consumed]
-
-            # Decisao 1: prioriza match por servico (placa+servico exato).
-            # Verifica divergencia de valor mesmo com match — operador precisa ver.
-            for c in available:
-                if _norm_servico(c.get("servico", "")) == servico:
-                    pdv_match = c; consumed.add(id(c))
-                    if abs(float(c.get("valor", 0) or 0) - preco) >= 0.01:
-                        status = "divergencia_valor"
-                    else:
-                        status = "ok"
-                    break
-
-            # Fallback: placa+valor (servico diverge)
-            if not pdv_match:
-                for c in available:
-                    if abs(float(c.get("valor", 0) or 0) - preco) < 0.01:
-                        pdv_match = c; consumed.add(id(c)); status = "ok_fallback"; break
-
-            # Divergencia: placa bate mas valor diferente
-            if not pdv_match and available:
-                pdv_match = available[0]; consumed.add(id(pdv_match))
-                if abs(float(pdv_match.get("valor", 0) or 0) - preco) >= 0.01:
-                    status = "divergencia_valor"
-                else:
-                    status = "ok_fallback"
-
-            linhas_out.append({
-                "id":      r.get("id", ""),
-                "placa":   r.get("placa", ""),
-                "cliente": r.get("cliente", ""),
-                "servico": r.get("servico", ""),
-                "preco":   preco,
-                "fp":      r.get("fp", ""),
-                "data":    data_r,
-                "status":  status,
-                "dia_anterior": dia_anterior,
-                "pdv_match": {
-                    "id":    pdv_match.get("id"),
-                    "hora":  pdv_match.get("hora"),
-                    "fp":    pdv_match.get("fp"),
-                    "valor": pdv_match.get("valor"),
-                } if pdv_match else None,
-            })
-
-        # Vistorias no PDV sem correspondencia na planilha
-        orfas_pdv = []
-        for lc in lancamentos:
-            if id(lc) in consumed:
-                continue
-            orfas_pdv.append({
-                "id":      lc.get("id"),
-                "placa":   lc.get("placa"),
-                "cliente": lc.get("cliente"),
-                "servico": lc.get("servico"),
-                "valor":   lc.get("valor"),
-                "fp":      lc.get("fp"),
-                "hora":    lc.get("hora"),
-            })
-
-        timings["loop"] = _time.monotonic() - t
-
-        stats = {
-            "total":          len(linhas_out),
-            "cruzadas":       sum(1 for l in linhas_out if l["status"] in ("ok", "ok_fallback") and not l["dia_anterior"]),
-            "divergencias":   sum(1 for l in linhas_out if l["status"] == "divergencia_valor"),
-            "orfas_planilha": sum(1 for l in linhas_out if l["status"] == "sem_pdv" and not l["dia_anterior"]),
-            "orfas_pdv":      len(orfas_pdv),
-            "dia_anterior":   sum(1 for l in linhas_out if l["dia_anterior"]),
-        }
-
-        result = {
-            "success":     True,
-            "data":        data_iso,
-            "exists":      True,
-            "uploaded_at": payload.get("uploaded_at"),
-            "uploaded_by": payload.get("uploaded_by"),
-            "versao":      payload.get("versao", 1),
-            "stats":       stats,
-            "linhas":      linhas_out,
-            "orfas_pdv":   orfas_pdv,
-            "cached":      False,
-        }
-
-        # Cache pra absorver hammering da UI (Conferencia Antecipada)
+        result = _compute_planilha_status(unit, data_iso)
+        if not result.get("exists"):
+            return _json(result)
+        result["cached"] = False
         _PLANILHA_STATUS_CACHE[cache_key] = {
             "data": result, "cached_at": _time.monotonic(), "mtime": mtime,
         }
@@ -6459,14 +6580,13 @@ def api_planilha_status(unit: str):
         elapsed = _time.monotonic() - t_start
         if elapsed > 2.0:
             app.logger.warning(
-                "[planilha.status] %s data=%s SLOW total=%.2fs read=%.2fs build=%.2fs db=%.2fs loop=%.2fs records=%d lancamentos=%d",
+                "[planilha.status] %s data=%s SLOW total=%.2fs records=%d orfas_pdv=%d",
                 unit, data_iso, elapsed,
-                timings.get("read_json", 0), timings.get("build_config", 0),
-                timings.get("db_load", 0), timings.get("loop", 0),
-                len(records), len(lancamentos),
+                len(result.get("linhas") or []),
+                len(result.get("orfas_pdv") or []),
             )
-
         return _json(result)
+
     except Exception as exc:
         app.logger.exception("[planilha.status] %s", unit)
         return _json({"success": False, "error": str(exc)}, 500)
