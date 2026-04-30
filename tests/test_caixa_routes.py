@@ -76,9 +76,12 @@ class TestLancar:
         r = _lancar(client, cliente="")
         assert r.status_code == 400
 
-    def test_valor_zero_retorna_400(self, client):
+    def test_valor_zero_aceito(self, client):
+        # Cortesia/retorno: valor 0,00 e valido (Ian liberou apos workaround
+        # ruim de operadoras lancando R$ 0,01 pra contornar a validacao).
         r = _lancar(client, valor=0)
-        assert r.status_code == 400
+        assert r.status_code == 200
+        assert r.get_json()["lancamento"]["valor"] == 0.0
 
     def test_valor_negativo_retorna_400(self, client):
         r = _lancar(client, valor=-50)
@@ -186,9 +189,16 @@ class TestEditar:
         r = self._editar(client, lc_id, fp="boleto")
         assert r.status_code == 400
 
-    def test_valor_zero_retorna_400(self, client):
+    def test_valor_zero_aceito(self, client):
+        # Editar pra 0,00 e valido — corrige lancamento que ficou com 0,01
+        # (workaround antigo de operadora pra contornar a validacao).
         lc_id = _lancar(client).get_json()["lancamento"]["id"]
         r = self._editar(client, lc_id, valor=0)
+        assert r.status_code == 200
+
+    def test_valor_negativo_retorna_400(self, client):
+        lc_id = _lancar(client).get_json()["lancamento"]["id"]
+        r = self._editar(client, lc_id, valor=-1)
         assert r.status_code == 400
 
 

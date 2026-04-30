@@ -5999,7 +5999,7 @@ def api_caixa_editar(unit: str, lancamento_id: str):
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
 
-        if not all([placa, cliente, servico]) or valor <= 0 or fp not in FP_VALIDOS:
+        if not all([placa, cliente, servico]) or valor < 0 or fp not in FP_VALIDOS:
             return _json({"success": False, "error": "Dados invalidos."}, 400)
 
         state = _load_caixa_dia(unit)

@@ -36,8 +36,8 @@ def validar_lancamento(data: dict[str, Any]) -> str | None:
         valor = float(data.get("valor", 0))
     except (TypeError, ValueError):
         return "Valor invalido."
-    if valor <= 0:
-        return "Valor deve ser maior que zero."
+    if valor < 0:
+        return "Valor nao pode ser negativo."
     if data.get("fp") not in FP_VALIDOS:
         return "Forma de pagamento invalida."
     return None

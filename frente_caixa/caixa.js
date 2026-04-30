@@ -412,7 +412,7 @@ function validarFormulario() {
     }
   }
 
-  const ok = placa && placaOk && cliente && servico && valor > 0 && state.fpSelecionado && cpfOk;
+  const ok = placa && placaOk && cliente && servico && valor >= 0 && state.fpSelecionado && cpfOk;
   document.getElementById("btnLancar").disabled = !ok;
 }
 
