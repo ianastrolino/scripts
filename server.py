@@ -4720,6 +4720,15 @@ def api_preview(unit: str):
         state_path = state_dir / "imported.json"
         imported   = load_state(state_path).get("imported", {})
 
+        # Indice {placa: modelo} da planilha-dia da unit (cada record pode ter
+        # data diferente, mas planilhas sao salvas por dia — cacheamos por data).
+        _modelo_idx_cache: dict[str, dict[str, str]] = {}
+
+        def _modelo_idx_for(data_iso: str) -> dict[str, str]:
+            if data_iso not in _modelo_idx_cache:
+                _modelo_idx_cache[data_iso] = _build_planilha_modelo_index(unit, data_iso)
+            return _modelo_idx_cache[data_iso]
+
         previews = []
         for r in data.get("records", []):
             chave  = r.get("id", "?")
@@ -4739,6 +4748,7 @@ def api_preview(unit: str):
                 chave_deduplicacao=chave, av_pagamento=av_pag,
                 cpf=r.get("cpf", ""),
             )
+            _enrich_record_modelo(rec, _modelo_idx_for(rec.data))
 
             pay_key = av_pag if av else fp
             pay_id  = lookup_config_id(forma_ids, pay_key)
@@ -4809,6 +4819,17 @@ def api_send(unit: str):
         # Lock protege imported dict e results de acessos concorrentes entre threads
         lock = threading.Lock()
 
+        # Cache de indice {placa: modelo} por data — carregado on-demand uma vez
+        # por data dentro do batch (varias threads compartilham).
+        _modelo_idx_cache: dict[str, dict[str, str]] = {}
+        _modelo_idx_lock = threading.Lock()
+
+        def _modelo_idx_for(data_iso: str) -> dict[str, str]:
+            with _modelo_idx_lock:
+                if data_iso not in _modelo_idx_cache:
+                    _modelo_idx_cache[data_iso] = _build_planilha_modelo_index(unit, data_iso)
+                return _modelo_idx_cache[data_iso]
+
         def _process_one(r: dict) -> None:
             """Processa um unico registro. Executado em thread pool."""
             servico_raw = clean_text(r.get("servico", "")).upper()
@@ -4826,6 +4847,7 @@ def api_send(unit: str):
             )
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
+            _enrich_record_modelo(rec, _modelo_idx_for(rec.data))
 
             # Camada 1: check local (thread-safe via lock)
             with lock:
@@ -6330,6 +6352,50 @@ def _planilha_dia_dir(unit: str) -> Path:
 
 def _planilha_dia_path(unit: str, data_iso: str) -> Path:
     return _planilha_dia_dir(unit) / f"{data_iso}.json"
+
+
+def _build_planilha_modelo_index(unit: str, data_iso: str) -> dict[str, str]:
+    """Carrega a planilha-dia da unit/data e devolve indice {placa_normalizada: modelo}.
+
+    Usado pra enriquecer envios PDV -> Tiny com marca/modelo do veiculo
+    (operador nao digita modelo no PDV; ele vem da planilha Sispevi/Megalaudo).
+
+    Placa normalizada: maiusculas, so [A-Z0-9].
+    Retorna {} se a planilha nao existir ou estiver corrompida — caller cai pro
+    fallback (envio sem modelo).
+    """
+    import re as _re
+    p = _planilha_dia_path(unit, data_iso)
+    if not p.exists():
+        return {}
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for r in (payload.get("records") or []):
+        placa_raw = (r.get("placa") or "").upper()
+        placa_norm = _re.sub(r"[^A-Z0-9]", "", placa_raw)
+        modelo = (r.get("modelo") or "").strip()
+        if placa_norm and modelo:
+            # Primeira ocorrencia ganha — varias linhas com mesma placa nao deveriam
+            # ter modelos diferentes; se tiver, mantem o primeiro.
+            out.setdefault(placa_norm, modelo.upper())
+    return out
+
+
+def _enrich_record_modelo(rec: "NormalizedRecord", modelo_idx: dict[str, str]) -> None:
+    """Se o record nao tem modelo, busca pelo indice ja carregado da planilha.
+
+    Mutacao in-place — o caller passa o NormalizedRecord e o indice carregado
+    1x por batch (evita reabrir o JSON da planilha pra cada record).
+    """
+    import re as _re
+    if rec.modelo:
+        return
+    placa_norm = _re.sub(r"[^A-Z0-9]", "", (rec.placa or "").upper())
+    if placa_norm and (m := modelo_idx.get(placa_norm)):
+        rec.modelo = m
 
 
 @app.route("/u/<unit>/api/planilha/upload", methods=["POST"])

@@ -56,7 +56,9 @@
       "Bash(python -m pytest tests/ -x --tb=short -q)",
       "Bash(python -m pytest tests/test_smoke_endpoints.py -x --tb=short)",
       "Bash(python -m pytest tests/ --tb=short -q)",
-      "Bash(python -m pytest tests/test_fechamento_relatorio_completo.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_fechamento_relatorio_completo.py -x --tb=short)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('tiny_import.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_historico_enriquecido.py -x --tb=short)"
     ]
   }
 }

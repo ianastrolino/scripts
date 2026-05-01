@@ -650,7 +650,14 @@ def compact_document_number(config: dict[str, Any], record: NormalizedRecord) ->
 
 
 def build_history(record: NormalizedRecord) -> str:
-    parts = [f"Placa {record.placa}", record.modelo]
+    """Monta o campo 'historico' que aparece no relatorio do Tiny.
+
+    Formato: 'Placa <X> | <MARCA MODELO> | <SERVICO> | CPF/CNPJ <doc>'
+    Cada parte vazia eh omitida — entradas anteriores ao enrichment ficavam
+    com so 'Placa XXX'. O servico foi adicionado em 2026-04-30 a pedido do
+    Ian pra contas-receber agrupadas por cliente fazerem sentido sem abrir.
+    """
+    parts = [f"Placa {record.placa}", record.modelo, record.servico]
     if record.cpf and len(record.cpf) == 11:
         parts.append(f"CPF {record.cpf[:3]}.{record.cpf[3:6]}.{record.cpf[6:9]}-{record.cpf[9:]}")
     elif record.cpf and len(record.cpf) == 14:
