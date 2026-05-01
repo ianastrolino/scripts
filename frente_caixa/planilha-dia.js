@@ -169,13 +169,18 @@
 
       const dataNorm = normalizeDataInput(row[dataIdx]);
       const placaRaw = row[placaIdx];
-      // Layout típico Sispevi: ... PLACA | CLIENTE_TIPO | SERVICO | ... | FP | VALOR | VALOR
+      // Layout típico Sispevi:
+      //   ... | DATA | MODELO | ANO | COR | CHASSI | PLACA | CLIENTE_TIPO | SERVICO | ... | FP | VALOR
+      // Modelo fica logo depois da data; sanity check rejeita se for so numero
+      // (caso a planilha venha sem coluna modelo, dataIdx+1 cai no ano).
+      const modeloRaw = String(row[dataIdx + 1] || "").trim();
+      const modelo = /^\d+$/.test(modeloRaw) ? "" : modeloRaw;
       const cliente = row[placaIdx + 1] || "";
       const servico = row[placaIdx + 2] || "";
       const fp      = detectFp(row, placaIdx + 3);
       const valor   = lastValor(row, placaIdx + 3);
 
-      out.push(makeRecord([dataNorm, "", placaRaw, cliente, servico, fp, valor], idx++, sourceFile));
+      out.push(makeRecord([dataNorm, modelo, placaRaw, cliente, servico, fp, valor], idx++, sourceFile));
     }
     console.log(`[planilha-dia] ${sourceFile}: parser sem-header detectou ${out.length} vistorias`);
 

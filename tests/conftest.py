@@ -26,3 +26,12 @@ def reset_health_cache():
     server._HEALTH_CACHE.update({"ts": 0.0, "payload": None, "code": 200})
     yield
     server._HEALTH_CACHE.update({"ts": 0.0, "payload": None, "code": 200})
+
+
+@pytest.fixture(autouse=True)
+def reset_planilha_status_cache():
+    """Limpa cache do /api/planilha/status entre testes (era global, contaminava
+    asserts cross-test que mudavam mtime/data muito rapido)."""
+    server._PLANILHA_STATUS_CACHE.clear()
+    yield
+    server._PLANILHA_STATUS_CACHE.clear()
