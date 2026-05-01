@@ -1797,6 +1797,67 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
 
 
 # Cache 60s pra visao geral — calculo pesa quando ha muitas unidades x 14 dias
+def _calcula_pascoa(ano: int) -> dt.date:
+    """Algoritmo de Meeus/Jones/Butcher pra calcular o domingo de Pascoa.
+
+    Pascoa eh feriado movel — Sexta Santa, Carnaval (terca) e Corpus Christi
+    sao calculados a partir dela. Algoritmo cobre 1900-2099 com precisao.
+    """
+    a = ano % 19
+    b = ano // 100
+    c = ano % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    L = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * L) // 451
+    mes = (h + L - 7 * m + 114) // 31
+    dia = ((h + L - 7 * m + 114) % 31) + 1
+    return dt.date(ano, mes, dia)
+
+
+def _eh_feriado_nacional(data: dt.date) -> tuple[bool, str]:
+    """Retorna (eh_feriado, nome) pra feriados nacionais brasileiros.
+
+    Cobre fixos (Confraternizacao, Tiradentes, Trabalho, Independencia, NS
+    Aparecida, Finados, Republica, Consciencia Negra, Natal) e moveis
+    derivados da Pascoa (Carnaval-terca, Sexta Santa, Corpus Christi).
+
+    Feriados estaduais/municipais NAO entram aqui — se precisar, vira lista
+    por unidade.
+    """
+    fixos = {
+        (1, 1):  "Confraternização Universal",
+        (4, 21): "Tiradentes",
+        (5, 1):  "Dia do Trabalho",
+        (9, 7):  "Independência",
+        (10, 12):"Nossa Senhora Aparecida",
+        (11, 2): "Finados",
+        (11, 15):"Proclamação da República",
+        (11, 20):"Dia da Consciência Negra",
+        (12, 25):"Natal",
+    }
+    if (data.month, data.day) in fixos:
+        return (True, fixos[(data.month, data.day)])
+
+    pascoa = _calcula_pascoa(data.year)
+    sexta_santa    = pascoa - dt.timedelta(days=2)
+    carnaval_terca = pascoa - dt.timedelta(days=47)
+    corpus_christi = pascoa + dt.timedelta(days=60)
+    moveis = {
+        sexta_santa:    "Sexta-Feira Santa",
+        carnaval_terca: "Carnaval",
+        corpus_christi: "Corpus Christi",
+    }
+    if data in moveis:
+        return (True, moveis[data])
+    return (False, "")
+
+
 _VISAO_GERAL_CACHE: dict[str, Any] = {}
 
 
@@ -1873,12 +1934,16 @@ def master_api_visao_geral():
             return None  # sem base de comparacao
         return round((novo - antigo) / antigo * 100, 1)
 
+    # Detector de feriado: suprime alertas de inatividade e expoe pra UI
+    eh_feriado, nome_feriado = _eh_feriado_nacional(hoje)
+
     # Alertas (tokens expirando, unidades sem operar, JS errors)
     alertas: list[dict] = []
     unidades_inativas = [u["nome"] for u in por_unidade
                          if u["erp"] == "tiny" and not u["ativo_hoje"]
                          and u["ultimos_7d"]["vistorias"] > 0]
-    if unidades_inativas:
+    # So alerta inatividade se NAO eh feriado — em feriado eh esperado nao operar
+    if unidades_inativas and not eh_feriado:
         alertas.append({
             "tipo": "unidade_inativa",
             "msg":  f"{len(unidades_inativas)} unidade(s) ativa(s) na semana sem operar hoje: {', '.join(unidades_inativas)}",
@@ -1889,6 +1954,7 @@ def master_api_visao_geral():
         "success":       True,
         "atualizado_em": dt.datetime.now(tz).isoformat(timespec="seconds"),
         "hoje":          hoje.isoformat(),
+        "feriado":       {"eh_feriado": eh_feriado, "nome": nome_feriado} if eh_feriado else None,
         "totais": {
             "hoje":            tot_hoje,
             "ontem":           tot_ontem,
@@ -3208,25 +3274,39 @@ def _fetch_contas_mes_tiny(unit: str, ano: int, mes: int) -> list[dict]:
 def master_api_contas_receber():
     """Dashboard de contas a receber por mes de emissao (Tiny-like).
 
-    Retorna 3 totais principais (emitidos / recebidos / em_aberto) igual ao
-    Tiny mostra, agregado por unidade, lista de em atraso e vencendo em 7 dias.
+    Wrapper HTTP — o miolo esta em _compute_contas_receber pra poder ser
+    chamado tambem pelo cron warmer.
 
     Params:
       unit=<slug>|all (default all)
       mes=YYYY-MM     (default mes corrente)
     """
     try:
-        unit_filter = (request.args.get("unit") or "all").strip()
-        units_iter = list(UNITS.keys()) if unit_filter == "all" else (
-            [unit_filter] if unit_filter in UNITS else []
+        payload = _compute_contas_receber(
+            unit_filter=(request.args.get("unit") or "all").strip(),
+            data_param=(request.args.get("data") or "").strip(),
+            mes_param=(request.args.get("mes") or "").strip(),
+            force=(request.args.get("force") or "").strip() in ("1", "true", "yes"),
         )
-        force = (request.args.get("force") or "").strip() in ("1", "true", "yes")
+        return _json(payload)
+    except Exception as exc:
+        app.logger.exception("[contas-receber] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
 
+
+def _compute_contas_receber(unit_filter: str, data_param: str, mes_param: str, force: bool) -> dict:
+    """Funcao pura: monta payload de contas-receber pra unit/periodo.
+
+    Usado pelo endpoint HTTP e pelo cron warmer (que pre-aquece o cache 4x/dia).
+    Cache hit retorna em <1ms; miss faz fetch paralelo no Tiny.
+    """
+    units_iter = list(UNITS.keys()) if unit_filter == "all" else (
+        [unit_filter] if unit_filter in UNITS else []
+    )
+    if True:  # bloco com `if True:` so pra preservar identacao do trecho original
         # Dois modos de periodo: dia (?data=YYYY-MM-DD) ou mes (?mes=YYYY-MM).
         # data tem prioridade. Default = dia=hoje.
         hoje = dt.date.today()
-        data_param = (request.args.get("data") or "").strip()
-        mes_param  = (request.args.get("mes") or "").strip()
 
         dia_alvo: dt.date | None = None
         if data_param:
@@ -3258,7 +3338,7 @@ def master_api_contas_receber():
             payload = dict(cached["data"])
             payload["cached"]     = True
             payload["cached_age"] = int(now_ts - cached["cached_at"])
-            return _json(payload)
+            return payload
 
         hoje_mais_7  = hoje + dt.timedelta(days=7)
 
@@ -3518,10 +3598,7 @@ def master_api_contas_receber():
             "cached":        False,
         }
         _CONTAS_RECEBER_CACHE[cache_key] = {"data": payload, "cached_at": now_ts}
-        return _json(payload)
-    except Exception as exc:
-        app.logger.exception("[server] %s", request.path)
-        return _json({"success": False, "error": str(exc)}, 500)
+        return payload
 
 
 @app.route("/master/contas-receber")
@@ -9481,6 +9558,23 @@ def _rotacionar_logs() -> None:
         app.logger.exception("[log_rotation] erro geral")
 
 
+def _warm_contas_receber_cache() -> None:
+    """Pre-aquece o cache de contas-receber (mes corrente, todas as unidades).
+
+    Roda 4x/dia no cron (8h, 12h, 16h, 20h). Resultado: usuario nunca paga os
+    ~200s da 1a chamada do dia — o endpoint sempre serve do cache.
+    Falha silenciosa (loga warning).
+    """
+    try:
+        t0 = time.monotonic()
+        payload = _compute_contas_receber(unit_filter="all", data_param="", mes_param="", force=True)
+        dur = time.monotonic() - t0
+        units_consultadas = len(payload.get("units_consultadas", []))
+        app.logger.info("[cron] warm contas-receber: %.1fs, %d units consultadas", dur, units_consultadas)
+    except Exception as exc:
+        app.logger.warning("[cron] warm contas-receber falhou: %s", exc)
+
+
 def _try_acquire_cron_lock() -> "object | None":
     """Tenta adquirir lock exclusivo pra cron. So 1 worker do gunicorn deve rodar
     o cron — o resto retorna None e o thread termina sem disparar emails.
@@ -9521,6 +9615,7 @@ def _cron_loop() -> None:
     last_renew_pm = ""    # 15:00 — recarrega pra cobrir a tarde
     last_rotation = ""
     last_test_restore = ""  # dia 1 do mes 03:00 — valida backup
+    last_warm_cr  = {}    # {hora: today_iso} — pra cada slot 8/12/16/20
     while True:
         try:
             now   = dt.datetime.now(tz)
@@ -9548,6 +9643,12 @@ def _cron_loop() -> None:
                 last_renew_pm = today
                 app.logger.info("[cron] Renovacao tokens Tiny (15:00 — tarde)")
                 _verificar_saude_tokens()
+            # Pre-aquece cache de contas-receber 4x/dia (8h, 12h, 16h, 20h)
+            # Resultado: usuario nunca paga os ~200s da 1a chamada do dia.
+            if now.hour in (8, 12, 16, 20) and now.minute == 0 and last_warm_cr.get(now.hour) != today:
+                last_warm_cr[now.hour] = today
+                app.logger.info("[cron] Warm contas-receber cache (%02d:00)", now.hour)
+                _warm_contas_receber_cache()
         except Exception:
             app.logger.exception("[cron] Erro no loop")
         time.sleep(60)

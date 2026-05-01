@@ -10,6 +10,21 @@
   <style>
     #app-main .app-content-wrap { max-width: 1440px; }
 
+    /* ─── Banner de feriado nacional ──────────────────────────── */
+    .vg-feriado {
+      display: flex; align-items: center; gap: 14px;
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #f59e0b;
+      border-left: 4px solid #d97706;
+      border-radius: var(--ds-radius-lg);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .vg-feriado[hidden] { display: none; }
+    .vg-feriado-icon { font-size: 26px; line-height: 1; }
+    .vg-feriado-title { font-weight: 800; font-size: 14px; color: #78350f; letter-spacing: -.01em; }
+    .vg-feriado-sub   { font-size: 12px; color: #92400e; margin-top: 2px; }
+
     /* ─── Hero (3 cards: Hoje, Ontem, 7d) ─────────────────────── */
     .vg-hero {
       display: grid;
@@ -202,6 +217,15 @@
         </div>
       </div>
 
+      <!-- Banner de feriado (so aparece se hoje for feriado nacional) -->
+      <div id="vgFeriado" class="vg-feriado" hidden>
+        <div class="vg-feriado-icon">🇧🇷</div>
+        <div class="vg-feriado-text">
+          <div class="vg-feriado-title">Feriado Nacional · <span id="vgFeriadoNome">—</span></div>
+          <div class="vg-feriado-sub">Empresa fechada. Alertas de inatividade suspensos hoje.</div>
+        </div>
+      </div>
+
       <!-- Hero: Hoje / Ontem / 7 dias -->
       <div class="vg-hero" id="vgHero">
         <div class="vg-card is-primary">
@@ -354,6 +378,16 @@
         const res = await fetch("/master/api/visao-geral", { cache: "no-store" });
         const d = await res.json();
         if (!d.success) throw new Error("API retornou erro");
+
+        // Banner de feriado (suprime alerta de inatividade na visualização tb)
+        const fer = d.feriado;
+        const ferEl = document.getElementById("vgFeriado");
+        if (fer && fer.eh_feriado) {
+          document.getElementById("vgFeriadoNome").textContent = fer.nome;
+          ferEl.hidden = false;
+        } else {
+          ferEl.hidden = true;
+        }
 
         // Hero
         document.getElementById("vgHojeData").textContent = fmtData(d.hoje);
