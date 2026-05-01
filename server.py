@@ -3533,7 +3533,7 @@ def master_contas_receber_page():
 # Roadmap/backlog do sistema — lista mantida inline pra edicao rapida via
 # commit. Se virar coisa frequente, migra pra JSON editavel.
 _ROADMAP = {
-    "atualizado_em": "2026-04-27",
+    "atualizado_em": "2026-05-01",
     "categorias": [
         {
             "nome": "Negócio — alta prioridade (receita / cobertura)",
@@ -3558,6 +3558,9 @@ _ROADMAP = {
             "descricao": "Manutenibilidade do código (server.py é monolito)",
             "cor":  "#f59e0b",
             "itens": [
+                {"titulo": "Separar Master DEV vs Master Operação (RBAC)",
+                 "status": "pendente", "estimativa": "~3-4h",
+                 "nota":   "Hoje 'master' é binário — quem é vê tudo (incluindo tokens, deletar usuário, sistema, reabrir caixa). Adicionar flag master_op pra gerentes regionais terem dashboards/financeiro/aprovações sem acesso técnico. Decorator novo @master_op_or_dev_required pra telas operacionais; @master_only_required mantém pra coisas dev. Pré-requisito antes de aceitar gerentes regionais quando rede crescer pra 15 unidades."},
                 {"titulo": "Extrair helpers compartilhados (auth, audit, paths, pin)",
                  "status": "pendente", "estimativa": "~1 dia",
                  "nota":   "ROI baixo isolado — melhor junto com Blueprints"},
