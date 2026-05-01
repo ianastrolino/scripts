@@ -1997,6 +1997,45 @@ def master_api_units_status():
     return _json({"status": status, "data": today})
 
 
+@app.route("/master/api/email-prefs", methods=["GET"])
+@master_view_required
+def master_api_email_prefs_get():
+    """Retorna as preferencias atuais + defaults pra UI saber o estado inicial."""
+    return _json({
+        "success":  True,
+        "prefs":    _email_prefs_load(),
+        "defaults": dict(_DEFAULT_EMAIL_PREFS),
+    })
+
+
+@app.route("/master/api/email-prefs", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_email_prefs_set():
+    """Atualiza as preferencias de email. Aceita parcial (so as keys enviadas
+    sao alteradas; o resto preserva o valor anterior)."""
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        atual = _email_prefs_load()
+        # So aceita keys conhecidas; ignora lixo
+        for k in _DEFAULT_EMAIL_PREFS:
+            if k in body:
+                atual[k] = bool(body[k])
+        _email_prefs_save(atual)
+        user = _current_user() or {}
+        _write_audit_log(user, "email_prefs.set", target="email_prefs", payload=atual)
+        return _json({"success": True, "prefs": atual})
+    except Exception as exc:
+        app.logger.exception("[email-prefs] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/email-prefs")
+@master_only_required
+def master_email_prefs_page():
+    return _nocache(send_from_directory(UI_DIR, "email-prefs.html"))
+
+
 @app.route("/master/api/sistema/saude")
 @master_view_required
 def master_api_sistema_saude():
@@ -8682,6 +8721,42 @@ def _send_email_to(recipients: list[str], subject: str, html: str) -> None:
         _send_via_smtp(subject, html, recipients)
 
 
+_DEFAULT_EMAIL_PREFS = {
+    "envio_tiny_sempre": False,  # False = so dispara se houver falhas (default)
+    "backup_diario":     True,
+    "caixa_do_dia":      True,
+    "test_restore":      True,
+    "token_expirado":    True,   # critico — sempre on por padrao
+}
+
+
+def _email_prefs_path() -> Path:
+    return DATA_DIR / "email_prefs.json"
+
+
+def _email_prefs_load() -> dict:
+    """Carrega preferencias de envio de email. Aplica defaults pra keys ausentes."""
+    p = _email_prefs_path()
+    if not p.exists():
+        return dict(_DEFAULT_EMAIL_PREFS)
+    try:
+        loaded = json.loads(p.read_text(encoding="utf-8"))
+        return {**_DEFAULT_EMAIL_PREFS, **loaded}
+    except Exception:
+        app.logger.warning("[email_prefs] arquivo corrompido — usando defaults")
+        return dict(_DEFAULT_EMAIL_PREFS)
+
+
+def _email_prefs_save(prefs: dict) -> None:
+    """Persiste apenas as chaves conhecidas (defaults). Atomico via tmp+replace."""
+    p = _email_prefs_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    clean = {k: bool(prefs.get(k, _DEFAULT_EMAIL_PREFS[k])) for k in _DEFAULT_EMAIL_PREFS}
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
 def _send_email(subject: str, html: str, attachment: bytes | None = None, attachment_name: str = "") -> None:
     """Envia email. Prefere Resend (API HTTPS) se RESEND_API_KEY setada; senao SMTP.
 
@@ -8702,6 +8777,8 @@ def _send_email(subject: str, html: str, attachment: bytes | None = None, attach
 
 
 def _enviar_alerta_fechamento(today: str) -> None:
+    if not _email_prefs_load().get("caixa_do_dia", True):
+        return
     tz   = ZoneInfo("America/Sao_Paulo")
     rows = ""
     tem_movimento = False
@@ -9012,6 +9089,8 @@ def _test_restore_backup() -> dict:
 
 def _cron_test_restore_backup() -> None:
     """Roda 1x por mes (dia 1 03:00). Manda email com resultado."""
+    if not _email_prefs_load().get("test_restore", True):
+        return
     res = _test_restore_backup()
     tz = ZoneInfo("America/Sao_Paulo")
     data = dt.datetime.now(tz).strftime("%d/%m/%Y")
@@ -9144,8 +9223,13 @@ def _executar_backup(tipo: str = "auto", ator: str = "") -> dict:
             # Anexa o ZIP apenas se B2 falhou (evita emails pesados quando o bucket ja tem)
             anexo = zip_bytes if not resultado["b2"].get("ok") else None
             anexo_nome = fname if anexo else ""
-            _send_email(f"[Astrovistorias] Backup {'Manual ' if tipo != 'auto' else ''}{data_fmt}", html, anexo, anexo_nome)
-            resultado["email"]["ok"] = True
+            # Manual sempre envia (operador clicou); auto respeita preferencia
+            if tipo != "auto" or _email_prefs_load().get("backup_diario", True):
+                _send_email(f"[Astrovistorias] Backup {'Manual ' if tipo != 'auto' else ''}{data_fmt}", html, anexo, anexo_nome)
+                resultado["email"]["ok"] = True
+            else:
+                resultado["email"]["ok"] = True  # nao-envio intencional conta como ok
+                resultado["email"]["skipped"] = "pref desligada"
         except Exception as exc:
             resultado["email"]["error"] = str(exc)
 
@@ -9177,6 +9261,9 @@ def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
 
     Resumo: quantos enviados / pulados / falhas + total em R$ enviado.
     Falha silenciosa (log) — nao trava a response do envio.
+
+    Por padrao so envia se houver falhas (preferencia 'envio_tiny_sempre' no
+    /master/email-prefs liga envio em todo lote, util pra debug ou inicio).
     """
     try:
         unit_nome = UNITS.get(unit, {}).get("nome", unit)
@@ -9185,6 +9272,11 @@ def _enviar_email_envio_tiny(unit: str, results: dict, records: list) -> None:
         enviados  = len(results.get("enviados", []))
         pulados   = len(results.get("pulados", []))
         falhas    = len(results.get("falhas", []))
+
+        # Respeita preferencia: por padrao so envia email se houve falha.
+        prefs = _email_prefs_load()
+        if not prefs.get("envio_tiny_sempre", False) and falhas == 0:
+            return
 
         # Total enviado em R$. Tenta casar por id; se nao bater (id regenerado
         # em _process_one), cai em heuristica: soma proporcional dos records
@@ -9310,7 +9402,8 @@ def _verificar_saude_tokens() -> None:
   </div>
 </body></html>"""
             try:
-                _send_email(f"[Astrovistorias] Token Tiny expirado — {unit_nome}", html)
+                if _email_prefs_load().get("token_expirado", True):
+                    _send_email(f"[Astrovistorias] Token Tiny expirado — {unit_nome}", html)
                 marker.write_text(today)
             except Exception as email_exc:
                 app.logger.error("[cron:tokens] falha ao enviar email de alerta: %s", email_exc)
@@ -9385,7 +9478,39 @@ def _rotacionar_logs() -> None:
         app.logger.exception("[log_rotation] erro geral")
 
 
+def _try_acquire_cron_lock() -> "object | None":
+    """Tenta adquirir lock exclusivo pra cron. So 1 worker do gunicorn deve rodar
+    o cron — o resto retorna None e o thread termina sem disparar emails.
+
+    Lock fica em /data/cron.lock e usa fcntl.LOCK_EX|LOCK_NB. Se o worker dono do
+    lock crash, o kernel libera o file descriptor e outro worker pode pegar na
+    proxima reinicializacao. Em ambiente nao-Linux (testes), retorna o file
+    handle direto sem lock — comportamento tipo single-worker eh aceitavel ali.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        # Windows/teste — sem fcntl. Retorna sentinel; cron roda em todo
+        # processo (aceitavel pra testes single-process).
+        return object()
+    lock_path = DATA_DIR / "cron.lock"
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fh = open(lock_path, "w")
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fh.write(f"pid={os.getpid()}\n")
+        fh.flush()
+        return fh  # mantem aberto pra preservar o lock
+    except (BlockingIOError, OSError) as exc:
+        app.logger.info("[cron] outro worker ja rodando o cron (%s) — esse pulou", exc)
+        return None
+
+
 def _cron_loop() -> None:
+    if _try_acquire_cron_lock() is None:
+        return  # outro worker pegou o lock — esse nao executa cron
+    app.logger.info("[cron] worker pid=%s adquiriu o lock — vai executar cron", os.getpid())
+
     tz           = ZoneInfo("America/Sao_Paulo")
     last_alerta   = ""
     last_backup   = ""

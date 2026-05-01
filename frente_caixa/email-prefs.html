@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Preferências de Email</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .pref-list {
+      display: flex; flex-direction: column; gap: 12px;
+      max-width: 720px;
+    }
+    .pref-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 18px;
+      align-items: center;
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 14px 18px;
+      box-shadow: var(--ds-shadow-xs);
+    }
+    .pref-info .pref-title {
+      font-size: 14px; font-weight: 700; color: var(--ds-ink);
+      margin-bottom: 3px;
+    }
+    .pref-info .pref-desc {
+      font-size: 12.5px; color: var(--ds-ink-muted); line-height: 1.45;
+    }
+    .pref-info .pref-when {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      color: var(--ds-ink-muted); background: var(--ds-surface-alt);
+      padding: 2px 8px; border-radius: 100px;
+      margin-top: 6px;
+    }
+    /* Toggle iOS-style */
+    .switch {
+      position: relative; display: inline-block;
+      width: 46px; height: 26px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background-color: #cbd5e1; border-radius: 100px;
+      transition: .2s;
+    }
+    .slider:before {
+      content: ""; position: absolute; height: 20px; width: 20px;
+      left: 3px; bottom: 3px; background: white; border-radius: 50%;
+      transition: .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    input:checked + .slider { background-color: #16a34a; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .switch.is-saving { opacity: .5; pointer-events: none; }
+
+    .save-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: #fff;
+      padding: 10px 18px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      opacity: 0; transition: opacity .25s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .save-toast.show { opacity: 1; }
+    .save-toast.err { background: #dc2626; }
+
+    .lead-block {
+      background: var(--ds-surface-alt); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg); padding: 14px 18px;
+      font-size: 12.5px; color: var(--ds-ink-muted);
+      margin-bottom: 18px; max-width: 720px; line-height: 1.55;
+    }
+    .lead-block strong { color: var(--ds-ink); }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Sistema</div>
+        <h1 class="app-page-title">Preferências de Email</h1>
+        <p class="app-page-sub">Liga ou desliga cada tipo de email automático que o sistema envia. Mudanças salvam imediatamente.</p>
+      </div>
+
+      <div class="lead-block">
+        Os emails vão pra <strong>todos os endereços listados em <code>ALERT_EMAILS</code></strong> no Railway.
+        Pra mudar quem recebe, alterar essa env var (configuração separada).
+      </div>
+
+      <div id="prefList" class="pref-list">
+        <div style="padding:30px;color:var(--ds-ink-muted)">Carregando…</div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="save-toast"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+  AstroShell.init({
+    active: "email-prefs",
+    breadcrumbs: [
+      { label: "Sistema" },
+      { label: "Preferências de Email", current: true }
+    ]
+  });
+
+  const PREFS_META = [
+    {
+      key: "envio_tiny_sempre",
+      title: "Envio Tiny — confirmação de cada lote",
+      desc: "Email a cada vez que um operador envia um lote de vistorias pro Tiny. <strong>Por padrão, desligado</strong>: só recebe quando há falhas (erros do Tiny). Ligar volta a mandar email em todo envio (útil em fase de adoção).",
+      when: "A cada envio Tiny"
+    },
+    {
+      key: "caixa_do_dia",
+      title: "Caixa do Dia — resumo diário",
+      desc: "Resumo do fechamento de todas as unidades, com totais e status do envio Tiny.",
+      when: "Todo dia às 18:30"
+    },
+    {
+      key: "backup_diario",
+      title: "Backup automático",
+      desc: "Confirmação que o backup do dia foi gerado e subiu pro Backblaze. Inclui anexo se o B2 falhar.",
+      when: "Todo dia às 00:00"
+    },
+    {
+      key: "test_restore",
+      title: "Test restore mensal",
+      desc: "Validação que o backup do mês passado consegue ser restaurado. Crítico pra garantir que o backup é real.",
+      when: "Dia 1 de cada mês às 03:00"
+    },
+    {
+      key: "token_expirado",
+      title: "Token Tiny expirado",
+      desc: "Alerta crítico quando uma unidade fica sem renovar o token Tiny — fechamento dela vai falhar até reautorizar. Recomendado manter ligado.",
+      when: "Quando detecta falha"
+    },
+  ];
+
+  const brl = v => Number(v || 0);
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  let _csrfToken = "";
+  let _currentPrefs = {};
+
+  async function loadCsrf() {
+    try {
+      const r = await fetch("/api/csrf-token", { credentials: "include" });
+      const j = await r.json();
+      _csrfToken = j.csrf_token || "";
+    } catch {}
+  }
+
+  function showToast(msg, isErr) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.toggle("err", !!isErr);
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  async function loadPrefs() {
+    try {
+      const r = await fetch("/master/api/email-prefs", { cache: "no-store", credentials: "include" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha ao carregar");
+      _currentPrefs = j.prefs;
+      render();
+    } catch (e) {
+      document.getElementById("prefList").innerHTML =
+        `<div style="padding:30px;color:var(--ds-danger)">Erro: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function render() {
+    const html = PREFS_META.map(p => `
+      <div class="pref-row" data-key="${p.key}">
+        <div class="pref-info">
+          <div class="pref-title">${esc(p.title)}</div>
+          <div class="pref-desc">${p.desc}</div>
+          <span class="pref-when">${esc(p.when)}</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" data-key="${p.key}" ${_currentPrefs[p.key] ? "checked" : ""}>
+          <span class="slider"></span>
+        </label>
+      </div>
+    `).join("");
+    document.getElementById("prefList").innerHTML = html;
+
+    document.querySelectorAll('input[type="checkbox"][data-key]').forEach(cb => {
+      cb.addEventListener("change", async (e) => {
+        const key = e.target.dataset.key;
+        const val = e.target.checked;
+        const sw = e.target.closest(".switch");
+        sw.classList.add("is-saving");
+        try {
+          const r = await fetch("/master/api/email-prefs", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": _csrfToken,
+            },
+            body: JSON.stringify({ [key]: val }),
+          });
+          const j = await r.json();
+          if (!j.success) throw new Error(j.error || "falha ao salvar");
+          _currentPrefs = j.prefs;
+          showToast(val ? "Ativado" : "Desativado");
+        } catch (err) {
+          // Reverte UI em caso de erro
+          e.target.checked = !val;
+          showToast(`Erro: ${err.message}`, true);
+        } finally {
+          sw.classList.remove("is-saving");
+        }
+      });
+    });
+  }
+
+  (async () => {
+    await loadCsrf();
+    loadPrefs();
+  })();
+</script>
+</body>
+</html>
