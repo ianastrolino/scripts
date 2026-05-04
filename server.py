@@ -1015,11 +1015,13 @@ _GLOBAL_ALIASES: dict[str, dict[str, str]] = {
     # Sao nomes que representam o mesmo servico — unifica o ranking e o envio ao Tiny.
     "servico": {
         "LAUDO CAUTELAR": "VISTORIA CAUTELAR",
-        # Variantes do "CAUTELAR COM ANALISE DE PINTURA" — Ian padronizou no Sispevi
-        # com 3 grafias (~truncamento de coluna): canonica, com 2 As, sem A final.
-        # Todas mapeam pro nome canonico que ja existe nas categorias_por_unidade.
-        "CAUTELAR COM ANALISE DE PINTURAA": "CAUTELAR COM ANALISE DE PINTURA",
-        "CAUTELAR COM ANALISE DE PINTUR":   "CAUTELAR COM ANALISE DE PINTURA",
+        # Cautelar com pintura: nome canonico eh "CAUTELAR + PINTURA" (18 chars,
+        # cabe no Sispevi que trunca em 19). Moema ja usa esse nome; Barueri e
+        # Mooca tinham "CAUTELAR COM ANALISE DE PINTURA" (truncava). Aliases
+        # cobrem nomes longos legacy + variantes que aparecerem.
+        "CAUTELAR COM ANALISE DE PINTURA":  "CAUTELAR + PINTURA",
+        "CAUTELAR COM ANALISE DE PINTURAA": "CAUTELAR + PINTURA",
+        "CAUTELAR COM ANALISE DE PINTUR":   "CAUTELAR + PINTURA",
     },
     "fp": {},
     "cliente": {},
@@ -1038,7 +1040,8 @@ _CATEGORIAS_POR_UNIDADE: dict[str, dict[str, int]] = {
         "LAUDO DE VERIFICACAO":                    897968384,
         "LAUDO CAUTELAR VERIFICACAO":              897968384,
         "CAUTELAR COM ANALISE":                    897968384,
-        "CAUTELAR COM ANALISE DE PINTURA":         897968384,
+        "CAUTELAR COM ANALISE DE PINTURA":         897968384,  # legacy
+        "CAUTELAR + PINTURA":                      897968384,  # canonico (cabe no Sispevi)
         "REVISTORIA":                              897968385,
         "BAIXA PERMANENTE":                        897968385,
         "CONSULTA GRAVAME":                        897968385,
@@ -1053,7 +1056,8 @@ _CATEGORIAS_POR_UNIDADE: dict[str, dict[str, int]] = {
         "LAUDO DE VERIFICACAO":                    747861719,
         "LAUDO CAUTELAR VERIFICACAO":              747861719,
         "CAUTELAR COM ANALISE":                    747861719,
-        "CAUTELAR COM ANALISE DE PINTURA":         747861719,
+        "CAUTELAR COM ANALISE DE PINTURA":         747861719,  # legacy
+        "CAUTELAR + PINTURA":                      747861719,  # canonico (cabe no Sispevi)
         "REVISTORIA":                              757397501,
         "BAIXA PERMANENTE":                        774162345,
         "CONSULTA GRAVAME":                        786613890,

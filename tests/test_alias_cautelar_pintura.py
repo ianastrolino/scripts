@@ -1,12 +1,14 @@
 """
-Testes dos novos aliases globais pra "CAUTELAR COM ANALISE DE PINTURA".
+Testes dos aliases globais pra "CAUTELAR + PINTURA" (canonico).
 
-Ian padronizou no Sispevi (04/05/2026) com 3 grafias possiveis:
-- "CAUTELAR COM ANALISE DE PINTURA"  (canonica, 31 chars)
+Decisao 04/05/2026: nome canonico vira "CAUTELAR + PINTURA" (18 chars, cabe
+no Sispevi que trunca em 19). Moema ja usa esse nome; Barueri/Mooca tinham
+"CAUTELAR COM ANALISE DE PINTURA" (truncava).
+
+Variantes legacy/longas que viram canonico via alias:
+- "CAUTELAR COM ANALISE DE PINTURA"  (legacy, 31 chars)
 - "CAUTELAR COM ANALISE DE PINTURAA" (com 2 As, 32 chars)
 - "CAUTELAR COM ANALISE DE PINTUR"   (sem A final, 30 chars)
-
-Todas devem virar "CAUTELAR COM ANALISE DE PINTURA" no envio ao Tiny.
 """
 from __future__ import annotations
 
@@ -40,17 +42,21 @@ def config_com_aliases():
 
 
 class TestAliasCautelarPintura:
-    def test_nome_canonico_inalterado(self, config_com_aliases):
+    def test_nome_canonico_curto_inalterado(self, config_com_aliases):
+        result = apply_alias(config_com_aliases, "servico", "CAUTELAR + PINTURA")
+        assert result == "CAUTELAR + PINTURA"
+
+    def test_legacy_longo_normaliza_pra_curto(self, config_com_aliases):
         result = apply_alias(config_com_aliases, "servico", "CAUTELAR COM ANALISE DE PINTURA")
-        assert result == "CAUTELAR COM ANALISE DE PINTURA"
+        assert result == "CAUTELAR + PINTURA"
 
     def test_dois_As_finais_normaliza(self, config_com_aliases):
         result = apply_alias(config_com_aliases, "servico", "CAUTELAR COM ANALISE DE PINTURAA")
-        assert result == "CAUTELAR COM ANALISE DE PINTURA"
+        assert result == "CAUTELAR + PINTURA"
 
     def test_sem_A_final_normaliza(self, config_com_aliases):
         result = apply_alias(config_com_aliases, "servico", "CAUTELAR COM ANALISE DE PINTUR")
-        assert result == "CAUTELAR COM ANALISE DE PINTURA"
+        assert result == "CAUTELAR + PINTURA"
 
     def test_alias_legacy_laudo_cautelar_continua_funcionando(self, config_com_aliases):
         """Garante que nao quebrei o alias antigo 'LAUDO CAUTELAR' → 'VISTORIA CAUTELAR'."""
@@ -63,13 +69,19 @@ class TestAliasCautelarPintura:
 
 
 class TestAliasIntegradoComCategoriasUnidade:
-    """Confere que Barueri e Mooca tem 'CAUTELAR COM ANALISE DE PINTURA'
-    no _CATEGORIAS_POR_UNIDADE — ai o resolve_categoria_id encontra."""
+    """Confere que Barueri e Mooca tem 'CAUTELAR + PINTURA' no
+    _CATEGORIAS_POR_UNIDADE apontando pro mesmo ID que ja tinha em
+    'CAUTELAR COM ANALISE DE PINTURA' (legacy mantido pra compat)."""
 
-    def test_barueri_tem_categoria_pintura(self):
+    def test_barueri_tem_pintura_curto_e_legacy(self):
         cats = server._CATEGORIAS_POR_UNIDADE.get("barueri", {})
+        assert "CAUTELAR + PINTURA" in cats
         assert "CAUTELAR COM ANALISE DE PINTURA" in cats
+        # Mesmo ID
+        assert cats["CAUTELAR + PINTURA"] == cats["CAUTELAR COM ANALISE DE PINTURA"]
 
-    def test_mooca_tem_categoria_pintura(self):
+    def test_mooca_tem_pintura_curto_e_legacy(self):
         cats = server._CATEGORIAS_POR_UNIDADE.get("mooca", {})
+        assert "CAUTELAR + PINTURA" in cats
         assert "CAUTELAR COM ANALISE DE PINTURA" in cats
+        assert cats["CAUTELAR + PINTURA"] == cats["CAUTELAR COM ANALISE DE PINTURA"]
