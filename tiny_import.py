@@ -564,10 +564,27 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
         raise
 
 
+# Sinonimos historicos de forma de pagamento. A planilha Sispevi exporta "FA"/"AV"
+# (2 letras), o PDV grava "faturado"/"avista" (palavra inteira). Sem isso, o
+# lookup falhava pra fp="faturado" + mapeamento {"FA": <id>}, retornava None,
+# e o Tiny aplicava o default da empresa (geralmente Boleto). Bug confirmado em
+# Moema 04/05/2026 — todos os FA do PDV viravam Boleto no Tiny.
+_FP_SYNONYMS = {
+    "fa": "faturado", "faturado": "fa",
+    "av": "avista",   "avista":   "av",
+}
+
+
 def lookup_config_id(mapping: dict[str, Any], name: str) -> int | None:
     normalized = normalize_key(name)
+    candidates = {normalized}
+    if normalized in _FP_SYNONYMS:
+        candidates.add(_FP_SYNONYMS[normalized])
     for key, value in mapping.items():
-        if key == name or normalize_key(str(key)) == normalized:
+        if key == name:
+            return int(value)
+        key_norm = normalize_key(str(key))
+        if key_norm in candidates:
             return int(value)
     return None
 
