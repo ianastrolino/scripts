@@ -67,6 +67,16 @@ class TestAliasCautelarPintura:
         result = apply_alias(config_com_aliases, "servico", "ALGUM SERVICO NOVO")
         assert result == "ALGUM SERVICO NOVO"
 
+    def test_variante_sem_espacos_normaliza(self, config_com_aliases):
+        """Sispevi pode exportar 'CAUTELAR+PINTURA' (sem espacos)."""
+        result = apply_alias(config_com_aliases, "servico", "CAUTELAR+PINTURA")
+        assert result == "CAUTELAR + PINTURA"
+
+    def test_variante_espaco_so_antes_do_mais(self, config_com_aliases):
+        """Sispevi pode exportar 'CAUTELAR +PINTURA' (espaco antes do +)."""
+        result = apply_alias(config_com_aliases, "servico", "CAUTELAR +PINTURA")
+        assert result == "CAUTELAR + PINTURA"
+
 
 class TestAliasIntegradoComCategoriasUnidade:
     """Confere que Barueri e Mooca tem 'CAUTELAR + PINTURA' no

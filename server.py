@@ -1022,6 +1022,10 @@ _GLOBAL_ALIASES: dict[str, dict[str, str]] = {
         "CAUTELAR COM ANALISE DE PINTURA":  "CAUTELAR + PINTURA",
         "CAUTELAR COM ANALISE DE PINTURAA": "CAUTELAR + PINTURA",
         "CAUTELAR COM ANALISE DE PINTUR":   "CAUTELAR + PINTURA",
+        # Variantes de espacamento do Sispevi: "CAUTELAR+PINTURA",
+        # "CAUTELAR +PINTURA", "CAUTELAR + PINTURA". O normalize_key remove
+        # +/espacos, entao 1 alias captura as 3.
+        "CAUTELAR+PINTURA":                 "CAUTELAR + PINTURA",
     },
     "fp": {},
     "cliente": {},
