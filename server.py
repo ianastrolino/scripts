@@ -1015,6 +1015,11 @@ _GLOBAL_ALIASES: dict[str, dict[str, str]] = {
     # Sao nomes que representam o mesmo servico — unifica o ranking e o envio ao Tiny.
     "servico": {
         "LAUDO CAUTELAR": "VISTORIA CAUTELAR",
+        # Variantes do "CAUTELAR COM ANALISE DE PINTURA" — Ian padronizou no Sispevi
+        # com 3 grafias (~truncamento de coluna): canonica, com 2 As, sem A final.
+        # Todas mapeam pro nome canonico que ja existe nas categorias_por_unidade.
+        "CAUTELAR COM ANALISE DE PINTURAA": "CAUTELAR COM ANALISE DE PINTURA",
+        "CAUTELAR COM ANALISE DE PINTUR":   "CAUTELAR COM ANALISE DE PINTURA",
     },
     "fp": {},
     "cliente": {},
