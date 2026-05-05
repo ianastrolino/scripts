@@ -208,6 +208,91 @@
     }
 
     /* ═══════════════════════════════════════════════════════
+       CV — Codigo de autorizacao do cartao (aparece em debito/credito)
+    ═══════════════════════════════════════════════════════ */
+    .field-cv {
+      /* Default: nao visivel. JS adiciona .is-visible quando fp=debito/credito */
+      display: none;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, var(--sf2) 0%, var(--ds-surface) 100%);
+      border: 1px solid var(--ds-line);
+      border-left: 3px solid var(--focus);
+      border-radius: var(--r);
+    }
+    .field-cv.is-visible {
+      display: flex;
+      animation: cvSlideDown .22s cubic-bezier(.2,.7,.3,1) both;
+    }
+    @keyframes cvSlideDown {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .field-cv label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11.5px; font-weight: 700;
+      color: var(--t3);
+      letter-spacing: -.01em;
+      margin-bottom: 6px;
+    }
+    .field-cv label .cv-label-icon {
+      color: var(--focus);
+      flex-shrink: 0;
+    }
+
+    .cv-wrap {
+      position: relative;
+    }
+    .cv-prefix {
+      position: absolute;
+      left: 12px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px; font-weight: 800;
+      color: var(--t5);
+      pointer-events: none; user-select: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .field-cv input {
+      width: 100%;
+      height: 42px;
+      padding: 0 12px 0 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      background: var(--ds-surface);
+      font-size: 15px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .02em;
+      color: var(--t1);
+      font-family: inherit;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field-cv input::placeholder {
+      color: var(--t6); font-weight: 400; letter-spacing: 0;
+    }
+    .field-cv input:hover:not(:focus) {
+      border-color: var(--ds-line-strong);
+    }
+    .field-cv input:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px var(--focus-r);
+    }
+
+    .cv-hint {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px;
+      color: var(--t5);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+    .cv-hint svg { flex-shrink: 0; opacity: .7; }
+
+    /* layout interno do field-cv */
+    .field-cv { flex-direction: column; gap: 0; }
+
+    /* ═══════════════════════════════════════════════════════
        FORMAS DE PAGAMENTO — estados nítidos
     ═══════════════════════════════════════════════════════ */
     .fp-section-label {
@@ -1974,13 +2059,24 @@
             </button>
           </div>
 
-          <!-- CV: aparece so quando FP=debito/credito. JS controla via .field-cv.is-visible -->
-          <div class="field field-cv" id="cvField" style="margin-top:16px;display:none;">
-            <label for="fCv">CV / Código de autorização do cartão</label>
-            <input id="fCv" type="text" inputmode="numeric" maxlength="32"
-                   placeholder="ex: 16618216" autocomplete="off">
-            <div class="field-hint" style="font-size:11.5px;color:var(--t5);margin-top:4px;">
-              Número do comprovante da maquininha (obrigatório em débito/crédito)
+          <!-- CV: aparece so quando FP=debito/credito. JS toggla .is-visible -->
+          <div class="field field-cv" id="cvField">
+            <label for="fCv">
+              <svg class="cv-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 11h20"/>
+              </svg>
+              <span>CV — Código de autorização do cartão</span>
+            </label>
+            <div class="cv-wrap">
+              <span class="cv-prefix" aria-hidden="true">№</span>
+              <input id="fCv" type="text" inputmode="numeric" maxlength="32"
+                     placeholder="número do comprovante" autocomplete="off">
+            </div>
+            <div class="cv-hint">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+              </svg>
+              <span>Obrigatório em débito/crédito — facilita conferência com extrato da maquininha</span>
             </div>
           </div>
 

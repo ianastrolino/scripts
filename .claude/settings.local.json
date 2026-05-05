@@ -59,7 +59,8 @@
       "Bash(python -m pytest tests/test_fechamento_relatorio_completo.py -x --tb=short)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('tiny_import.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -m pytest tests/test_historico_enriquecido.py -x --tb=short)",
-      "Bash(python -m pytest tests/test_wizard_v2_routes.py::TestPlanilhaStatus::test_status_dia_anterior_eh_flagado -x --tb=long)"
+      "Bash(python -m pytest tests/test_wizard_v2_routes.py::TestPlanilhaStatus::test_status_dia_anterior_eh_flagado -x --tb=long)",
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('/home/astro/projeto/scripts/frente_caixa/caixa.js','utf8'\\)\\); console.log\\('JS OK'\\)\")"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"

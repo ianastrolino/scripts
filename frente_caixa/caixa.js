@@ -413,10 +413,11 @@ function validarFormulario() {
   }
 
   // CV: aparece so quando fp = debito/credito. Obrigatorio nesse caso.
+  // Animacao via .is-visible (CSS define keyframes); estilo de erro via .has-error.
   const cvField = document.getElementById("cvField");
   const cvEl    = document.getElementById("fCv");
   const cartao  = state.fpSelecionado === "debito" || state.fpSelecionado === "credito";
-  if (cvField) cvField.style.display = cartao ? "" : "none";
+  if (cvField) cvField.classList.toggle("is-visible", cartao);
   let cvOk = true;
   if (cartao) {
     const cvVal = (cvEl?.value || "").trim();
@@ -442,7 +443,7 @@ function limparFormulario() {
   const cvEl = document.getElementById("fCv");
   if (cvEl) { cvEl.value = ""; cvEl.style.borderColor = ""; }
   const cvField = document.getElementById("cvField");
-  if (cvField) cvField.style.display = "none";
+  if (cvField) cvField.classList.remove("is-visible");
   state.fpSelecionado = "";
   // Suporta layout 1 (.fp-btn) e layout 2 (.fp-card)
   document.querySelectorAll(".fp-btn, .fp-card").forEach(b => b.classList.remove("selected"));
