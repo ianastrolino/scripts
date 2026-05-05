@@ -436,9 +436,17 @@ def normalize_plate(value: str) -> str:
 
 
 def record_key(record: dict[str, Any]) -> str:
+    """Hash deterministico do registro pra dedup de envio.
+
+    NAO inclui 'modelo' — modelo eh metadado enriquecido (vem da planilha
+    Sispevi via lookup), pode mudar entre envios da mesma vistoria. Se
+    incluido, reenvio com parser melhorado gera chave diferente e duplica.
+
+    Inclui (data, placa, cliente, servico, preco) — atributos da identidade
+    da vistoria. Mudanca em qualquer um significa vistoria diferente.
+    """
     parts = [
         record["data"],
-        normalize_key(record["modelo"]),
         record["placa"],
         normalize_key(record["cliente"]),
         normalize_key(record["servico"]),

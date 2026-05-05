@@ -1767,6 +1767,9 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
     except Exception:
         envios = []
 
+    # Dedup por (placa, servico, valor, fp) — varios envios pra mesma chave
+    # contam 1 so vez. Importante quando record_key divergiu entre envios e
+    # gerou duplicatas em envios_tiny.
     chaves_tiny: set[tuple] = set()
     total_tiny_av = 0.0
     total_tiny_fa = 0.0
@@ -1776,7 +1779,10 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
         valor   = float(e.get("valor", 0) or 0)
         fp_raw  = (e.get("fp") or "").lower().strip()
         fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
-        chaves_tiny.add((placa, servico, round(valor, 2), fp_norm))
+        key = (placa, servico, round(valor, 2), fp_norm)
+        if key in chaves_tiny:
+            continue  # ja contabilizado
+        chaves_tiny.add(key)
         if fp_norm in ("faturado", "fa"):
             total_tiny_fa += valor
         else:
@@ -1801,7 +1807,9 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
     total_av = total_tiny_av + total_pdv_av
     total_fa = total_tiny_fa + total_pdv_fa
     return {
-        "vistorias":       len(envios) + pdv_dedupe_count,
+        # chaves_tiny eh um set — conta vistorias unicas mesmo se houver
+        # duplicatas em envios_tiny (ex: reenvio com record_key divergente).
+        "vistorias":       len(chaves_tiny) + pdv_dedupe_count,
         "total":           round(total_av + total_fa, 2),
         "av":              round(total_av, 2),
         "fa":              round(total_fa, 2),
@@ -2010,7 +2018,9 @@ def master_api_units_status():
         except Exception:
             envios_hoje = []
 
-        # Chaves pra dedupe: (placa, servico, valor, fp) dos envios_tiny
+        # Chaves pra dedupe: (placa, servico, valor, fp) dos envios_tiny.
+        # Mesma chave entrando 2x no envios_tiny (record_key divergente entre
+        # envios) conta 1 so vez tanto pro count quanto pros totais.
         chaves_tiny: set[tuple] = set()
         total_tiny_av = 0.0
         total_tiny_fa = 0.0
@@ -2020,7 +2030,10 @@ def master_api_units_status():
             valor = float(e.get("valor", 0) or 0)
             fp_raw = (e.get("fp") or "").lower().strip()
             fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
-            chaves_tiny.add((placa, servico, round(valor, 2), fp_norm))
+            key = (placa, servico, round(valor, 2), fp_norm)
+            if key in chaves_tiny:
+                continue  # ja contabilizado
+            chaves_tiny.add(key)
             if fp_norm in ("faturado", "fa"):
                 total_tiny_fa += valor
             else:
@@ -2046,7 +2059,7 @@ def master_api_units_status():
         total_av = total_tiny_av + total_pdv_av
         total_fa = total_tiny_fa + total_pdv_fa
         total_geral = total_av + total_fa
-        total_lcs = len(envios_hoje) + pdv_dedupe_count
+        total_lcs = len(chaves_tiny) + pdv_dedupe_count
 
         ultimo_lc = max(lancamentos, key=lambda x: x.get("timestamp", ""), default=None) if lancamentos else None
         ultima = ultimo_lc.get("timestamp", "") if ultimo_lc else None
