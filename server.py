@@ -4934,6 +4934,7 @@ def api_preview(unit: str):
                 linha_origem=r.get("linhaOrigem", 0),
                 chave_deduplicacao=chave, av_pagamento=av_pag,
                 cpf=r.get("cpf", ""),
+                cv=r.get("cv", ""),
             )
             _enrich_record_modelo(rec, _modelo_idx_for(rec.data))
 
@@ -5031,6 +5032,7 @@ def api_send(unit: str):
                 chave_deduplicacao=r.get("id", "missing_key"),
                 av_pagamento=r.get("avPagamento", ""),
                 cpf=r.get("cpf", ""),
+                cv=r.get("cv", ""),
             )
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
@@ -5554,7 +5556,7 @@ def _load_caixa_dia(unit: str) -> dict[str, Any]:
                 pass
         return {"data": today, "lancamentos": []}
 
-    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp", "client_uuid", "usuario"}
+    _KEEP = {"id", "hora", "timestamp", "placa", "cliente", "cpf", "servico", "valor", "fp", "client_uuid", "usuario", "cv"}
     lancamentos = [
         {k: v for k, v in lc.items() if k in _KEEP}
         for lc in _db_load(unit, unit_dir, today)
@@ -5592,9 +5594,13 @@ def _save_caixa_dia(unit: str, state: dict[str, Any]) -> None:
         if lcs:
             conn.executemany(
                 "INSERT INTO lancamentos "
-                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp,client_uuid,usuario) "
-                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp,:client_uuid,:usuario)",
-                [{**lc, "unit": unit, "data": today, "cpf": lc.get("cpf", ""), "client_uuid": lc.get("client_uuid", ""), "usuario": lc.get("usuario", "")} for lc in lcs],
+                "(id,unit,data,hora,timestamp,placa,cliente,cpf,servico,valor,fp,client_uuid,usuario,cv) "
+                "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:cpf,:servico,:valor,:fp,:client_uuid,:usuario,:cv)",
+                [{**lc, "unit": unit, "data": today,
+                  "cpf": lc.get("cpf", ""),
+                  "client_uuid": lc.get("client_uuid", ""),
+                  "usuario": lc.get("usuario", ""),
+                  "cv": lc.get("cv", "")} for lc in lcs],
             )
 
 
@@ -6118,12 +6124,16 @@ def api_caixa_lancar(unit: str):
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
+        cv      = clean_text(data.get("cv", ""))[:32]
         client_uuid = clean_text(data.get("client_uuid", ""))[:64]
 
         err = validar_lancamento({"placa": placa, "cliente": cliente, "servico": servico,
                                    "valor": valor, "fp": fp})
         if err:
             return _json({"success": False, "error": err}, 400)
+        # CV obrigatorio em pagamento por cartao
+        if fp in ("debito", "credito") and not cv:
+            return _json({"success": False, "error": "CV obrigatorio em pagamentos no cartao."}, 400)
 
         # Se o dia esta fechado (envio Tiny ja aconteceu), exige PIN pra lançar
         hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
@@ -6168,6 +6178,7 @@ def api_caixa_lancar(unit: str):
             "servico": servico,
             "valor": round(valor, 2),
             "fp": fp,
+            "cv": cv,
             "usuario": usuario_tag,
         }
         if client_uuid:
@@ -6207,23 +6218,27 @@ def api_caixa_editar(unit: str, lancamento_id: str):
         servico = clean_text(data.get("servico", "")).upper()
         valor   = float(data.get("valor", 0))
         fp      = data.get("fp", "")
+        cv      = clean_text(data.get("cv", ""))[:32]
 
         if not all([placa, cliente, servico]) or valor < 0 or fp not in FP_VALIDOS:
             return _json({"success": False, "error": "Dados invalidos."}, 400)
+        if fp in ("debito", "credito") and not cv:
+            return _json({"success": False, "error": "CV obrigatorio em pagamentos no cartao."}, 400)
 
         state = _load_caixa_dia(unit)
         for lc in state["lancamentos"]:
             if lc["id"] == lancamento_id:
                 antes = {"placa": lc.get("placa", ""), "cliente": lc.get("cliente", ""),
-                         "servico": lc.get("servico", ""), "valor": lc.get("valor", 0), "fp": lc.get("fp", "")}
+                         "servico": lc.get("servico", ""), "valor": lc.get("valor", 0), "fp": lc.get("fp", ""),
+                         "cv": lc.get("cv", "")}
                 lc.update({"placa": placa, "cliente": cliente, "cpf": cpf,
-                            "servico": servico, "valor": round(valor, 2), "fp": fp})
+                            "servico": servico, "valor": round(valor, 2), "fp": fp, "cv": cv})
                 _save_caixa_dia(unit, state)
                 _append_audit_log(unit, "editar_lancamento", {
                     "lancamento_id": lancamento_id,
                     "antes": antes,
                     "depois": {"placa": placa, "cliente": cliente, "servico": servico,
-                               "valor": round(valor, 2), "fp": fp},
+                               "valor": round(valor, 2), "fp": fp, "cv": cv},
                     "lancado_por": lc.get("usuario", ""),
                 })
                 return _json({"success": True, "totais": _caixa_totals(state["lancamentos"])})
@@ -7046,6 +7061,7 @@ def api_caixa_conferir(unit: str):
                 "valor":    lc.get("valor"),
                 "fp":       lc.get("fp"),
                 "cpf":      lc.get("cpf", ""),
+                "cv":       lc.get("cv", ""),
                 "timestamp": lc.get("timestamp"),
             })
 

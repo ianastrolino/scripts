@@ -150,6 +150,7 @@ class TestEditar:
             "pin": pin,
             "placa": "XYZ9999", "cliente": "NOVO CLIENTE",
             "servico": "VISTORIA CAUTELAR", "valor": 200.0, "fp": "debito",
+            "cv": "12345678",  # debito/credito exige CV
             **kwargs,
         }
         return client.put(f"/u/{UNIT}/api/caixa/editar/{lancamento_id}", json=payload)

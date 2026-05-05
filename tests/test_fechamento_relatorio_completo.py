@@ -158,7 +158,7 @@ class TestAgregacao:
         _lancar(sp_client, "sp", valor=100.0, fp="pix")
         _lancar(sp_client, "sp", valor=80.0,  fp="pix")
         _lancar(sp_client, "sp", valor=200.0, fp="dinheiro")
-        _lancar(sp_client, "sp", valor=150.0, fp="credito")
+        _lancar(sp_client, "sp", valor=150.0, fp="credito", cv="123456")
         j = sp_client.get(f"/u/sp/api/fechamento/relatorio-completo").get_json()
         f = j["avista_por_fp"]
         assert f["pix"]["total"] == 180.0

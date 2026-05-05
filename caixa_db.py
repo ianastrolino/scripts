@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS lancamentos (
     fp          TEXT NOT NULL,
     cpf         TEXT NOT NULL DEFAULT "",
     client_uuid TEXT NOT NULL DEFAULT "",
-    usuario     TEXT NOT NULL DEFAULT ""
+    usuario     TEXT NOT NULL DEFAULT "",
+    cv          TEXT NOT NULL DEFAULT ""
 );
 CREATE INDEX IF NOT EXISTS idx_lancamentos_unit_data ON lancamentos(unit, data);
 """
@@ -44,6 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_lancamentos_client_uuid ON lancamentos(unit, data
 _MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\""
 _MIGRATE_CLIENT_UUID = "ALTER TABLE lancamentos ADD COLUMN client_uuid TEXT NOT NULL DEFAULT \"\""
 _MIGRATE_USUARIO = "ALTER TABLE lancamentos ADD COLUMN usuario TEXT NOT NULL DEFAULT \"\""
+_MIGRATE_CV = "ALTER TABLE lancamentos ADD COLUMN cv TEXT NOT NULL DEFAULT \"\""
 
 _DDL_DIV = """
 CREATE TABLE IF NOT EXISTS divergencias (
@@ -169,6 +171,9 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     _ensure_column(conn, "lancamentos", "cpf",         _MIGRATE_CPF)
     _ensure_column(conn, "lancamentos", "client_uuid", _MIGRATE_CLIENT_UUID)
     _ensure_column(conn, "lancamentos", "usuario",     _MIGRATE_USUARIO)
+    # cv = Codigo de Verificacao do cartao (debito/credito) — operador digita
+    # do comprovante, vai parar no historico Tiny pra rastreio financeiro
+    _ensure_column(conn, "lancamentos", "cv",          _MIGRATE_CV)
     conn.executescript(_DDL_INDICES_POS_MIGRATE)
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
@@ -232,15 +237,15 @@ def insert_lancamento(unit_dir: Path, lancamento: dict[str, Any]) -> None:
     with _connect(unit_dir) as conn:
         conn.execute(
             "INSERT INTO lancamentos "
-            "(id, unit, data, hora, timestamp, placa, cliente, servico, valor, fp, cpf) "
-            "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp,:cpf)",
-            {**lancamento, "cpf": lancamento.get("cpf", "")},
+            "(id, unit, data, hora, timestamp, placa, cliente, servico, valor, fp, cpf, cv) "
+            "VALUES (:id,:unit,:data,:hora,:timestamp,:placa,:cliente,:servico,:valor,:fp,:cpf,:cv)",
+            {**lancamento, "cpf": lancamento.get("cpf", ""), "cv": lancamento.get("cv", "")},
         )
 
 
 def update_lancamento(unit_dir: Path, lancamento_id: str, fields: dict[str, Any]) -> bool:
     """Atualiza campos de um lançamento. Retorna True se encontrado."""
-    allowed = {"placa", "cliente", "servico", "valor", "fp", "cpf"}
+    allowed = {"placa", "cliente", "servico", "valor", "fp", "cpf", "cv"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False

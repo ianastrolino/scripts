@@ -412,7 +412,21 @@ function validarFormulario() {
     }
   }
 
-  const ok = placa && placaOk && cliente && servico && valor >= 0 && state.fpSelecionado && cpfOk;
+  // CV: aparece so quando fp = debito/credito. Obrigatorio nesse caso.
+  const cvField = document.getElementById("cvField");
+  const cvEl    = document.getElementById("fCv");
+  const cartao  = state.fpSelecionado === "debito" || state.fpSelecionado === "credito";
+  if (cvField) cvField.style.display = cartao ? "" : "none";
+  let cvOk = true;
+  if (cartao) {
+    const cvVal = (cvEl?.value || "").trim();
+    cvOk = !!cvVal;
+    if (cvEl) cvEl.style.borderColor = cvOk ? "" : "var(--red)";
+  } else if (cvEl) {
+    cvEl.style.borderColor = "";
+  }
+
+  const ok = placa && placaOk && cliente && servico && valor >= 0 && state.fpSelecionado && cpfOk && cvOk;
   document.getElementById("btnLancar").disabled = !ok;
 }
 
@@ -425,6 +439,10 @@ function limparFormulario() {
   if (cpfEl) { cpfEl.value = ""; cpfEl.style.borderColor = ""; }
   const cpfErr = document.getElementById("cpfError");
   if (cpfErr) { cpfErr.textContent = ""; cpfErr.style.display = "none"; }
+  const cvEl = document.getElementById("fCv");
+  if (cvEl) { cvEl.value = ""; cvEl.style.borderColor = ""; }
+  const cvField = document.getElementById("cvField");
+  if (cvField) cvField.style.display = "none";
   state.fpSelecionado = "";
   // Suporta layout 1 (.fp-btn) e layout 2 (.fp-card)
   document.querySelectorAll(".fp-btn, .fp-card").forEach(b => b.classList.remove("selected"));
@@ -505,11 +523,12 @@ async function lancar() {
     servico: document.getElementById("fServico").value,
     valor:   parseFloat(document.getElementById("fValor").value),
     fp:      state.fpSelecionado,
+    cv:      (document.getElementById("fCv")?.value || "").trim(),
   };
 
   // Reusa o mesmo client_uuid enquanto o payload nao muda — se o POST anterior falhou
   // por timeout/rede mas chegou no servidor, o retry nao duplica (server deduplica).
-  const fingerprint = [payload.placa, payload.cliente, payload.cpf, payload.servico, payload.valor, payload.fp].join("|");
+  const fingerprint = [payload.placa, payload.cliente, payload.cpf, payload.servico, payload.valor, payload.fp, payload.cv].join("|");
   if (!state.pendingAttempt || state.pendingAttempt.fingerprint !== fingerprint) {
     state.pendingAttempt = { uuid: _genUuid(), fingerprint };
   }
@@ -746,7 +765,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnReabrir) btnReabrir.addEventListener("click", reabrirCaixaComPin);
 
   // Campos de texto: validar ao digitar
-  ["fPlaca", "fCliente", "fServico", "fValor", "fCpf"].forEach(id => {
+  ["fPlaca", "fCliente", "fServico", "fValor", "fCpf", "fCv"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", validarFormulario);
   });

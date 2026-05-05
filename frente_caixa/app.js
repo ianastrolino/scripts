@@ -1394,6 +1394,7 @@ async function conferirComPDV() {
         placa: lc.placa || "",
         cliente: (lc.cliente || "").toUpperCase(),
         cpf: lc.cpf || "",
+        cv:  lc.cv  || "",
         servico: (lc.servico || "").toUpperCase(),
         tipoServico: serviceType(lc.servico || ""),
         fp: lc.fp === "faturado" ? "FA" : "AV",
