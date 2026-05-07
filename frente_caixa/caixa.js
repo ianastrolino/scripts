@@ -151,6 +151,27 @@ function renderFechamentoTarja() {
   if (subEl) subEl.textContent = `enviado ao Tiny às ${hora} · alterações exigem PIN`;
 }
 
+async function voltarParaLancamentos() {
+  if (!confirm("Voltar pra etapa 1 (Lançamentos)?\n\nIsso reverte a marcação de 'Conferência iniciada' — útil quando avançou sem querer. Não exige PIN porque ainda não enviou ao Tiny.")) return;
+  const btn = document.getElementById("btnVoltarEtapa1");
+  if (btn) btn.disabled = true;
+  try {
+    const r = await apiFetch(`${apiBase}/api/fechamento/voltar-para-lancamentos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || "falha ao voltar");
+    // Recarrega o estado pra refletir etapa 1
+    await carregarEstado();
+  } catch (e) {
+    alert(`Erro: ${e.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function reabrirCaixaComPin() {
   document.getElementById("pinModalTitle").textContent = "Reabrir caixa do dia";
   const hora = (state.fechamento && state.fechamento.fechado_em)
@@ -764,6 +785,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const btnReabrir = document.getElementById("btnReabrirCaixa");
   if (btnReabrir) btnReabrir.addEventListener("click", reabrirCaixaComPin);
+
+  const btnVoltarEtapa1 = document.getElementById("btnVoltarEtapa1");
+  if (btnVoltarEtapa1) btnVoltarEtapa1.addEventListener("click", voltarParaLancamentos);
 
   // Campos de texto: validar ao digitar
   ["fPlaca", "fCliente", "fServico", "fValor", "fCpf", "fCv"].forEach(id => {

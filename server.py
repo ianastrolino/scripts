@@ -5746,6 +5746,42 @@ def _dia_etapa(unit: str, data_iso: str) -> int:
     return 1
 
 
+def _voltar_para_lancamentos(unit: str, data_iso: str, user_email: str) -> bool:
+    """Reverte etapa 2 -> etapa 1 (remove conferencia_iniciada_em).
+
+    Caso de uso: operadora avancou pra Conferencia sem querer e ficou travada
+    pra novos lancamentos. Operacao reversivel, sem PIN — so funciona em etapa 2
+    (etapa 3 ja foi enviado pro Tiny, exige _reabrir_dia + PIN).
+
+    Retorna True se voltou, False se nao estava em etapa 2.
+    """
+    fechs = _load_fechamentos(unit)
+    entry = fechs.get(data_iso) or {}
+    if entry.get("fechado_em"):
+        return False  # etapa 3 — exige reabertura formal com PIN
+    if not entry.get("conferencia_iniciada_em"):
+        return False  # ja em etapa 1
+    # Preserva historico de quem iniciou e quem voltou (pra auditoria)
+    hist = fechs.setdefault("_voltas_etapa", [])
+    hist.append({
+        "data": data_iso,
+        "iniciada_em":  entry.get("conferencia_iniciada_em"),
+        "iniciada_por": entry.get("conferencia_iniciada_por", ""),
+        "voltada_em":   dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+        "voltada_por":  user_email,
+    })
+    entry.pop("conferencia_iniciada_em", None)
+    entry.pop("conferencia_iniciada_por", None)
+    # Se a entry ficou sem nada de fechamento, remove. Senao mantem (ex:
+    # decisoes do wizard tambem ficam salvas em _decisoes separado, nao aqui)
+    if not any(k for k in entry if not k.startswith("_")):
+        fechs.pop(data_iso, None)
+    else:
+        fechs[data_iso] = entry
+    _save_fechamentos(unit, fechs)
+    return True
+
+
 def _reabrir_dia(unit: str, data_iso: str, user_email: str) -> bool:
     """Remove a marcacao de fechado. Retorna True se reabriu, False se nao estava fechado.
     Preserva conferencia_iniciada_em — reabrir so tira o envio ao Tiny, nao apaga
@@ -6135,10 +6171,14 @@ def api_caixa_lancar(unit: str):
         if fp in ("debito", "credito") and not cv:
             return _json({"success": False, "error": "CV obrigatorio em pagamentos no cartao."}, 400)
 
-        # Se o dia esta fechado (envio Tiny ja aconteceu), exige PIN pra lançar
+        # PIN so eh exigido em etapa 3 (dia fechado, envio Tiny ja aconteceu).
+        # Etapa 2 (conferencia iniciada) eh reversivel — operadora pode voltar
+        # pra etapa 1 via /api/fechamento/voltar-para-lancamentos. Lancar em
+        # etapa 2 sem PIN era um bloqueio que travava operadoras que avancaram
+        # sem querer.
         hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
         fech_info = _dia_fechado(unit, hoje_iso)
-        if fech_info:
+        if fech_info and fech_info.get("fechado_em"):
             ip = request.remote_addr or "unknown"
             if not _pin_rate_check(unit, ip):
                 return _json({"success": False, "error": "Muitas tentativas. Aguarde 1 minuto."}, 429)
@@ -6334,6 +6374,34 @@ _DECISAO_TIPOS = {
 _DECISAO_TIPOS_REQUER_PIN = {
     "marcar_cortesia",
 }
+
+
+@app.route("/u/<unit>/api/fechamento/voltar-para-lancamentos", methods=["POST"])
+@unit_access_required
+@csrf_required
+def api_fechamento_voltar(unit: str):
+    """Volta da etapa 2 (Conferencia iniciada) pra etapa 1 (Lancamentos).
+
+    Caso de uso: operadora clicou sem querer em "Iniciar conferencia" e ficou
+    travada pra novos lancamentos. Operacao reversivel, sem PIN.
+
+    Etapa 3 (dia fechado/enviado pro Tiny) NAO eh afetada — exige reabertura
+    formal via /reabrir.
+    """
+    try:
+        hoje_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+        user = _current_user() or {}
+        user_email = session.get("email") or user.get("email") or "?"
+        ok = _voltar_para_lancamentos(unit, hoje_iso, user_email)
+        if not ok:
+            return _json({"success": False, "error": "Nao esta em etapa 2 — nada a voltar."}, 400)
+        _append_audit_log(unit, "voltar_para_lancamentos", {
+            "data": hoje_iso,
+        })
+        return _json({"success": True, "etapa": _dia_etapa(unit, hoje_iso)})
+    except Exception as exc:
+        app.logger.exception("[fechamento.voltar] %s", unit)
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/u/<unit>/api/fechamento/decisao", methods=["POST"])

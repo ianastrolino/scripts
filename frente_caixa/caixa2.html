@@ -1630,6 +1630,17 @@
     .caixa-etapa2-callout svg { flex-shrink: 0; margin-top: 2px; color: #2563eb; }
     .caixa-etapa2-callout strong { display: block; margin-bottom: 2px; color: #1e3a8a; }
     .caixa-etapa2-callout a { color: #1d4ed8; font-weight: 700; text-decoration: underline; }
+    .btn-voltar-etapa1 {
+      flex-shrink: 0; align-self: center;
+      font: inherit; font-size: 12px; font-weight: 700;
+      padding: 7px 12px; border-radius: var(--ds-radius-md);
+      border: 1px solid #bfdbfe;
+      background: #fff; color: #1d4ed8;
+      cursor: pointer; white-space: nowrap;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-voltar-etapa1:hover { background: #dbeafe; border-color: #93c5fd; }
+    .btn-voltar-etapa1:disabled { opacity: .5; cursor: wait; }
 
     @media (max-width: 720px) {
       .caixa-wizard { padding: 10px 12px; gap: 4px; }
@@ -1926,11 +1937,15 @@
       <!-- Callout quando etapa 2 — ela ja comecou a conferir, voltou aqui pra lancar algo -->
       <div class="caixa-etapa2-callout" id="etapa2Callout" style="display:none">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <div>
+        <div style="flex:1">
           <strong>Fechamento em andamento.</strong>
           A conferência com a planilha já foi iniciada. Se esqueceu algum lançamento,
           adicione abaixo — ao concluir, <a href="fechamento">retorne ao fechamento</a> para enviar ao Tiny.
         </div>
+        <button id="btnVoltarEtapa1" type="button" class="btn-voltar-etapa1"
+                title="Reverte pra etapa 1 — usar quando avançou sem querer">
+          ← Voltar pra Lançamentos
+        </button>
       </div>
 
       <!-- Painel "Planilha do dia" (Conferência Antecipada) -->
