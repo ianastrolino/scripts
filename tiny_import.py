@@ -97,12 +97,21 @@ def _is_doc_already_registered(exc: Exception) -> bool:
     """Retorna True se o Tiny rejeitou por numeroDocumento duplicado.
     Cobre tanto a mensagem do pre-check local quanto a resposta nativa da API Tiny."""
     msg = str(exc)
-    return (
+    msg_lower = msg.lower()
+    # Tiny: numeroDocumento ja cadastrado
+    if (
         "já cadastrado no sistema" in msg
         or "ja cadastrado no sistema" in msg
         or "j\u00e1 cadastrado" in msg  # variante sem "no sistema"
-        or "numero do documento" in msg.lower() and "cadastrado" in msg.lower()
-    )
+        or "numero do documento" in msg_lower and "cadastrado" in msg_lower
+    ):
+        return True
+    # Omie: codigo_lancamento_integracao ja consta cadastrado
+    if "ja consta cadastrado" in msg_lower or "já consta cadastrado" in msg_lower:
+        return True
+    if "codigo_lancamento_integracao" in msg_lower and "cadastrado" in msg_lower:
+        return True
+    return False
 
 
 def is_av_paid(av_pagamento: str) -> bool:

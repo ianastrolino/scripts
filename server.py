@@ -103,6 +103,7 @@ from tiny_import import (
     save_state,
     similarity_score,
 )
+from omie_import import OmieApiError, OmieImporter
 
 # ── Flask ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -1142,10 +1143,64 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
         merged_ids.update(extra)
         tiny["cliente_ids"] = merged_ids
 
+    # Omie config: app_key/app_secret + id_conta_corrente + categoria_ids
+    # Carregado de /data/<unit>/omie_config.json (gerenciado via /master/erp-config).
+    # Se nao existe, retorna {} — OmieImporter trata gracefully.
+    omie_cfg = _load_omie_config(unit)
+
     return merge_config(DEFAULT_CONFIG, {
         "state_dir": str(_unit_state_dir(unit)),
         "tiny": tiny,
+        "omie": omie_cfg,
     })
+
+
+def _omie_config_path(unit: str) -> Path:
+    return _unit_state_dir(unit) / "omie_config.json"
+
+
+def _load_omie_config(unit: str) -> dict[str, Any]:
+    """Carrega config Omie da unidade. Retorna {} se nao existe ou corrompido."""
+    p = _omie_config_path(unit)
+    if not p.exists():
+        return {}
+    try:
+        cfg = json.loads(p.read_text(encoding="utf-8"))
+        return cfg if isinstance(cfg, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_omie_config(unit: str, cfg: dict[str, Any]) -> None:
+    """Persiste config Omie atomicamente. Apenas chaves conhecidas sao salvas."""
+    p = _omie_config_path(unit)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    allowed_keys = {"app_key", "app_secret", "id_conta_corrente", "categoria_ids", "timeout_seconds"}
+    clean: dict[str, Any] = {}
+    for k, v in (cfg or {}).items():
+        if k not in allowed_keys:
+            continue
+        if k == "id_conta_corrente":
+            try:
+                clean[k] = int(v) if v else 0
+            except Exception:
+                clean[k] = 0
+        elif k == "categoria_ids":
+            clean[k] = {
+                str(kk).upper().strip(): str(vv).strip()
+                for kk, vv in (v or {}).items()
+                if str(kk).strip() and str(vv).strip()
+            }
+        elif k == "timeout_seconds":
+            try:
+                clean[k] = int(v)
+            except Exception:
+                clean[k] = 30
+        else:
+            clean[k] = str(v).strip()
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(p)
 
 
 def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
@@ -1187,6 +1242,26 @@ def _unit_tiny_ready(unit: str) -> bool:
         return bool(stored.get("refresh_token"))
     except Exception:
         return False
+
+
+def _unit_erp(unit: str) -> str:
+    """Retorna o ERP configurado pra unit ('tiny' ou 'omie'). Default 'tiny'."""
+    return (UNITS.get(unit, {}).get("erp") or "tiny").lower()
+
+
+def _build_erp_importer(unit: str, config: dict, state_dir: Path):
+    """Roteador: retorna (importer, erp_kind) baseado em unit.erp.
+
+    - tiny: TinyImporter (com _seed_tokens chamado antes pra garantir refresh)
+    - omie: OmieImporter (sem seed, credenciais sao app_key/app_secret estaticas)
+
+    Ambos expoem create_accounts_receivable(rec) — interface comum usada em api_send.
+    """
+    erp_kind = _unit_erp(unit)
+    if erp_kind == "omie":
+        return OmieImporter(config, state_dir), "omie"
+    _seed_tokens(unit, config)
+    return TinyImporter(config, state_dir), "tiny"
 
 
 # ── Resposta JSON helper ───────────────────────────────────────────────────────
@@ -2126,6 +2201,12 @@ def master_api_email_prefs_set():
 @master_only_required
 def master_email_prefs_page():
     return _nocache(send_from_directory(UI_DIR, "email-prefs.html"))
+
+
+@app.route("/master/erp-config")
+@master_only_required
+def master_erp_config_page():
+    return _nocache(send_from_directory(UI_DIR, "erp-config.html"))
 
 
 @app.route("/master/api/sistema/saude")
@@ -3959,6 +4040,107 @@ def master_api_unidades_criar():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# ── Omie config ──────────────────────────────────────────────────────────────
+@app.route("/master/api/unidades/<slug>/omie-config")
+@master_only_required
+def master_api_unidade_omie_config_get(slug: str):
+    """Retorna config Omie da unit. app_secret eh mascarado (so primeiros 4 + ***)."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    cfg = _load_omie_config(slug)
+    secret = cfg.get("app_secret", "")
+    return _json({
+        "success": True,
+        "config": {
+            "app_key":            cfg.get("app_key", ""),
+            "app_secret_masked":  (secret[:4] + "***" + secret[-2:]) if len(secret) >= 6 else "",
+            "has_app_secret":     bool(secret),
+            "id_conta_corrente":  cfg.get("id_conta_corrente", 0),
+            "categoria_ids":      cfg.get("categoria_ids", {}),
+        },
+    })
+
+
+@app.route("/master/api/unidades/<slug>/omie-config", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_omie_config_save(slug: str):
+    """Salva config Omie da unit. app_secret omitido = preserva o atual."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        cur = _load_omie_config(slug)
+        merged = {**cur}
+        # Aceita parcial — mantem app_secret atual se nao veio no body
+        for k in ("app_key", "id_conta_corrente", "categoria_ids", "timeout_seconds"):
+            if k in body:
+                merged[k] = body[k]
+        if "app_secret" in body and body["app_secret"]:
+            merged["app_secret"] = body["app_secret"]
+        _save_omie_config(slug, merged)
+        user = _current_user() or {}
+        _write_audit_log(user, "omie_config.set", target=slug, payload={
+            "app_key_set": bool(merged.get("app_key")),
+            "id_conta_corrente": merged.get("id_conta_corrente"),
+            "categorias_count": len(merged.get("categoria_ids") or {}),
+        })
+        return _json({"success": True})
+    except Exception as exc:
+        app.logger.exception("[omie-config] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/unidades/<slug>/omie/testar")
+@master_only_required
+def master_api_unidade_omie_testar(slug: str):
+    """Testa credenciais Omie chamando ListarCategorias (chamada barata)."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    config = _build_unit_config(slug)
+    state_dir = _unit_state_dir(slug)
+    importer = OmieImporter(config, state_dir)
+    return _json({"success": True, "resultado": importer.testar_conexao()})
+
+
+@app.route("/master/api/unidades/<slug>/omie/contas-correntes")
+@master_only_required
+def master_api_unidade_omie_contas_correntes(slug: str):
+    """Lista contas correntes do Omie da unit pra escolher id_conta_corrente."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        importer = OmieImporter(config, state_dir)
+        contas = importer.listar_contas_correntes()
+        return _json({"success": True, "contas": contas})
+    except OmieApiError as exc:
+        return _json({"success": False, "error": exc.descricao, "code": exc.code}, 502)
+    except Exception as exc:
+        app.logger.exception("[omie.contas-correntes] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/unidades/<slug>/omie/categorias")
+@master_only_required
+def master_api_unidade_omie_categorias(slug: str):
+    """Lista categorias do Omie da unit pra mapeamento servico → codigo."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        importer = OmieImporter(config, state_dir)
+        cats = importer.listar_categorias()
+        return _json({"success": True, "categorias": cats})
+    except OmieApiError as exc:
+        return _json({"success": False, "error": exc.descricao, "code": exc.code}, 502)
+    except Exception as exc:
+        app.logger.exception("[omie.categorias] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>/formas-recebimento")
 @master_only_required
 def master_api_unidade_formas_recebimento(slug: str):
@@ -4996,12 +5178,13 @@ def api_send(unit: str):
         data      = request.get_json(force=True, silent=True) or {}
         config    = _build_unit_config(unit)
         state_dir = _unit_state_dir(unit)
-        _seed_tokens(unit, config)
 
         state_path = state_dir / "imported.json"
         st         = load_state(state_path)
         imported   = st.setdefault("imported", {})
-        importer   = TinyImporter(config, state_dir)
+        # Roteador ERP — escolhe TinyImporter ou OmieImporter conforme unit.erp.
+        # _build_erp_importer ja chama _seed_tokens pra unidades Tiny.
+        importer, erp_kind = _build_erp_importer(unit, config, state_dir)
         results: dict[str, list] = {"enviados": [], "pulados": [], "falhas": []}
 
         # Lock protege imported dict e results de acessos concorrentes entre threads
@@ -5118,6 +5301,7 @@ def api_send(unit: str):
                 chave = e["chave"]
                 r = e.get("record") or {}
                 _db_insert_envio(unit, state_dir, {
+                    "erp":                erp_kind,
                     "chave_deduplicacao": chave,
                     "timestamp":          ts_now,
                     "data_lancamento":    r.get("data", "") or "",
@@ -5137,6 +5321,7 @@ def api_send(unit: str):
                 motivo = p.get("motivo", "")
                 status = "ja_existia_tiny" if "existia no Tiny" in motivo else "ja_importado_local"
                 _db_insert_envio(unit, state_dir, {
+                    "erp":                erp_kind,
                     "chave_deduplicacao": chave,
                     "timestamp":          ts_now,
                     "data_lancamento":    r.get("data", "") or "",
@@ -5154,6 +5339,7 @@ def api_send(unit: str):
                 chave = f["chave"]
                 r = f.get("record") or {}
                 _db_insert_envio(unit, state_dir, {
+                    "erp":                erp_kind,
                     "chave_deduplicacao": chave,
                     "timestamp":          ts_now,
                     "data_lancamento":    r.get("data", "") or "",
@@ -5168,7 +5354,7 @@ def api_send(unit: str):
                     "erro":               f.get("erro", ""),
                 })
         except Exception as mirror_exc:
-            app.logger.warning("[envios_tiny:mirror] falha ao gravar tabela: %s", mirror_exc)
+            app.logger.warning("[envios_erp:mirror] falha ao gravar tabela: %s", mirror_exc)
 
         # Email de confirmacao do envio (falha silenciosa — nao trava a resposta)
         try:

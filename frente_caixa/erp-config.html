@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Configuração ERP</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 18px 22px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 800; color: var(--ds-ink);
+      margin-bottom: 4px;
+    }
+    .card-sub {
+      font-size: 12.5px; color: var(--ds-ink-muted);
+      margin-bottom: 14px; line-height: 1.5;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row > * { flex-shrink: 0; }
+    .row > .grow { flex: 1; min-width: 200px; }
+
+    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .field label {
+      font-size: 12px; font-weight: 700; color: var(--ds-ink-muted);
+    }
+    .field input, .field select {
+      height: 36px;
+      border: 1px solid var(--ds-line); border-radius: 6px;
+      padding: 0 12px; font-family: inherit; font-size: 13.5px;
+      background: var(--ds-surface); color: var(--ds-ink);
+      outline: none;
+    }
+    .field input:focus, .field select:focus {
+      border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+
+    .btn {
+      font: inherit; font-size: 13px; font-weight: 600;
+      padding: 8px 14px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-surface-alt); }
+    .btn.primary { background: #111827; color: #fff; border-color: #111827; }
+    .btn.primary:hover { background: #000; }
+    .btn.success { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn.success:hover { background: #15803d; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .pill {
+      display: inline-block; padding: 2px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 800;
+    }
+    .pill.tiny { background: #e0e7ff; color: #3730a3; }
+    .pill.omie { background: #ccfbf1; color: #0f766e; }
+
+    .alert {
+      padding: 10px 14px; border-radius: 6px;
+      font-size: 12.5px; margin-bottom: 12px;
+    }
+    .alert.ok    { background: #dcfce7; color: #166534; border-left: 3px solid #16a34a; }
+    .alert.error { background: #fee2e2; color: #991b1b; border-left: 3px solid #dc2626; }
+    .alert.info  { background: #dbeafe; color: #1e3a8a; border-left: 3px solid #2563eb; }
+
+    table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .tbl th, .tbl td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--ds-line); }
+    .tbl th { font-size: 11px; color: var(--ds-ink-muted); background: var(--ds-surface-alt); text-transform: uppercase; letter-spacing: .04em; }
+    .tbl tbody tr:hover td { background: var(--ds-surface-alt); }
+
+    .cat-row { display: grid; grid-template-columns: 1fr 200px auto; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .cat-row input { height: 32px; border: 1px solid var(--ds-line); border-radius: 4px; padding: 0 10px; font-size: 13px; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: #fff; padding: 10px 18px;
+      border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+      pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .toast.err { background: #dc2626; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap" style="max-width:920px;">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Sistema</div>
+        <h1 class="app-page-title">Configuração ERP por unidade</h1>
+        <p class="app-page-sub">Define qual ERP cada unidade usa (Tiny ou Omie) e suas credenciais.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Unidade</div>
+        <div class="row">
+          <select id="selUnit" class="grow"></select>
+          <span id="erpBadge" class="pill tiny">—</span>
+        </div>
+      </div>
+
+      <!-- Bloco Omie: aparece quando unit.erp = omie OU quando user quiser configurar -->
+      <div class="card" id="omieCard" hidden>
+        <div class="card-title">Credenciais Omie</div>
+        <div class="card-sub">App Key / App Secret obtidos em <code>app.omie.com.br → Apps</code>.</div>
+
+        <div class="field">
+          <label>App Key</label>
+          <input id="appKey" type="text" placeholder="sua App Key">
+        </div>
+        <div class="field">
+          <label>App Secret <span id="secretHint" style="font-weight:400;color:var(--ds-ink-muted)"></span></label>
+          <input id="appSecret" type="password" placeholder="deixe vazio pra preservar o atual">
+        </div>
+
+        <div class="row" style="margin-top:6px">
+          <button id="btnSalvarCred" class="btn primary">Salvar credenciais</button>
+          <button id="btnTestar" class="btn">Testar conexão</button>
+          <span id="testStatus" style="font-size:12.5px"></span>
+        </div>
+      </div>
+
+      <div class="card" id="contaCard" hidden>
+        <div class="card-title">Conta corrente</div>
+        <div class="card-sub">Toda conta a receber criada no Omie precisa ter uma conta corrente associada.</div>
+        <div class="row">
+          <select id="selConta" class="grow"></select>
+          <button id="btnRecarregarContas" class="btn">↻</button>
+          <button id="btnSalvarConta" class="btn primary">Salvar</button>
+        </div>
+      </div>
+
+      <div class="card" id="catCard" hidden>
+        <div class="card-title">Mapeamento serviço → categoria Omie</div>
+        <div class="card-sub">
+          Pra cada serviço da unidade, escolha o código de categoria correspondente no Omie.
+          <button id="btnRecarregarCats" class="btn" style="margin-left:8px;height:24px;padding:2px 10px;font-size:11px">↻ recarregar do Omie</button>
+        </div>
+        <div id="catList"></div>
+        <div class="row" style="margin-top:10px">
+          <button id="btnAddCat" class="btn">+ Adicionar serviço</button>
+          <button id="btnSalvarCats" class="btn primary">Salvar mapeamento</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "erp-config",
+  breadcrumbs: [{ label: "Sistema" }, { label: "Configuração ERP", current: true }]
+});
+
+let _csrfToken = "";
+let _currentSlug = "";
+let _omieCategorias = [];     // categorias do Omie (cache da última listagem)
+let _omieContas = [];         // contas correntes do Omie
+
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const toast = (msg, err) => {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1800);
+};
+
+async function loadCsrf() {
+  try {
+    const r = await fetch("/api/csrf-token", { credentials: "include" });
+    _csrfToken = (await r.json()).csrf_token || "";
+  } catch {}
+}
+
+async function loadUnidades() {
+  const r = await fetch("/master/api/unidades").then(r => r.json());
+  const sel = document.getElementById("selUnit");
+  sel.innerHTML = (r.unidades || []).map(u =>
+    `<option value="${esc(u.slug)}" data-erp="${esc(u.erp)}">${esc(u.nome)} (${esc(u.erp)})</option>`
+  ).join("");
+  if (sel.value) onUnitChange();
+}
+
+function onUnitChange() {
+  const sel = document.getElementById("selUnit");
+  _currentSlug = sel.value;
+  const erp = sel.options[sel.selectedIndex]?.dataset?.erp || "tiny";
+  const badge = document.getElementById("erpBadge");
+  badge.textContent = erp.toUpperCase();
+  badge.className = `pill ${erp}`;
+  // Mostra cards Omie só se erp=omie (ou se você quiser preparar a unit pra omie)
+  const showOmie = erp === "omie";
+  document.getElementById("omieCard").hidden = !showOmie;
+  document.getElementById("contaCard").hidden = !showOmie;
+  document.getElementById("catCard").hidden = !showOmie;
+  if (showOmie) loadOmieConfig();
+}
+
+async function loadOmieConfig() {
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha ao carregar config");
+    document.getElementById("appKey").value = r.config.app_key || "";
+    document.getElementById("secretHint").textContent =
+      r.config.has_app_secret ? `(salvo: ${r.config.app_secret_masked})` : "";
+    document.getElementById("appSecret").value = "";
+    // categoria_ids virou tabela editavel
+    renderCategoriasMap(r.config.categoria_ids || {});
+    // id_conta_corrente já será setado quando lista carregar
+    if (r.config.id_conta_corrente) {
+      // Preserva pra escolher quando lista vier
+      document.getElementById("selConta").dataset.preferido = String(r.config.id_conta_corrente);
+    }
+  } catch (e) {
+    toast(`Erro: ${e.message}`, true);
+  }
+}
+
+async function salvarCredenciais() {
+  const body = {
+    app_key:    document.getElementById("appKey").value.trim(),
+    app_secret: document.getElementById("appSecret").value.trim(),
+  };
+  if (!body.app_secret) delete body.app_secret;  // omitido = preserva atual
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || "falha ao salvar");
+    toast("Credenciais salvas");
+    loadOmieConfig();
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+async function testarConexao() {
+  document.getElementById("testStatus").textContent = "testando…";
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie/testar`).then(r => r.json());
+    const res = r.resultado || {};
+    if (res.ok) {
+      document.getElementById("testStatus").innerHTML =
+        `<span style="color:#16a34a">✓ Conectado · ${res.categorias_total} categorias</span>`;
+    } else {
+      document.getElementById("testStatus").innerHTML =
+        `<span style="color:#dc2626">✗ Falhou: ${esc(res.error || res.code || "?")}</span>`;
+    }
+  } catch (e) {
+    document.getElementById("testStatus").innerHTML =
+      `<span style="color:#dc2626">✗ Erro: ${esc(e.message)}</span>`;
+  }
+}
+
+async function carregarContas() {
+  const sel = document.getElementById("selConta");
+  const preferido = sel.dataset.preferido || "";
+  sel.innerHTML = '<option>carregando…</option>';
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie/contas-correntes`).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    _omieContas = r.contas || [];
+    sel.innerHTML = '<option value="">— escolha —</option>' +
+      _omieContas.map(c =>
+        `<option value="${c.nCodCC}">${esc(c.descricao || c.cDescCC || "(sem nome)")} · #${c.nCodCC}</option>`
+      ).join("");
+    if (preferido) sel.value = preferido;
+  } catch (e) {
+    sel.innerHTML = `<option>erro: ${esc(e.message)}</option>`;
+  }
+}
+
+async function salvarConta() {
+  const id = parseInt(document.getElementById("selConta").value || "0");
+  if (!id) { toast("Escolha uma conta corrente", true); return; }
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
+      credentials: "include",
+      body: JSON.stringify({ id_conta_corrente: id }),
+    });
+    if (!(await r.json()).success) throw new Error("falha ao salvar");
+    toast("Conta corrente salva");
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+function renderCategoriasMap(mapa) {
+  const list = document.getElementById("catList");
+  const entries = Object.entries(mapa);
+  if (!entries.length) entries.push(["", ""]);  // 1 linha vazia inicial
+  list.innerHTML = entries.map(([nome, codigo]) => `
+    <div class="cat-row">
+      <input type="text" class="cat-nome" placeholder="VISTORIA CAUTELAR" value="${esc(nome)}">
+      <input type="text" class="cat-codigo" placeholder="1.01.01" value="${esc(codigo)}">
+      <button type="button" class="btn cat-rm">×</button>
+    </div>`).join("");
+  list.querySelectorAll(".cat-rm").forEach(btn => {
+    btn.addEventListener("click", e => e.target.closest(".cat-row").remove());
+  });
+}
+
+function adicionarCatRow() {
+  const list = document.getElementById("catList");
+  const div = document.createElement("div");
+  div.className = "cat-row";
+  div.innerHTML = `
+    <input type="text" class="cat-nome" placeholder="VISTORIA CAUTELAR">
+    <input type="text" class="cat-codigo" placeholder="1.01.01">
+    <button type="button" class="btn cat-rm">×</button>`;
+  div.querySelector(".cat-rm").addEventListener("click", () => div.remove());
+  list.appendChild(div);
+}
+
+async function salvarCategorias() {
+  const mapa = {};
+  document.querySelectorAll(".cat-row").forEach(row => {
+    const nome = row.querySelector(".cat-nome").value.trim().toUpperCase();
+    const cod = row.querySelector(".cat-codigo").value.trim();
+    if (nome && cod) mapa[nome] = cod;
+  });
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
+      credentials: "include",
+      body: JSON.stringify({ categoria_ids: mapa }),
+    });
+    if (!(await r.json()).success) throw new Error("falha ao salvar");
+    toast(`Salvas ${Object.keys(mapa).length} categorias`);
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+async function recarregarCategoriasOmie() {
+  toast("Buscando categorias do Omie…");
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/omie/categorias`).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    _omieCategorias = r.categorias || [];
+    toast(`${_omieCategorias.length} categorias carregadas (use os códigos abaixo)`);
+    // Mostra lista pop-up simples no console pra ajudar
+    console.log("Categorias Omie:", _omieCategorias.map(c => `${c.codigo} · ${c.descricao}`));
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+document.getElementById("selUnit").addEventListener("change", onUnitChange);
+document.getElementById("btnSalvarCred").addEventListener("click", salvarCredenciais);
+document.getElementById("btnTestar").addEventListener("click", testarConexao);
+document.getElementById("btnRecarregarContas").addEventListener("click", carregarContas);
+document.getElementById("btnSalvarConta").addEventListener("click", salvarConta);
+document.getElementById("btnAddCat").addEventListener("click", adicionarCatRow);
+document.getElementById("btnSalvarCats").addEventListener("click", salvarCategorias);
+document.getElementById("btnRecarregarCats").addEventListener("click", recarregarCategoriasOmie);
+
+(async () => {
+  await loadCsrf();
+  await loadUnidades();
+  // Carrega contas correntes automaticamente quando entra
+  if (_currentSlug && document.getElementById("erpBadge").textContent === "OMIE") {
+    carregarContas();
+  }
+})();
+</script>
+</body>
+</html>
