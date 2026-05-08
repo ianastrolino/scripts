@@ -160,7 +160,8 @@
     try {
       const r = await fetch("/api/csrf-token", { credentials: "include" });
       const j = await r.json();
-      _csrfToken = j.csrf_token || "";
+      // API retorna {token: "..."} (chave 'token', nao 'csrf_token')
+      _csrfToken = j.token || j.csrf_token || "";
     } catch {}
   }
 
