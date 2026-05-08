@@ -60,7 +60,12 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('tiny_import.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
       "Bash(python -m pytest tests/test_historico_enriquecido.py -x --tb=short)",
       "Bash(python -m pytest tests/test_wizard_v2_routes.py::TestPlanilhaStatus::test_status_dia_anterior_eh_flagado -x --tb=long)",
-      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('/home/astro/projeto/scripts/frente_caixa/caixa.js','utf8'\\)\\); console.log\\('JS OK'\\)\")"
+      "Bash(node -e \"new Function\\(require\\('fs'\\).readFileSync\\('/home/astro/projeto/scripts/frente_caixa/caixa.js','utf8'\\)\\); console.log\\('JS OK'\\)\")",
+      "WebSearch",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('caixa_db.py'\\).read\\(\\)\\); print\\('caixa_db OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('omie_import.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"from omie_import import OmieClient, OmieImporter, OmieApiError; print\\('imports OK'\\)\")",
+      "Bash(python -m pytest tests/test_omie_importer.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"
