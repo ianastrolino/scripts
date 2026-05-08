@@ -84,10 +84,14 @@ CREATE INDEX IF NOT EXISTS idx_snap_unit_data ON planilhas_snapshot(unit, data);
 CREATE INDEX IF NOT EXISTS idx_snap_unit_created ON planilhas_snapshot(unit, created_at);
 """
 
+# Tabela generica pra envios a ERPs (tiny/omie). Antes chamava envios_tiny;
+# em 2026-05-02 renomeada pra envios_erp + coluna 'erp' adicionada (DEFAULT 'tiny'
+# pra preservar registros legacy). Migration retroativa em _migrate_envios_tabela.
 _DDL_ENVIOS = """
-CREATE TABLE IF NOT EXISTS envios_tiny (
+CREATE TABLE IF NOT EXISTS envios_erp (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     unit               TEXT NOT NULL,
+    erp                TEXT NOT NULL DEFAULT 'tiny',
     chave_deduplicacao TEXT NOT NULL,
     timestamp          TEXT NOT NULL,
     data_lancamento    TEXT NOT NULL DEFAULT "",
@@ -103,9 +107,10 @@ CREATE TABLE IF NOT EXISTS envios_tiny (
     erro               TEXT NOT NULL DEFAULT "",
     UNIQUE(unit, chave_deduplicacao)
 );
-CREATE INDEX IF NOT EXISTS idx_envios_unit_data ON envios_tiny(unit, data_lancamento);
-CREATE INDEX IF NOT EXISTS idx_envios_unit_ts   ON envios_tiny(unit, timestamp);
-CREATE INDEX IF NOT EXISTS idx_envios_status    ON envios_tiny(unit, status);
+CREATE INDEX IF NOT EXISTS idx_envios_unit_data ON envios_erp(unit, data_lancamento);
+CREATE INDEX IF NOT EXISTS idx_envios_unit_ts   ON envios_erp(unit, timestamp);
+CREATE INDEX IF NOT EXISTS idx_envios_status    ON envios_erp(unit, status);
+CREATE INDEX IF NOT EXISTS idx_envios_unit_erp  ON envios_erp(unit, erp);
 """
 
 _DDL_HISTORICO_TINY = """
@@ -162,6 +167,48 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) 
         raise
 
 
+def _migrate_envios_tiny_to_erp(conn: sqlite3.Connection) -> None:
+    """Migration: renomeia envios_tiny -> envios_erp + adiciona coluna 'erp'.
+
+    Banco antigo (pre-2026-05-02) tem tabela envios_tiny. Banco novo cria direto
+    envios_erp via DDL. Esta funcao bridge:
+    - Se NAO existe envios_erp E existe envios_tiny: renomeia + adiciona erp
+    - Se existem ambas: copia dados que faltam de envios_tiny pra envios_erp
+      (improvavel — so se tabelas foram criadas em ordem estranha)
+    - Se so existe envios_erp: no-op
+
+    Idempotente. Pode rodar varias vezes sem efeito colateral.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    if "envios_erp" in tables:
+        # Ja migrado. Garante que coluna 'erp' existe (caso sqlite antigo)
+        if "erp" not in _table_columns(conn, "envios_erp"):
+            try:
+                conn.execute("ALTER TABLE envios_erp ADD COLUMN erp TEXT NOT NULL DEFAULT 'tiny'")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+        return
+    if "envios_tiny" in tables:
+        log.info("[caixa_db] migrating envios_tiny -> envios_erp")
+        try:
+            # SQLite 3.25+ aceita RENAME TABLE. Railway usa sqlite recente.
+            conn.execute("ALTER TABLE envios_tiny RENAME TO envios_erp")
+            # Coluna erp pode nao existir na tabela antiga
+            if "erp" not in _table_columns(conn, "envios_erp"):
+                conn.execute("ALTER TABLE envios_erp ADD COLUMN erp TEXT NOT NULL DEFAULT 'tiny'")
+            conn.commit()
+            log.info("[caixa_db] migration envios_tiny -> envios_erp ok")
+        except sqlite3.OperationalError as exc:
+            log.error("[caixa_db] migration envios_tiny -> envios_erp falhou: %s", exc)
+            # Nao re-raise: o DDL principal cria envios_erp vazia e seguimos.
+            # Dados antigos ficam na envios_tiny ate intervencao manual.
+
+
 def _connect(unit_dir: Path) -> sqlite3.Connection:
     db_path = unit_dir / "caixa_dia.db"
     conn = sqlite3.connect(str(db_path))
@@ -177,6 +224,9 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.executescript(_DDL_INDICES_POS_MIGRATE)
     conn.executescript(_DDL_DIV)
     conn.executescript(_DDL_SNAPSHOT)
+    # Roda migration ANTES do DDL_ENVIOS — renomeia envios_tiny → envios_erp
+    # se necessario, pra que o DDL nao crie envios_erp vazia ao lado da legacy
+    _migrate_envios_tiny_to_erp(conn)
     conn.executescript(_DDL_ENVIOS)
     conn.executescript(_DDL_HISTORICO_TINY)
     existing_hist = _table_columns(conn, "historico_tiny")
@@ -374,12 +424,16 @@ def delete_snapshot(unit: str, unit_dir: Path, snapshot_id: int) -> bool:
 # ── Envios Tiny (historico de todos os envios: ok, pulado, falha) ─────────────
 
 def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> bool:
-    """Grava um envio na tabela envios_tiny. Retorna True se inseriu novo, False se ja existia.
+    """Grava um envio na tabela envios_erp. Retorna True se inseriu novo, False se ja existia.
 
-    Modo espelho: nao e a fonte de verdade ainda — grava em paralelo ao imported.json.
+    Nome historico mantido (insert_envio_tiny). Aceita payload['erp'] = 'tiny'
+    (default) ou 'omie'. Coluna 'resposta_tiny' guarda resposta crua de
+    qualquer ERP — nome legado mas conteudo e generico.
     """
+    erp_kind = (payload.get("erp") or "tiny").lower()
     row = {
         "unit":               unit,
+        "erp":                erp_kind,
         "chave_deduplicacao": payload.get("chave_deduplicacao", ""),
         "timestamp":          payload.get("timestamp", ""),
         "data_lancamento":    payload.get("data_lancamento", ""),
@@ -391,15 +445,15 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
         "status":             payload.get("status", ""),
         "arquivo":            payload.get("arquivo", ""),
         "linha":              int(payload.get("linha", 0) or 0),
-        "resposta_tiny":      json.dumps(payload.get("resposta_tiny"), ensure_ascii=False) if payload.get("resposta_tiny") is not None else "",
+        "resposta_tiny":      json.dumps(payload.get("resposta_tiny") or payload.get("resposta_erp"), ensure_ascii=False) if (payload.get("resposta_tiny") is not None or payload.get("resposta_erp") is not None) else "",
         "erro":               payload.get("erro", ""),
     }
     with _connect(unit_dir) as conn:
         try:
             conn.execute(
-                "INSERT INTO envios_tiny "
-                "(unit, chave_deduplicacao, timestamp, data_lancamento, placa, cliente, servico, valor, fp, status, arquivo, linha, resposta_tiny, erro) "
-                "VALUES (:unit,:chave_deduplicacao,:timestamp,:data_lancamento,:placa,:cliente,:servico,:valor,:fp,:status,:arquivo,:linha,:resposta_tiny,:erro)",
+                "INSERT INTO envios_erp "
+                "(unit, erp, chave_deduplicacao, timestamp, data_lancamento, placa, cliente, servico, valor, fp, status, arquivo, linha, resposta_tiny, erro) "
+                "VALUES (:unit,:erp,:chave_deduplicacao,:timestamp,:data_lancamento,:placa,:cliente,:servico,:valor,:fp,:status,:arquivo,:linha,:resposta_tiny,:erro)",
                 row,
             )
             return True
@@ -408,7 +462,7 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
             # Guard: so sobrescreve se o novo row tem dado; nao apaga dado bom com vazio.
             sets = []
             params = {"unit": row["unit"], "chave": row["chave_deduplicacao"]}
-            for col in ("data_lancamento", "placa", "cliente", "servico", "fp", "arquivo", "resposta_tiny", "erro"):
+            for col in ("erp", "data_lancamento", "placa", "cliente", "servico", "fp", "arquivo", "resposta_tiny", "erro"):
                 val = row.get(col, "")
                 if val:
                     sets.append(f"{col}=:{col}")
@@ -427,7 +481,7 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
                 params["timestamp"] = row["timestamp"]
             if sets:
                 conn.execute(
-                    "UPDATE envios_tiny SET " + ", ".join(sets) +
+                    "UPDATE envios_erp SET " + ", ".join(sets) +
                     " WHERE unit=:unit AND chave_deduplicacao=:chave",
                     params,
                 )
@@ -437,7 +491,7 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
 def has_envio_tiny(unit: str, unit_dir: Path, chave_deduplicacao: str) -> bool:
     with _connect(unit_dir) as conn:
         r = conn.execute(
-            "SELECT 1 FROM envios_tiny WHERE unit=? AND chave_deduplicacao=? LIMIT 1",
+            "SELECT 1 FROM envios_erp WHERE unit=? AND chave_deduplicacao=? LIMIT 1",
             (unit, chave_deduplicacao),
         ).fetchone()
     return r is not None
@@ -445,8 +499,10 @@ def has_envio_tiny(unit: str, unit_dir: Path, chave_deduplicacao: str) -> bool:
 
 def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
                      date_to: str | None = None, status: str | None = None,
+                     erp: str | None = None,
                      limit: int = 500) -> list[dict[str, Any]]:
-    sql = "SELECT * FROM envios_tiny WHERE unit=? "
+    """Lista envios da tabela envios_erp. Filtro 'erp' opcional (None = qualquer)."""
+    sql = "SELECT * FROM envios_erp WHERE unit=? "
     params: list[Any] = [unit]
     if date_from:
         sql += "AND data_lancamento >= ? "
@@ -457,6 +513,9 @@ def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
     if status:
         sql += "AND status = ? "
         params.append(status)
+    if erp:
+        sql += "AND erp = ? "
+        params.append(erp)
     sql += "ORDER BY timestamp DESC LIMIT ?"
     params.append(int(limit))
     with _connect(unit_dir) as conn:
@@ -473,17 +532,24 @@ def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
     return out
 
 
-def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to: str) -> list[dict[str, Any]]:
-    """Lê envios_tiny que representam registros efetivamente no Tiny (exclui falhas).
-    Usado pelo Gerencial/Histórico como fonte financeira consolidada."""
+def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to: str,
+                              erp: str | None = None) -> list[dict[str, Any]]:
+    """Lê envios_erp que representam registros efetivamente no ERP (exclui falhas).
+    Usado pelo Gerencial/Histórico como fonte financeira consolidada.
+
+    Filtro 'erp' opcional — None retorna tiny+omie consolidados (default pra
+    relatorios que mostram total da rede).
+    """
+    sql = ("SELECT data_lancamento, placa, cliente, servico, valor, fp, status, timestamp, erp "
+           "FROM envios_erp "
+           "WHERE unit=? AND data_lancamento>=? AND data_lancamento<=? AND status!='falha' ")
+    params: list[Any] = [unit, date_from, date_to]
+    if erp:
+        sql += "AND erp = ? "
+        params.append(erp)
+    sql += "ORDER BY data_lancamento ASC"
     with _connect(unit_dir) as conn:
-        rows = conn.execute(
-            "SELECT data_lancamento, placa, cliente, servico, valor, fp, status, timestamp "
-            "FROM envios_tiny "
-            "WHERE unit=? AND data_lancamento>=? AND data_lancamento<=? AND status!='falha' "
-            "ORDER BY data_lancamento ASC",
-            (unit, date_from, date_to),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -570,17 +636,22 @@ def count_historico_tiny(unit: str, unit_dir: Path, ano_mes: str | None = None) 
     return int(r["c"] if r else 0)
 
 
-def count_envios_tiny(unit: str, unit_dir: Path) -> dict[str, int]:
+def count_envios_tiny(unit: str, unit_dir: Path, erp: str | None = None) -> dict[str, int]:
+    """Conta envios por status. Filtro opcional por erp (None = todos)."""
+    sql = "SELECT status, COUNT(*) AS c FROM envios_erp WHERE unit=? "
+    params: list[Any] = [unit]
+    if erp:
+        sql += "AND erp = ? "
+        params.append(erp)
+    sql += "GROUP BY status"
     with _connect(unit_dir) as conn:
-        rows = conn.execute(
-            "SELECT status, COUNT(*) AS c FROM envios_tiny WHERE unit=? GROUP BY status",
-            (unit,),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return {r["status"]: r["c"] for r in rows}
 
 
 def migrate_imported_json_to_envios(unit: str, unit_dir: Path) -> dict[str, int]:
-    """Le unit_dir/imported.json e popula envios_tiny. Nao remove o JSON (seguranca).
+    """Le unit_dir/imported.json e popula envios_erp (com erp='tiny').
+    Nao remove o JSON (seguranca).
 
     Retorna {migrados, duplicados, invalidos}.
     """
