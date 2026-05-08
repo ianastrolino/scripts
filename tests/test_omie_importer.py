@@ -21,6 +21,7 @@ from omie_import import (  # noqa: E402
     OmieClient,
     OmieImporter,
     _iso_para_br,
+    _is_omie_redundant_error,
 )
 
 
@@ -324,6 +325,22 @@ class TestCreateAccountsReceivable:
 # ══════════════════════════════════════════════════════════════════════════════
 # helpers
 # ══════════════════════════════════════════════════════════════════════════════
+
+class TestRedundantError:
+    def test_msg_completa_omie_detecta(self):
+        exc = Exception("Omie [SOAP-ENV:Client-6]: ERROR: Consumo redundante detectado. Aguarde 57 segundos para tentar novamente (REDUNDANT).")
+        assert _is_omie_redundant_error(exc)
+
+    def test_so_palavra_redundant_detecta(self):
+        assert _is_omie_redundant_error(Exception("REDUNDANT"))
+
+    def test_consumo_redundante_em_pt_detecta(self):
+        assert _is_omie_redundant_error(Exception("Consumo redundante"))
+
+    def test_outro_erro_nao_detecta(self):
+        assert not _is_omie_redundant_error(Exception("App Key invalida"))
+        assert not _is_omie_redundant_error(Exception("Cliente nao encontrado"))
+
 
 class TestIsoParaBr:
     @pytest.mark.parametrize("iso,br", [

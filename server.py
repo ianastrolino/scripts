@@ -103,7 +103,7 @@ from tiny_import import (
     save_state,
     similarity_score,
 )
-from omie_import import OmieApiError, OmieImporter
+from omie_import import OmieApiError, OmieImporter, _is_omie_redundant_error
 
 # ── Flask ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -5229,7 +5229,7 @@ def api_send(unit: str):
 
             try:
                 # Retry com backoff: 3 tentativas, espera 2s e 4s entre elas
-                # Cobre quedas temporárias do Tiny sem perder o lançamento
+                # Cobre quedas temporárias do ERP sem perder o lançamento
                 last_exc: Exception | None = None
                 resp = None
                 for attempt in range(3):
@@ -5237,8 +5237,10 @@ def api_send(unit: str):
                         resp = importer.create_accounts_receivable(rec)
                         break
                     except Exception as exc:
-                        if _is_doc_already_registered(exc):
-                            raise  # não retenta duplicata — vai direto para o handler abaixo
+                        # Nao retenta duplicata (ja gravado no ERP) nem REDUNDANT
+                        # do Omie (anti-flood: ERP detectou chamada igual recente)
+                        if _is_doc_already_registered(exc) or _is_omie_redundant_error(exc):
+                            raise
                         last_exc = exc
                         if attempt < 2:
                             time.sleep(2 ** attempt)  # 0s, 2s, 4s
@@ -5262,6 +5264,17 @@ def api_send(unit: str):
                             "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
                         }
                         results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny", "record": r})
+                    elif _is_omie_redundant_error(exc):
+                        # Omie detectou chamada redundante (anti-flood). Nao
+                        # sabemos se a 1a chamada foi sucesso ou falha — Omie
+                        # exige aguardar ~1min. Marca como pulado pra nao
+                        # bloquear o lote; operador reenvia depois se preciso.
+                        results["pulados"].append({
+                            "chave":   rec.chave_deduplicacao,
+                            "cliente": rec.cliente,
+                            "motivo":  "Omie anti-flood: aguarde 1 minuto e reenvie",
+                            "record":  r,
+                        })
                     else:
                         app.logger.exception("[send] falha chave=%s cliente=%s", rec.chave_deduplicacao, rec.cliente)
                         results["falhas"].append({
