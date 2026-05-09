@@ -372,24 +372,37 @@
 
       <div class="doc-wrap">
 
-        <!-- Capa -->
-        <div class="cover">
-          <div class="cover-logo">
-            <img src="/logo/PNG/ASTRO%20Logo_Full%20Color.png" alt="Astro Vistorias">
-          </div>
-          <div class="cover-title">Manual do Sistema<br>Frente de Caixa</div>
-          <div class="cover-sub">Guia completo de operação do PDV, Fechamento e Gerencial</div>
-          <span class="cover-version">Versão 2.1 — 2026</span>
-        </div>
+        <!-- ═══════════════════════════════════════════════════════
+             DOCUMENTOS DA MARCA (cards) — topo da pagina
+             Substitui capa + indice antigos. Cards do Manual do Sistema
+             (estaticos) + PDFs uploaded (master/matriz).
+             ═══════════════════════════════════════════════════════ -->
+        <div class="doc-section" id="documentos">
+          <div class="doc-section-num">📚</div>
+          <h2 class="doc-section-title">Documentos da Marca</h2>
+          <p style="color:var(--ds-ink-muted);margin-bottom:18px">
+            Manuais do sistema, manuais técnicos, critérios de avaliação, apostilas de vistoria e outros materiais oficiais.
+          </p>
 
-        <!-- Índice -->
-        <div class="toc">
-          <div class="toc-title">Índice</div>
-          <a href="#acesso"><span class="toc-num">1.</span> Acesso ao Sistema</a>
-          <a href="#pdv"><span class="toc-num">2.</span> PDV — Caixa do Dia</a>
-          <a href="#fechamento"><span class="toc-num">3.</span> Fechamento de Caixa</a>
-          <a href="#gerencial"><span class="toc-num">4.</span> Gerencial (Master)</a>
-          <a href="#faq"><span class="toc-num">5.</span> Perguntas Frequentes</a>
+          <!-- Botões admin (master/matriz) — ocultos pra operador -->
+          <div id="bibAdmin" class="bib-admin" hidden>
+            <button id="btnAddDoc" type="button" class="bib-btn primary">+ Adicionar documento</button>
+            <span style="font-size:12px;color:var(--ds-ink-muted)">
+              Apenas Master e Matriz veem este botão
+            </span>
+          </div>
+
+          <!-- Filtro por categoria -->
+          <div class="bib-filter">
+            <label style="font-size:12px;color:var(--ds-ink-muted);margin-right:8px">Categoria:</label>
+            <select id="bibFiltroCat" class="bib-select">
+              <option value="">Todas</option>
+            </select>
+          </div>
+
+          <div id="bibLista">
+            <div class="bib-empty">Carregando…</div>
+          </div>
         </div>
 
         <!-- ══════════════════════════════════════════════════ -->
@@ -755,38 +768,6 @@
 
           <div class="doc-section-sub">Preciso de suporte</div>
           <p>Entre em contato com o gestor da sua unidade ou com o administrativo da rede.</p>
-        </div>
-
-        <!-- ═══════════════════════════════════════════════════════
-             PARTE 2 — DOCUMENTOS DA MARCA (PDFs)
-             Master/matriz fazem upload; todos baixam/visualizam.
-             ═══════════════════════════════════════════════════════ -->
-        <div class="doc-section" id="documentos">
-          <div class="doc-section-num">📚</div>
-          <h2 class="doc-section-title">Documentos da Marca</h2>
-          <p style="color:var(--ds-ink-muted);margin-bottom:18px">
-            Manuais técnicos, critérios de avaliação, apostilas de vistoria e outros materiais oficiais.
-          </p>
-
-          <!-- Botões admin (master/matriz) — ocultos pra operador -->
-          <div id="bibAdmin" class="bib-admin" hidden>
-            <button id="btnAddDoc" type="button" class="bib-btn primary">+ Adicionar documento</button>
-            <span style="font-size:12px;color:var(--ds-ink-muted)">
-              Apenas Master e Matriz veem este botão
-            </span>
-          </div>
-
-          <!-- Filtro por categoria -->
-          <div class="bib-filter">
-            <label style="font-size:12px;color:var(--ds-ink-muted);margin-right:8px">Categoria:</label>
-            <select id="bibFiltroCat" class="bib-select">
-              <option value="">Todas</option>
-            </select>
-          </div>
-
-          <div id="bibLista">
-            <div class="bib-empty">Carregando…</div>
-          </div>
         </div>
 
       </div><!-- /.doc-wrap -->
