@@ -69,7 +69,9 @@
       "Bash(python -m pytest tests/test_tiny_importer.py tests/test_omie_importer.py --tb=short -q)",
       "Bash(python -m pytest tests/test_erp_config_e_router.py -x --tb=short)",
       "Bash(node -e \"console.log\\('JS OK'\\)\")",
-      "Bash(python -m pytest tests/test_biblioteca.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_biblioteca.py -x --tb=short)",
+      "Bash(node -e \"console.log\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_biblioteca.py --tb=short -q)"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"

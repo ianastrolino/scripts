@@ -868,9 +868,20 @@
 
   async function loadCsrf() {
     try {
-      const r = await fetch("/api/csrf-token", { credentials: "include" });
-      _csrf = (await r.json()).token || "";
-    } catch {}
+      const r = await fetch("/api/csrf-token", { credentials: "include", cache: "no-store" });
+      if (!r.ok) {
+        console.warn("[biblioteca] /api/csrf-token retornou", r.status);
+        _csrf = "";
+        return;
+      }
+      const j = await r.json();
+      // API retorna {token: "..."} (chave 'token', nao 'csrf_token')
+      _csrf = j.token || j.csrf_token || "";
+      if (!_csrf) console.warn("[biblioteca] csrf-token vazio na resposta:", j);
+    } catch (e) {
+      console.warn("[biblioteca] erro ao carregar csrf:", e);
+      _csrf = "";
+    }
   }
 
   async function loadMe() {
@@ -950,13 +961,15 @@
   async function removerDoc(id, titulo) {
     if (!confirm(`Remover "${titulo}"?\n\nIsso apaga o arquivo do servidor permanentemente.`)) return;
     try {
+      await loadCsrf();
+      if (!_csrf) throw new Error("token de segurança não carregou — recarregue a página (F5)");
       const r = await fetch(`/master/api/biblioteca/${id}`, {
         method: "DELETE",
         credentials: "include",
         headers: { "X-CSRF-Token": _csrf },
       });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || "falha");
+      const j = await r.json().catch(() => ({ success: false, error: `HTTP ${r.status}` }));
+      if (!j.success) throw new Error(j.error || `falha (HTTP ${r.status})`);
       await loadDocs();
     } catch (e) {
       alert(`Erro: ${e.message}`);
@@ -990,14 +1003,20 @@
     $("bibSalvar").disabled = true;
     $("bibSalvar").textContent = "Enviando…";
     try {
+      // Re-fetch do CSRF pra garantir token fresco — evita falha quando o
+      // token inicial nao carregou (race async) ou a sessao renovou
+      await loadCsrf();
+      if (!_csrf) {
+        throw new Error("token de segurança não carregou — recarregue a página (F5) e tente novamente");
+      }
       const r = await fetch("/master/api/biblioteca", {
         method: "POST",
         credentials: "include",
         headers: { "X-CSRF-Token": _csrf },
         body: fd,
       });
-      const j = await r.json();
-      if (!j.success) throw new Error(j.error || "falha");
+      const j = await r.json().catch(() => ({ success: false, error: `HTTP ${r.status}` }));
+      if (!j.success) throw new Error(j.error || `falha (HTTP ${r.status})`);
       fecharModal();
       await loadDocs();
     } catch (err) {
