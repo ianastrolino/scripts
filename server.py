@@ -113,7 +113,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=bool(os.environ.get("RAILWAY_ENVIRONMENT")),
     PERMANENT_SESSION_LIFETIME=43200,   # 12 horas
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024, # 1 MB — rejeita payloads gigantes antes de processar
+    MAX_CONTENT_LENGTH=25 * 1024 * 1024, # 25 MB — cobre upload da biblioteca (20MB max) + overhead form-data
 )
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
@@ -6154,6 +6154,190 @@ def unit_manual(unit: str):
 @app.route("/manual")
 def public_manual():
     return send_from_directory(UI_DIR, "manual.html")
+
+
+# ── Biblioteca de documentos (Manual da Marca - Parte 2) ────────────────────
+_BIBLIOTECA_DIR = DATA_DIR / "biblioteca"
+_BIBLIOTECA_INDEX = _BIBLIOTECA_DIR / "index.json"
+_BIBLIOTECA_MAX_SIZE = 20 * 1024 * 1024  # 20 MB
+
+
+def _biblioteca_load_index() -> dict:
+    """Le o index.json. Retorna {documentos: []} se nao existir."""
+    if not _BIBLIOTECA_INDEX.exists():
+        return {"documentos": []}
+    try:
+        data = json.loads(_BIBLIOTECA_INDEX.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or "documentos" not in data:
+            return {"documentos": []}
+        return data
+    except Exception:
+        app.logger.exception("[biblioteca] index corrompido")
+        return {"documentos": []}
+
+
+def _biblioteca_save_index(data: dict) -> None:
+    """Persiste atomicamente o index.json."""
+    _BIBLIOTECA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = _BIBLIOTECA_INDEX.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_BIBLIOTECA_INDEX)
+
+
+def _is_master_or_matriz(user: dict | None) -> bool:
+    """True se o usuario eh master ou matriz (perfil que gerencia a rede)."""
+    return bool(user and (user.get("master") or user.get("matriz")))
+
+
+@app.route("/api/biblioteca")
+@login_required
+def api_biblioteca_list():
+    """Lista documentos da biblioteca. Acesso pra qualquer usuario logado."""
+    data = _biblioteca_load_index()
+    docs = sorted(
+        data.get("documentos") or [],
+        key=lambda d: d.get("uploaded_em", ""),
+        reverse=True,
+    )
+    return _json({"success": True, "documentos": docs})
+
+
+@app.route("/api/biblioteca/<doc_id>/download")
+@login_required
+def api_biblioteca_download(doc_id: str):
+    """Serve o PDF. Inline (Content-Disposition: inline) pra preview no browser."""
+    data = _biblioteca_load_index()
+    doc = next((d for d in data.get("documentos") or [] if d.get("id") == doc_id), None)
+    if not doc:
+        return _json({"success": False, "error": "documento nao encontrado"}, 404)
+    arquivo = doc.get("arquivo", "")
+    if not arquivo or "/" in arquivo or "\\" in arquivo:  # path traversal guard
+        return _json({"success": False, "error": "arquivo invalido"}, 400)
+    p = _BIBLIOTECA_DIR / arquivo
+    if not p.exists():
+        return _json({"success": False, "error": "arquivo fisico ausente"}, 404)
+    return send_from_directory(
+        _BIBLIOTECA_DIR, arquivo,
+        mimetype="application/pdf",
+        as_attachment=False,  # preview inline
+        download_name=f"{doc.get('titulo', 'documento')}.pdf",
+    )
+
+
+@app.route("/master/api/biblioteca", methods=["POST"])
+@csrf_required
+def master_api_biblioteca_upload():
+    """Upload de PDF. Acesso pra master + matriz."""
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz podem subir documentos."}, 403)
+    try:
+        titulo    = (request.form.get("titulo") or "").strip()
+        descricao = (request.form.get("descricao") or "").strip()
+        categoria = (request.form.get("categoria") or "").strip() or "Outros"
+        arquivo   = request.files.get("arquivo")
+
+        if not titulo:
+            return _json({"success": False, "error": "Titulo obrigatorio."}, 400)
+        if not arquivo or not arquivo.filename:
+            return _json({"success": False, "error": "Arquivo PDF obrigatorio."}, 400)
+        if not arquivo.filename.lower().endswith(".pdf"):
+            return _json({"success": False, "error": "Apenas arquivos PDF sao aceitos."}, 400)
+
+        # Le pra checar tamanho. werkzeug FileStorage permite seek/tell.
+        arquivo.stream.seek(0, 2)  # SEEK_END
+        size = arquivo.stream.tell()
+        arquivo.stream.seek(0)
+        if size > _BIBLIOTECA_MAX_SIZE:
+            return _json({
+                "success": False,
+                "error": f"Arquivo muito grande ({size // 1024}KB). Maximo: 20MB."
+            }, 400)
+
+        # Persiste
+        _BIBLIOTECA_DIR.mkdir(parents=True, exist_ok=True)
+        doc_id = secrets.token_hex(8)
+        nome_disco = f"{doc_id}.pdf"
+        arquivo.save(_BIBLIOTECA_DIR / nome_disco)
+
+        data = _biblioteca_load_index()
+        data["documentos"].append({
+            "id":           doc_id,
+            "titulo":       titulo[:200],
+            "descricao":    descricao[:500],
+            "categoria":    categoria[:100],
+            "arquivo":      nome_disco,
+            "tamanho_bytes": size,
+            "uploaded_by":  user.get("email", ""),
+            "uploaded_em":  dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds"),
+        })
+        _biblioteca_save_index(data)
+
+        _write_audit_log(user, "biblioteca.upload", target=doc_id, payload={
+            "titulo": titulo, "categoria": categoria, "size_kb": size // 1024,
+        })
+        return _json({"success": True, "id": doc_id})
+    except Exception as exc:
+        app.logger.exception("[biblioteca.upload]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/biblioteca/<doc_id>", methods=["DELETE"])
+@csrf_required
+def master_api_biblioteca_delete(doc_id: str):
+    """Remove documento. Acesso pra master + matriz."""
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz podem remover documentos."}, 403)
+    try:
+        data = _biblioteca_load_index()
+        docs = data.get("documentos") or []
+        doc = next((d for d in docs if d.get("id") == doc_id), None)
+        if not doc:
+            return _json({"success": False, "error": "documento nao encontrado"}, 404)
+        # Remove arquivo fisico
+        arquivo = doc.get("arquivo", "")
+        if arquivo and "/" not in arquivo and "\\" not in arquivo:
+            try:
+                (_BIBLIOTECA_DIR / arquivo).unlink(missing_ok=True)
+            except Exception as exc:
+                app.logger.warning("[biblioteca.delete] falha ao remover arquivo: %s", exc)
+        # Remove do index
+        data["documentos"] = [d for d in docs if d.get("id") != doc_id]
+        _biblioteca_save_index(data)
+        _write_audit_log(user, "biblioteca.delete", target=doc_id, payload={
+            "titulo": doc.get("titulo", ""),
+        })
+        return _json({"success": True})
+    except Exception as exc:
+        app.logger.exception("[biblioteca.delete]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/api/biblioteca/<doc_id>", methods=["PUT"])
+@csrf_required
+def master_api_biblioteca_edit(doc_id: str):
+    """Edita metadata do documento (titulo/descricao/categoria) sem trocar arquivo."""
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz podem editar."}, 403)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        data = _biblioteca_load_index()
+        for d in data.get("documentos") or []:
+            if d.get("id") == doc_id:
+                if "titulo" in body:    d["titulo"]    = str(body["titulo"])[:200].strip() or d["titulo"]
+                if "descricao" in body: d["descricao"] = str(body["descricao"])[:500].strip()
+                if "categoria" in body: d["categoria"] = str(body["categoria"])[:100].strip() or d["categoria"]
+                d["editado_em"] = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+                d["editado_por"] = user.get("email", "")
+                _biblioteca_save_index(data)
+                _write_audit_log(user, "biblioteca.edit", target=doc_id, payload={"titulo": d["titulo"]})
+                return _json({"success": True, "documento": d})
+        return _json({"success": False, "error": "documento nao encontrado"}, 404)
+    except Exception as exc:
+        app.logger.exception("[biblioteca.edit]")
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/u/<unit>/fechamento")

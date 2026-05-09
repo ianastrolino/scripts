@@ -170,7 +170,7 @@
         { id: "erp-comparativo",  label: "Comparativo ERP",   icon: "relatorios", href: "/master/erp-comparativo", requires: "master" },
         { id: "email-prefs",   label: "Emails",         icon: "mail",       href: "/master/email-prefs", requires: "master" },
         { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
-        { id: "manual",        label: "Manual",         icon: "manual", hrefUnit: "/manual", href: "/manual" },
+        { id: "manual",        label: "Manual da Marca", icon: "manual", hrefUnit: "/manual", href: "/manual" },
       ],
     },
     {

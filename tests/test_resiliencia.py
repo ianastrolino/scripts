@@ -182,7 +182,9 @@ class TestPayloadLimit:
         assert r.status_code == 200
 
     def test_payload_gigante_rejeitado(self, client):
-        payload = {"placa": "ABC1234", "cliente": "C" * (2 * 1024 * 1024),
+        # MAX_CONTENT_LENGTH agora eh 25MB (aumentado pra acomodar upload da
+        # biblioteca). Usa payload > 25MB pra continuar testando o limite.
+        payload = {"placa": "ABC1234", "cliente": "C" * (26 * 1024 * 1024),
                    "servico": "LAUDO", "valor": 100.0, "fp": "pix"}
         r = client.post(f"/u/{UNIT}/api/caixa/lancar", json=payload)
         assert r.status_code == 413

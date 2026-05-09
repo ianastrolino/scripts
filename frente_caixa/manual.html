@@ -230,6 +230,119 @@
       box-shadow: var(--ds-shadow-md);
     }
     .btn-print:hover { background: var(--ds-accent-700); }
+
+    /* ── Biblioteca (Documentos da Marca) ─────────────────── */
+    .bib-admin {
+      display: flex; gap: 12px; align-items: center;
+      padding: 12px; background: var(--ds-surface-alt);
+      border: 1px dashed var(--ds-line); border-radius: var(--ds-radius-md);
+      margin-bottom: 14px;
+    }
+    .bib-filter { margin-bottom: 14px; }
+    .bib-select {
+      font: inherit; font-size: 13px;
+      padding: 6px 30px 6px 10px;
+      border: 1px solid var(--ds-line); border-radius: 6px;
+      background: var(--ds-surface); cursor: pointer;
+    }
+
+    .bib-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .bib-card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-md);
+      padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .bib-card:hover { border-color: var(--ds-line-strong); box-shadow: var(--ds-shadow-xs); }
+    .bib-card .bib-cat {
+      display: inline-block; align-self: flex-start;
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .05em; color: #1d4ed8;
+      background: #dbeafe; padding: 2px 9px; border-radius: 100px;
+    }
+    .bib-card .bib-titulo {
+      font-size: 14.5px; font-weight: 800; color: var(--ds-ink);
+      line-height: 1.3;
+    }
+    .bib-card .bib-desc {
+      font-size: 12.5px; color: var(--ds-ink-muted); line-height: 1.45;
+      flex: 1;
+    }
+    .bib-card .bib-meta {
+      font-size: 11px; color: var(--ds-ink-muted);
+      padding-top: 6px; border-top: 1px solid var(--ds-line);
+    }
+    .bib-card .bib-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+    .bib-btn {
+      font: inherit; font-size: 12px; font-weight: 700;
+      padding: 6px 12px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .bib-btn:hover { background: var(--ds-surface-alt); }
+    .bib-btn.primary { background: #111827; color: #fff; border-color: #111827; }
+    .bib-btn.primary:hover { background: #000; }
+    .bib-btn.danger  { color: #dc2626; border-color: #fecaca; }
+    .bib-btn.danger:hover { background: #fee2e2; }
+
+    .bib-empty {
+      padding: 30px; text-align: center; color: var(--ds-ink-muted);
+      font-size: 13px;
+      background: var(--ds-surface-alt); border: 1px dashed var(--ds-line);
+      border-radius: var(--ds-radius-md);
+    }
+
+    /* Modal upload */
+    .bib-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .bib-modal[hidden] { display: none; }
+    .bib-modal-content {
+      background: #fff; border-radius: 12px; padding: 22px;
+      max-width: 520px; width: calc(100% - 32px);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .bib-modal-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--ds-line);
+    }
+    .bib-modal-head h3 { margin: 0; font-size: 16px; font-weight: 800; }
+    .bib-modal-close {
+      background: none; border: none; font-size: 28px;
+      cursor: pointer; color: var(--ds-ink-muted); line-height: 1;
+      padding: 0 4px;
+    }
+    .bib-field { margin-bottom: 12px; }
+    .bib-field label {
+      display: block; font-size: 12px; font-weight: 700;
+      color: var(--ds-ink-muted); margin-bottom: 4px;
+    }
+    .bib-field input, .bib-field textarea {
+      width: 100%; box-sizing: border-box;
+      padding: 8px 10px; font: inherit; font-size: 13px;
+      border: 1px solid var(--ds-line); border-radius: 6px;
+      background: var(--ds-surface); color: var(--ds-ink);
+    }
+    .bib-field input:focus, .bib-field textarea:focus {
+      outline: none; border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+    .bib-modal-footer {
+      display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+      padding-top: 12px; border-top: 1px solid var(--ds-line);
+    }
+    .bib-err {
+      margin-top: 10px; padding: 8px 12px;
+      background: #fee2e2; color: #991b1b;
+      border-radius: 6px; font-size: 12.5px;
+    }
   </style>
 </head>
 <body>
@@ -240,9 +353,9 @@
   <div class="app-content">
     <div class="app-content-wrap">
       <div class="app-page-header">
-        <div class="app-page-eyebrow">Sistema</div>
-        <h1 class="app-page-title">Manual do Sistema<span class="app-page-unit" id="pageUnit">—</span></h1>
-        <p class="app-page-sub">Guia completo de operação do PDV, Fechamento e Gerencial</p>
+        <div class="app-page-eyebrow">Astro Vistorias</div>
+        <h1 class="app-page-title">Manual da Marca<span class="app-page-unit" id="pageUnit">—</span></h1>
+        <p class="app-page-sub">Operação do sistema + documentos da marca (manuais, critérios, apostilas)</p>
       </div>
 
       <div class="doc-wrap">
@@ -632,10 +745,80 @@
           <p>Entre em contato com o gestor da sua unidade ou com o administrativo da rede.</p>
         </div>
 
+        <!-- ═══════════════════════════════════════════════════════
+             PARTE 2 — DOCUMENTOS DA MARCA (PDFs)
+             Master/matriz fazem upload; todos baixam/visualizam.
+             ═══════════════════════════════════════════════════════ -->
+        <div class="doc-section" id="documentos">
+          <div class="doc-section-num">📚</div>
+          <h2 class="doc-section-title">Documentos da Marca</h2>
+          <p style="color:var(--ds-ink-muted);margin-bottom:18px">
+            Manuais técnicos, critérios de avaliação, apostilas de vistoria e outros materiais oficiais.
+          </p>
+
+          <!-- Botões admin (master/matriz) — ocultos pra operador -->
+          <div id="bibAdmin" class="bib-admin" hidden>
+            <button id="btnAddDoc" type="button" class="bib-btn primary">+ Adicionar documento</button>
+            <span style="font-size:12px;color:var(--ds-ink-muted)">
+              Apenas Master e Matriz veem este botão
+            </span>
+          </div>
+
+          <!-- Filtro por categoria -->
+          <div class="bib-filter">
+            <label style="font-size:12px;color:var(--ds-ink-muted);margin-right:8px">Categoria:</label>
+            <select id="bibFiltroCat" class="bib-select">
+              <option value="">Todas</option>
+            </select>
+          </div>
+
+          <div id="bibLista">
+            <div class="bib-empty">Carregando…</div>
+          </div>
+        </div>
+
       </div><!-- /.doc-wrap -->
     </div>
   </div>
 </main>
+
+<!-- Modal upload (overlay simples) -->
+<div id="bibModal" class="bib-modal" hidden>
+  <div class="bib-modal-content">
+    <div class="bib-modal-head">
+      <h3 id="bibModalTitle">Adicionar documento</h3>
+      <button class="bib-modal-close" type="button" id="bibModalClose">×</button>
+    </div>
+    <form id="bibForm" enctype="multipart/form-data">
+      <div class="bib-field">
+        <label>Título *</label>
+        <input type="text" id="bibTitulo" maxlength="200" required
+               placeholder="Ex: Manual de Vistoria Cautelar v3">
+      </div>
+      <div class="bib-field">
+        <label>Descrição</label>
+        <textarea id="bibDescricao" rows="3" maxlength="500"
+                  placeholder="Resumo do conteúdo (opcional)"></textarea>
+      </div>
+      <div class="bib-field">
+        <label>Categoria *</label>
+        <input type="text" id="bibCategoria" maxlength="100" required
+               placeholder="Ex: Manual Cautelar / Critério / Apostila"
+               list="bibCategoriasList">
+        <datalist id="bibCategoriasList"></datalist>
+      </div>
+      <div class="bib-field">
+        <label>Arquivo PDF * (máx 20MB)</label>
+        <input type="file" id="bibArquivo" accept=".pdf,application/pdf" required>
+      </div>
+      <div class="bib-modal-footer">
+        <button type="button" class="bib-btn" id="bibCancelar">Cancelar</button>
+        <button type="submit" class="bib-btn primary" id="bibSalvar">Salvar</button>
+      </div>
+      <div id="bibErr" class="bib-err" hidden></div>
+    </form>
+  </div>
+</div>
 
 <!-- Print button -->
 <div class="print-bar no-print">
@@ -661,6 +844,184 @@
       el.innerHTML = AstroShell.fpIcon(el.dataset.fpIcon) || "";
     });
   })();
+</script>
+
+<script>
+// ── Biblioteca de Documentos ───────────────────────────────────────────────
+(function () {
+  const $   = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const fmtSize = (b) => {
+    if (b < 1024) return b + " B";
+    if (b < 1024*1024) return (b/1024).toFixed(1) + " KB";
+    return (b/(1024*1024)).toFixed(1) + " MB";
+  };
+  const fmtDate = (iso) => {
+    if (!iso) return "—";
+    const [y,m,d] = String(iso).slice(0,10).split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  let _csrf = "";
+  let _isAdmin = false;
+  let _docs = [];
+
+  async function loadCsrf() {
+    try {
+      const r = await fetch("/api/csrf-token", { credentials: "include" });
+      _csrf = (await r.json()).token || "";
+    } catch {}
+  }
+
+  async function loadMe() {
+    try {
+      const r = await fetch("/api/me", { credentials: "include" });
+      const me = await r.json();
+      _isAdmin = !!(me.master || me.matriz);
+      $("bibAdmin").hidden = !_isAdmin;
+    } catch {}
+  }
+
+  async function loadDocs() {
+    const lista = $("bibLista");
+    try {
+      const r = await fetch("/api/biblioteca", { credentials: "include" });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      _docs = j.documentos || [];
+      atualizarFiltroCategorias();
+      render();
+    } catch (e) {
+      lista.innerHTML = `<div class="bib-empty" style="color:#991b1b">Erro: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function atualizarFiltroCategorias() {
+    const cats = [...new Set(_docs.map(d => d.categoria || "Outros"))].sort();
+    const sel = $("bibFiltroCat");
+    const atual = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>' +
+      cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    if (cats.includes(atual)) sel.value = atual;
+    // datalist do form
+    const dl = $("bibCategoriasList");
+    if (dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join("");
+  }
+
+  function render() {
+    const lista = $("bibLista");
+    const filtro = $("bibFiltroCat").value;
+    const filtrados = filtro ? _docs.filter(d => (d.categoria || "Outros") === filtro) : _docs;
+    if (!filtrados.length) {
+      lista.innerHTML = `<div class="bib-empty">
+        ${_docs.length === 0
+          ? "Nenhum documento ainda. Master/matriz pode adicionar pelo botão acima."
+          : "Nenhum documento nessa categoria."}
+      </div>`;
+      return;
+    }
+    lista.innerHTML = `<div class="bib-grid">${filtrados.map(d => `
+      <div class="bib-card" data-id="${esc(d.id)}">
+        <span class="bib-cat">${esc(d.categoria || "Outros")}</span>
+        <div class="bib-titulo">${esc(d.titulo)}</div>
+        ${d.descricao ? `<div class="bib-desc">${esc(d.descricao)}</div>` : ""}
+        <div class="bib-meta">
+          ${fmtSize(d.tamanho_bytes || 0)} · adicionado em ${fmtDate(d.uploaded_em)}
+          ${d.uploaded_by ? `por ${esc(d.uploaded_by.split("@")[0])}` : ""}
+        </div>
+        <div class="bib-acoes">
+          <a href="/api/biblioteca/${esc(d.id)}/download" target="_blank" rel="noopener" class="bib-btn primary">
+            👁 Visualizar
+          </a>
+          <a href="/api/biblioteca/${esc(d.id)}/download" download class="bib-btn">
+            ⬇ Baixar
+          </a>
+          ${_isAdmin ? `<button type="button" class="bib-btn danger" data-action="del" data-id="${esc(d.id)}" data-titulo="${esc(d.titulo)}">🗑 Remover</button>` : ""}
+        </div>
+      </div>`).join("")}</div>`;
+
+    if (_isAdmin) {
+      lista.querySelectorAll('[data-action="del"]').forEach(btn => {
+        btn.addEventListener("click", () => removerDoc(btn.dataset.id, btn.dataset.titulo));
+      });
+    }
+  }
+
+  async function removerDoc(id, titulo) {
+    if (!confirm(`Remover "${titulo}"?\n\nIsso apaga o arquivo do servidor permanentemente.`)) return;
+    try {
+      const r = await fetch(`/master/api/biblioteca/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-CSRF-Token": _csrf },
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      await loadDocs();
+    } catch (e) {
+      alert(`Erro: ${e.message}`);
+    }
+  }
+
+  function abrirModal() {
+    $("bibForm").reset();
+    $("bibErr").hidden = true;
+    $("bibModal").hidden = false;
+    setTimeout(() => $("bibTitulo").focus(), 50);
+  }
+  function fecharModal() { $("bibModal").hidden = true; }
+
+  async function submitDoc(e) {
+    e.preventDefault();
+    const errEl = $("bibErr");
+    errEl.hidden = true;
+    const fd = new FormData();
+    fd.append("titulo",    $("bibTitulo").value.trim());
+    fd.append("descricao", $("bibDescricao").value.trim());
+    fd.append("categoria", $("bibCategoria").value.trim());
+    const arq = $("bibArquivo").files[0];
+    if (!arq) { errEl.textContent = "Escolha um arquivo PDF."; errEl.hidden = false; return; }
+    if (arq.size > 20 * 1024 * 1024) {
+      errEl.textContent = `Arquivo muito grande (${fmtSize(arq.size)}). Máximo: 20 MB.`;
+      errEl.hidden = false; return;
+    }
+    fd.append("arquivo", arq);
+
+    $("bibSalvar").disabled = true;
+    $("bibSalvar").textContent = "Enviando…";
+    try {
+      const r = await fetch("/master/api/biblioteca", {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": _csrf },
+        body: fd,
+      });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || "falha");
+      fecharModal();
+      await loadDocs();
+    } catch (err) {
+      errEl.textContent = `Erro: ${err.message}`;
+      errEl.hidden = false;
+    } finally {
+      $("bibSalvar").disabled = false;
+      $("bibSalvar").textContent = "Salvar";
+    }
+  }
+
+  $("bibFiltroCat").addEventListener("change", render);
+  $("btnAddDoc").addEventListener("click", abrirModal);
+  $("bibModalClose").addEventListener("click", fecharModal);
+  $("bibCancelar").addEventListener("click", fecharModal);
+  $("bibForm").addEventListener("submit", submitDoc);
+  $("bibModal").addEventListener("click", (e) => { if (e.target.id === "bibModal") fecharModal(); });
+
+  (async () => {
+    await loadCsrf();
+    await loadMe();
+    await loadDocs();
+  })();
+})();
 </script>
 
 </body>
