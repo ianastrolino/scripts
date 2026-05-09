@@ -264,6 +264,18 @@
       letter-spacing: .05em; color: #1d4ed8;
       background: #dbeafe; padding: 2px 9px; border-radius: 100px;
     }
+    /* Cards estaticos (secoes do Manual do Sistema) — visual distinto */
+    .bib-card.bib-card-static {
+      background: linear-gradient(180deg, #faf5ff 0%, #fff 60%);
+      border-color: #e9d5ff;
+    }
+    .bib-card.bib-card-static:hover { border-color: #c084fc; }
+    .bib-card .bib-cat-static {
+      color: #6b21a8; background: #f3e8ff;
+    }
+    .bib-card .bib-icone {
+      font-size: 18px; margin-right: 4px;
+    }
     .bib-card .bib-titulo {
       font-size: 14.5px; font-weight: 800; color: var(--ds-ink);
       line-height: 1.3;
@@ -866,6 +878,26 @@
   let _isAdmin = false;
   let _docs = [];
 
+  // Secoes estaticas do Manual do Sistema — viram cards no grid junto com
+  // os PDFs uploaded. Cada card linka pra anchor da secao na mesma pagina.
+  const _SECOES_MANUAL = [
+    { anchor: "acesso",     titulo: "Acesso ao Sistema",
+      desc:  "Como fazer login, recuperar senha e navegar pelo painel.",
+      icone: "🔐" },
+    { anchor: "pdv",        titulo: "PDV — Caixa do Dia",
+      desc:  "Lançamento de vistorias, formas de pagamento, conferência antecipada com a planilha.",
+      icone: "💰" },
+    { anchor: "fechamento", titulo: "Fechamento de Caixa",
+      desc:  "Cruzamento PDV × planilha, decisões manuais e envio para o ERP (Tiny/Omie).",
+      icone: "✅" },
+    { anchor: "gerencial",  titulo: "Gerencial (Master)",
+      desc:  "Painéis de status, contas a receber, royalties e administração da rede.",
+      icone: "📊" },
+    { anchor: "faq",        titulo: "Perguntas Frequentes",
+      desc:  "Soluções rápidas para dúvidas e problemas comuns na operação.",
+      icone: "❓" },
+  ];
+
   async function loadCsrf() {
     try {
       const r = await fetch("/api/csrf-token", { credentials: "include", cache: "no-store" });
@@ -908,30 +940,65 @@
   }
 
   function atualizarFiltroCategorias() {
-    const cats = [...new Set(_docs.map(d => d.categoria || "Outros"))].sort();
+    // Categoria especial pras secoes estaticas + categorias livres dos PDFs
+    const cats = ["Manual do Sistema", ...new Set(_docs.map(d => d.categoria || "Outros"))]
+      .filter((v, i, a) => a.indexOf(v) === i)  // dedup preservando ordem
+      .sort();
     const sel = $("bibFiltroCat");
     const atual = sel.value;
     sel.innerHTML = '<option value="">Todas</option>' +
       cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
     if (cats.includes(atual)) sel.value = atual;
-    // datalist do form
+    // datalist do form (so categorias dos PDFs, nao o "Manual do Sistema")
     const dl = $("bibCategoriasList");
-    if (dl) dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join("");
+    if (dl) {
+      const catsDocs = [...new Set(_docs.map(d => d.categoria || "Outros"))].sort();
+      dl.innerHTML = catsDocs.map(c => `<option value="${esc(c)}">`).join("");
+    }
   }
 
   function render() {
     const lista = $("bibLista");
     const filtro = $("bibFiltroCat").value;
-    const filtrados = filtro ? _docs.filter(d => (d.categoria || "Outros") === filtro) : _docs;
-    if (!filtrados.length) {
+
+    // Cards estaticos do manual sao sempre renderizados primeiro, exceto
+    // quando filtro especifico de outra categoria estah ativo.
+    const mostrarSecoes = !filtro || filtro === "Manual do Sistema";
+    const docsFiltrados = !filtro || filtro === "Manual do Sistema"
+      ? (filtro ? [] : _docs)  // se filtra "Manual do Sistema", esconde PDFs
+      : _docs.filter(d => (d.categoria || "Outros") === filtro);
+
+    const totalCards = (mostrarSecoes ? _SECOES_MANUAL.length : 0) + docsFiltrados.length;
+    if (!totalCards) {
       lista.innerHTML = `<div class="bib-empty">
-        ${_docs.length === 0
+        ${_docs.length === 0 && !mostrarSecoes
           ? "Nenhum documento ainda. Master/matriz pode adicionar pelo botão acima."
-          : "Nenhum documento nessa categoria."}
+          : "Nenhum item nessa categoria."}
       </div>`;
       return;
     }
-    lista.innerHTML = `<div class="bib-grid">${filtrados.map(d => `
+
+    let html = '<div class="bib-grid">';
+
+    // Cards estaticos (secoes do Manual do Sistema)
+    if (mostrarSecoes) {
+      html += _SECOES_MANUAL.map(s => `
+        <div class="bib-card bib-card-static" data-anchor="${esc(s.anchor)}">
+          <span class="bib-cat bib-cat-static">Manual do Sistema</span>
+          <div class="bib-titulo"><span class="bib-icone">${s.icone}</span> ${esc(s.titulo)}</div>
+          <div class="bib-desc">${esc(s.desc)}</div>
+          <div class="bib-meta">Conteúdo da marca · sempre disponível</div>
+          <div class="bib-acoes">
+            <button type="button" class="bib-btn primary" data-action="ler" data-anchor="${esc(s.anchor)}">
+              📖 Ler
+            </button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    // Cards de PDFs uploaded
+    html += docsFiltrados.map(d => `
       <div class="bib-card" data-id="${esc(d.id)}">
         <span class="bib-cat">${esc(d.categoria || "Outros")}</span>
         <div class="bib-titulo">${esc(d.titulo)}</div>
@@ -949,13 +1016,25 @@
           </a>
           ${_isAdmin ? `<button type="button" class="bib-btn danger" data-action="del" data-id="${esc(d.id)}" data-titulo="${esc(d.titulo)}">🗑 Remover</button>` : ""}
         </div>
-      </div>`).join("")}</div>`;
+      </div>
+    `).join("");
 
+    html += "</div>";
+    lista.innerHTML = html;
+
+    // Bind acoes
     if (_isAdmin) {
       lista.querySelectorAll('[data-action="del"]').forEach(btn => {
         btn.addEventListener("click", () => removerDoc(btn.dataset.id, btn.dataset.titulo));
       });
     }
+    lista.querySelectorAll('[data-action="ler"]').forEach(btn => {
+      btn.addEventListener("click", () => {
+        const anchor = btn.dataset.anchor;
+        const target = document.getElementById(anchor);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
   }
 
   async function removerDoc(id, titulo) {
