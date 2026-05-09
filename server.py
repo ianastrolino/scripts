@@ -6152,6 +6152,7 @@ def unit_manual(unit: str):
 
 
 @app.route("/manual")
+@login_required
 def public_manual():
     return send_from_directory(UI_DIR, "manual.html")
 
