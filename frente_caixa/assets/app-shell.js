@@ -166,7 +166,8 @@
       group: "Sistema",
       items: [
         { id: "sistema",       label: "Sistema da Rede", icon: "wrench",     href: "/master/sistema", requires: "master" },
-        { id: "erp-config",    label: "Configuração ERP", icon: "wrench",    href: "/master/erp-config", requires: "master" },
+        { id: "erp-config",       label: "Configuração ERP",  icon: "wrench",     href: "/master/erp-config", requires: "master" },
+        { id: "erp-comparativo",  label: "Comparativo ERP",   icon: "relatorios", href: "/master/erp-comparativo", requires: "master" },
         { id: "email-prefs",   label: "Emails",         icon: "mail",       href: "/master/email-prefs", requires: "master" },
         { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
         { id: "manual",        label: "Manual",         icon: "manual", hrefUnit: "/manual", href: "/manual" },

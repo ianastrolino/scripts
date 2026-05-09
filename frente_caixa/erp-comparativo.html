@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Comparativo Tiny × Omie</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .toolbar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .toolbar select, .toolbar button {
+      font: inherit; font-size: 13px;
+      padding: 7px 14px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 720px) { .compare-grid { grid-template-columns: 1fr; } }
+
+    .erp-card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 18px 22px;
+      border-top: 4px solid var(--ds-ink-muted);
+    }
+    .erp-card.tiny { border-top-color: #6366f1; }
+    .erp-card.omie { border-top-color: #14b8a6; }
+    .erp-card .label {
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--ds-ink-muted);
+    }
+    .erp-card .name {
+      font-size: 22px; font-weight: 800; color: var(--ds-ink);
+      margin: 2px 0 14px;
+    }
+    .erp-card .stat {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 6px 0; border-bottom: 1px solid var(--ds-line);
+      font-size: 13px;
+    }
+    .erp-card .stat:last-child { border-bottom: none; }
+    .erp-card .stat .k { color: var(--ds-ink-muted); }
+    .erp-card .stat .v { font-weight: 700; color: var(--ds-ink); font-variant-numeric: tabular-nums; }
+    .erp-card .v.fail { color: #dc2626; }
+
+    .tbl { width: 100%; border-collapse: collapse;
+      font-size: 12.5px; font-variant-numeric: tabular-nums;
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg); overflow: hidden;
+    }
+    .tbl th, .tbl td {
+      padding: 9px 12px; text-align: left;
+      border-bottom: 1px solid var(--ds-line);
+    }
+    .tbl th {
+      font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ds-ink-muted);
+      background: var(--ds-surface-alt);
+    }
+    .tbl tbody tr:hover td { background: var(--ds-surface-alt); }
+    .tbl .num { text-align: right; }
+    .pill {
+      display: inline-block; padding: 1px 8px; border-radius: 100px;
+      font-size: 10.5px; font-weight: 800;
+    }
+    .pill.tiny { background: #e0e7ff; color: #3730a3; }
+    .pill.omie { background: #ccfbf1; color: #0f766e; }
+    .pill.zero { color: #9ca3af; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap" style="max-width:1100px;">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Sistema</div>
+        <h1 class="app-page-title">Comparativo Tiny × Omie</h1>
+        <p class="app-page-sub">Volume e falhas por ERP nas últimas N janelas. Útil pra decidir qual sistema fica.</p>
+      </div>
+
+      <div class="toolbar">
+        <select id="selDias">
+          <option value="7">Últimos 7 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+        <button id="btnRefresh">↻ Atualizar</button>
+        <span id="periodLabel" style="font-size:12.5px;color:var(--ds-ink-muted);margin-left:auto"></span>
+      </div>
+
+      <div class="compare-grid">
+        <div class="erp-card tiny">
+          <div class="label">Tiny</div>
+          <div class="name" id="tinyTotal">—</div>
+          <div class="stat"><span class="k">Envios</span> <span class="v" id="tinyCount">—</span></div>
+          <div class="stat"><span class="k">OK</span> <span class="v" id="tinyOk">—</span></div>
+          <div class="stat"><span class="k">Falhas</span> <span class="v fail" id="tinyFalhas">—</span></div>
+          <div class="stat"><span class="k">Unidades ativas</span> <span class="v" id="tinyUnits">—</span></div>
+        </div>
+        <div class="erp-card omie">
+          <div class="label">Omie</div>
+          <div class="name" id="omieTotal">—</div>
+          <div class="stat"><span class="k">Envios</span> <span class="v" id="omieCount">—</span></div>
+          <div class="stat"><span class="k">OK</span> <span class="v" id="omieOk">—</span></div>
+          <div class="stat"><span class="k">Falhas</span> <span class="v fail" id="omieFalhas">—</span></div>
+          <div class="stat"><span class="k">Unidades ativas</span> <span class="v" id="omieUnits">—</span></div>
+        </div>
+      </div>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Unidade</th>
+            <th>ERP atual</th>
+            <th class="num">Envios Tiny</th>
+            <th class="num">R$ Tiny</th>
+            <th class="num">Envios Omie</th>
+            <th class="num">R$ Omie</th>
+            <th class="num">Falhas</th>
+            <th>Último envio</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--ds-ink-muted)">Carregando…</td></tr>
+        </tbody>
+      </table>
+
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "erp-comparativo",
+  breadcrumbs: [{ label: "Sistema" }, { label: "Comparativo ERP", current: true }]
+});
+
+const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+const num = v => Number(v || 0).toLocaleString("pt-BR");
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const fmtBr = iso => {
+  if (!iso) return "—";
+  const [y, m, d] = String(iso).slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
+};
+const fmtUltimo = iso => {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return "—"; }
+};
+
+async function carregar() {
+  const dias = document.getElementById("selDias").value;
+  document.getElementById("tbody").innerHTML =
+    `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--ds-ink-muted)">Carregando…</td></tr>`;
+  try {
+    const r = await fetch(`/master/api/erp-stats?dias=${dias}`).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+
+    document.getElementById("periodLabel").textContent =
+      `${fmtBr(r.periodo.de)} — ${fmtBr(r.periodo.ate)}`;
+
+    // Cards de totais
+    const t = r.totais.tiny, o = r.totais.omie;
+    document.getElementById("tinyTotal").textContent = brl(t.valor);
+    document.getElementById("tinyCount").textContent = num(t.count);
+    document.getElementById("tinyOk").textContent = num(t.ok);
+    document.getElementById("tinyFalhas").textContent = num(t.falhas);
+    document.getElementById("omieTotal").textContent = brl(o.valor);
+    document.getElementById("omieCount").textContent = num(o.count);
+    document.getElementById("omieOk").textContent = num(o.ok);
+    document.getElementById("omieFalhas").textContent = num(o.falhas);
+
+    const unitsTinyAtivas = r.por_unidade.filter(u => u.tiny.count > 0).length;
+    const unitsOmieAtivas = r.por_unidade.filter(u => u.omie.count > 0).length;
+    document.getElementById("tinyUnits").textContent = `${unitsTinyAtivas}`;
+    document.getElementById("omieUnits").textContent = `${unitsOmieAtivas}`;
+
+    // Tabela
+    const tb = document.getElementById("tbody");
+    if (!r.por_unidade.length) {
+      tb.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--ds-ink-muted)">Nenhuma unidade</td></tr>`;
+      return;
+    }
+    tb.innerHTML = r.por_unidade.map(u => {
+      const totFalhas = (u.tiny.falhas || 0) + (u.omie.falhas || 0);
+      return `<tr>
+        <td><strong>${esc(u.nome)}</strong></td>
+        <td><span class="pill ${u.erp_atual}">${u.erp_atual.toUpperCase()}</span></td>
+        <td class="num"><span class="${u.tiny.count ? '' : 'pill zero'}">${num(u.tiny.count)}</span></td>
+        <td class="num">${u.tiny.valor ? brl(u.tiny.valor) : "—"}</td>
+        <td class="num"><span class="${u.omie.count ? '' : 'pill zero'}">${num(u.omie.count)}</span></td>
+        <td class="num">${u.omie.valor ? brl(u.omie.valor) : "—"}</td>
+        <td class="num" style="color:${totFalhas > 0 ? '#dc2626' : 'inherit'}">${totFalhas}</td>
+        <td>${fmtUltimo(u.ultimo_envio)}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    document.getElementById("tbody").innerHTML =
+      `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--ds-danger)">Erro: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+document.getElementById("selDias").addEventListener("change", carregar);
+document.getElementById("btnRefresh").addEventListener("click", carregar);
+
+carregar();
+</script>
+</body>
+</html>

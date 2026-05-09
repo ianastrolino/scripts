@@ -40,6 +40,8 @@ MASTER_USER = {"email": "admin@astro.com", "name": "Admin", "unit": None, "maste
 def master_client(tmp_path):
     server.DATA_DIR = tmp_path
     server.UNITS = UNITS_FIX
+    # _UNITS_CUSTOM_FILE eh resolvido no import — redirecionar pra tmp_path
+    server._UNITS_CUSTOM_FILE = tmp_path / "units_custom.json"
     server.app.config["TESTING"] = True
     with patch.object(server, "_current_user", return_value=MASTER_USER):
         with server.app.test_client() as c:
@@ -198,3 +200,62 @@ class TestEndpointOmieConfig:
         r = master_client.get("/master/erp-config")
         assert r.status_code == 200
         assert b"Configura" in r.data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Endpoint trocar ERP
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestTrocarErp:
+    def test_troca_tiny_pra_omie_persiste(self, master_client):
+        r = master_client.post("/master/api/unidades/barueri/erp", json={"erp": "omie"})
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["success"] is True
+        assert body["erp"] == "omie"
+        # Persiste em units_custom.json + recarrega UNITS
+        custom = server._load_units_custom()
+        assert custom["barueri"]["erp"] == "omie"
+
+    def test_erp_invalido_retorna_400(self, master_client):
+        r = master_client.post("/master/api/unidades/barueri/erp", json={"erp": "bling"})
+        assert r.status_code == 400
+
+    def test_unit_inexistente_retorna_400(self, master_client):
+        r = master_client.post("/master/api/unidades/inexistente/erp", json={"erp": "omie"})
+        assert r.status_code == 400
+
+    def test_mesmo_erp_eh_noop(self, master_client):
+        r = master_client.post("/master/api/unidades/barueri/erp", json={"erp": "tiny"})
+        assert r.status_code == 200
+        assert r.get_json().get("noop") is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Endpoint /master/api/erp-stats
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestErpStats:
+    def test_sem_envios_retorna_zeros(self, master_client):
+        r = master_client.get("/master/api/erp-stats?dias=7")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["totais"]["tiny"]["count"] == 0
+        assert body["totais"]["omie"]["count"] == 0
+        # Tem linha pra cada unit
+        assert len(body["por_unidade"]) == len(UNITS_FIX)
+
+    def test_periodo_obedece_param_dias(self, master_client):
+        r = master_client.get("/master/api/erp-stats?dias=14")
+        body = r.get_json()
+        assert body["periodo"]["dias"] == 14
+
+    def test_dias_invalido_clampa(self, master_client):
+        r = master_client.get("/master/api/erp-stats?dias=9999")
+        assert r.status_code == 200
+        assert r.get_json()["periodo"]["dias"] <= 365
+
+    def test_pagina_comparativo_serve(self, master_client):
+        r = master_client.get("/master/erp-comparativo")
+        assert r.status_code == 200
+        assert b"Comparativo" in r.data

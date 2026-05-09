@@ -4040,6 +4040,123 @@ def master_api_unidades_criar():
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/erp-stats")
+@master_view_required
+def master_api_erp_stats():
+    """Comparativo Tiny vs Omie por unit nos ultimos N dias.
+
+    Query: ?dias=30 (default 30). Agrega envios_erp por (unit, erp).
+    Retorna stats globais + breakdown por unidade.
+    """
+    try:
+        dias = int(request.args.get("dias", 30) or 30)
+        dias = max(1, min(dias, 365))
+        hoje = dt.date.today()
+        de   = (hoje - dt.timedelta(days=dias - 1)).isoformat()
+        ate  = hoje.isoformat()
+
+        agg = {
+            "tiny": {"count": 0, "valor": 0.0, "ok": 0, "falhas": 0, "ultimas": []},
+            "omie": {"count": 0, "valor": 0.0, "ok": 0, "falhas": 0, "ultimas": []},
+        }
+        por_unidade: list[dict] = []
+
+        for slug, info in UNITS.items():
+            unit_dir = _unit_state_dir(slug)
+            erp_atual = (info.get("erp") or "tiny").lower()
+            row = {
+                "unit": slug, "nome": info.get("nome", slug),
+                "erp_atual": erp_atual,
+                "tiny": {"count": 0, "valor": 0.0, "falhas": 0},
+                "omie": {"count": 0, "valor": 0.0, "falhas": 0},
+                "ultimo_envio": None,
+            }
+            try:
+                envios = _db_list_envios(slug, unit_dir, date_from=de, date_to=ate, limit=5000)
+            except Exception:
+                envios = []
+            for e in envios:
+                kind = (e.get("erp") or "tiny").lower()
+                if kind not in row:
+                    continue
+                row[kind]["count"] += 1
+                row[kind]["valor"] += float(e.get("valor", 0) or 0)
+                if (e.get("status") or "") == "falha":
+                    row[kind]["falhas"] += 1
+                # Maior timestamp = ultimo
+                ts = e.get("timestamp") or ""
+                if ts and (not row["ultimo_envio"] or ts > row["ultimo_envio"]):
+                    row["ultimo_envio"] = ts
+            # Acumula global
+            for kind in ("tiny", "omie"):
+                agg[kind]["count"]  += row[kind]["count"]
+                agg[kind]["valor"]  += row[kind]["valor"]
+                agg[kind]["ok"]     += (row[kind]["count"] - row[kind]["falhas"])
+                agg[kind]["falhas"] += row[kind]["falhas"]
+            row["tiny"]["valor"] = round(row["tiny"]["valor"], 2)
+            row["omie"]["valor"] = round(row["omie"]["valor"], 2)
+            por_unidade.append(row)
+
+        for kind in ("tiny", "omie"):
+            agg[kind]["valor"] = round(agg[kind]["valor"], 2)
+            del agg[kind]["ultimas"]  # nao preenchi; remove pra nao confundir
+
+        return _json({
+            "success":   True,
+            "periodo":   {"de": de, "ate": ate, "dias": dias},
+            "totais":    agg,
+            "por_unidade": sorted(por_unidade, key=lambda x: x["nome"].lower()),
+        })
+    except Exception as exc:
+        app.logger.exception("[erp-stats]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/erp-comparativo")
+@master_view_required
+def master_erp_comparativo_page():
+    return _nocache(send_from_directory(UI_DIR, "erp-comparativo.html"))
+
+
+# ── Trocar ERP da unit (tiny <-> omie) ──────────────────────────────────────
+@app.route("/master/api/unidades/<slug>/erp", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_erp_set(slug: str):
+    """Muda o ERP da unit (tiny <-> omie). Persiste em units_custom.json.
+
+    NAO mexe em envios_erp ja gravados (registros legacy ficam com erp antigo).
+    Operacao reversivel: trocar de volta nao apaga nada.
+    """
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        erp_novo = (body.get("erp") or "").strip().lower()
+        if erp_novo not in ("tiny", "omie"):
+            return _json({"success": False, "error": "erp deve ser 'tiny' ou 'omie'"}, 400)
+        erp_atual = (UNITS.get(slug, {}).get("erp") or "tiny").lower()
+        if erp_atual == erp_novo:
+            return _json({"success": True, "erp": erp_novo, "noop": True})
+
+        custom = _load_units_custom()
+        # Cria entry parcial se a unit veio do env (sem custom)
+        if slug not in custom:
+            custom[slug] = {}
+        custom[slug]["erp"] = erp_novo
+        _save_units_custom(custom)
+        _reload_units()
+
+        user = _current_user() or {}
+        _write_audit_log(user, "unit.set_erp", target=slug, payload={
+            "de": erp_atual, "para": erp_novo,
+        })
+        return _json({"success": True, "erp": erp_novo, "de": erp_atual})
+    except Exception as exc:
+        app.logger.exception("[unit.set_erp] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 # ── Omie config ──────────────────────────────────────────────────────────────
 @app.route("/master/api/unidades/<slug>/omie-config")
 @master_only_required

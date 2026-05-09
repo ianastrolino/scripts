@@ -109,6 +109,16 @@
           <select id="selUnit" class="grow"></select>
           <span id="erpBadge" class="pill tiny">—</span>
         </div>
+        <div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ds-line)">
+          <div style="font-size:12.5px;color:var(--ds-ink-muted);flex:1;min-width:240px;">
+            Trocar ERP desta unidade:
+          </div>
+          <select id="selErp" style="height:32px;border:1px solid var(--ds-line);border-radius:6px;padding:0 10px;">
+            <option value="tiny">Tiny</option>
+            <option value="omie">Omie</option>
+          </select>
+          <button id="btnTrocarErp" class="btn">Trocar ERP</button>
+        </div>
       </div>
 
       <!-- Bloco Omie: aparece quando unit.erp = omie OU quando user quiser configurar -->
@@ -205,12 +215,52 @@ function onUnitChange() {
   const badge = document.getElementById("erpBadge");
   badge.textContent = erp.toUpperCase();
   badge.className = `pill ${erp}`;
+  // Sincroniza o selector de troca com o ERP atual
+  const selErp = document.getElementById("selErp");
+  if (selErp) selErp.value = erp;
   // Mostra cards Omie só se erp=omie (ou se você quiser preparar a unit pra omie)
   const showOmie = erp === "omie";
   document.getElementById("omieCard").hidden = !showOmie;
   document.getElementById("contaCard").hidden = !showOmie;
   document.getElementById("catCard").hidden = !showOmie;
   if (showOmie) loadOmieConfig();
+}
+
+async function trocarErp() {
+  const novoErp = document.getElementById("selErp").value;
+  const sel = document.getElementById("selUnit");
+  const erpAtual = sel.options[sel.selectedIndex]?.dataset?.erp || "tiny";
+  if (novoErp === erpAtual) {
+    toast(`Unit ja esta em ${novoErp.toUpperCase()}`);
+    return;
+  }
+  if (!confirm(
+    `Trocar ERP da unit "${_currentSlug}" de ${erpAtual.toUpperCase()} pra ${novoErp.toUpperCase()}?\n\n` +
+    `Envios anteriores ficam preservados (cada um com o ERP da epoca).\n` +
+    `Operacao reversivel — pode trocar de volta a qualquer momento.`
+  )) return;
+  const btn = document.getElementById("btnTrocarErp");
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/master/api/unidades/${_currentSlug}/erp`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
+      body: JSON.stringify({ erp: novoErp }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || "falha");
+    toast(`ERP trocado pra ${novoErp.toUpperCase()}`);
+    // Atualiza dataset + dispara reload
+    sel.options[sel.selectedIndex].dataset.erp = novoErp;
+    sel.options[sel.selectedIndex].textContent =
+      sel.options[sel.selectedIndex].textContent.replace(/\((tiny|omie)\)$/, `(${novoErp})`);
+    onUnitChange();
+  } catch (e) {
+    toast(`Erro: ${e.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function loadOmieConfig() {
@@ -363,6 +413,7 @@ async function recarregarCategoriasOmie() {
 }
 
 document.getElementById("selUnit").addEventListener("change", onUnitChange);
+document.getElementById("btnTrocarErp").addEventListener("click", trocarErp);
 document.getElementById("btnSalvarCred").addEventListener("click", salvarCredenciais);
 document.getElementById("btnTestar").addEventListener("click", testarConexao);
 document.getElementById("btnRecarregarContas").addEventListener("click", carregarContas);
