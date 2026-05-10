@@ -71,7 +71,15 @@
       "Bash(node -e \"console.log\\('JS OK'\\)\")",
       "Bash(python -m pytest tests/test_biblioteca.py -x --tb=short)",
       "Bash(node -e \"console.log\\('OK'\\)\")",
-      "Bash(python -m pytest tests/test_biblioteca.py --tb=short -q)"
+      "Bash(python -m pytest tests/test_biblioteca.py --tb=short -q)",
+      "Bash(python -m pytest tests/ --tb=line -q)",
+      "Bash(grep -nE \"time\\\\.sleep|requests\\\\.get.*timeout=[0-9]{3,}\" /home/astro/projeto/scripts/server.py)",
+      "Bash(grep -iE \"\\\\.env$|\\\\.pem|\\\\.key$|credentials|secrets\\\\.json|tokens\\\\.json|password\")",
+      "Bash(git -C /home/astro/projeto/scripts ls-files)",
+      "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"TINY_REFRESH_TOKEN\")",
+      "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"RESEND_API_KEY\")",
+      "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"B2_KEY\")",
+      "Bash(python -m pytest tests/test_security_hardening.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"

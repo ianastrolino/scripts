@@ -194,6 +194,45 @@ def _maintenance_gate():
     return None
 
 
+# ── Headers de seguranca em todas as respostas ────────────────────────────────
+@app.after_request
+def _add_security_headers(response):
+    """Adiciona headers defensivos em toda resposta.
+
+    - X-Content-Type-Options: nosniff — protege contra MIME sniffing (browser
+      forcando content-type errado)
+    - X-Frame-Options: SAMEORIGIN — bloqueia iframe cross-origin (clickjacking)
+    - Strict-Transport-Security — forca HTTPS por 1 ano (Railway ja faz na borda
+      mas o header reforca o cache do client)
+    - Referrer-Policy — nao vaza URL completa (com query/path) pra origens externas
+    - Content-Security-Policy — limita origens de script/style/img/fetch.
+      'unsafe-inline' eh aceito em script/style por causa do legado de paginas
+      com <script> e style="..." inline. Refator pra CSP estrita fica pra depois.
+    """
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # HSTS so quando a request veio por HTTPS (evita problema em desenvolvimento)
+    if request.is_secure or request.headers.get("X-Forwarded-Proto") == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    return response
+
+
 # ── Rate limiting para login (por IP e por email) ────────────────────────────
 _LOGIN_WINDOW  = 60
 _LOGIN_MAX     = 5
@@ -217,6 +256,26 @@ def _login_rate_check(ip: str) -> bool:
         if len(_login_attempts[ip]) >= _LOGIN_MAX:
             return False
         _login_attempts[ip].append(now)
+        return True
+
+
+# Rate-limit pro endpoint publico /api/log/js-error.
+# Operador real raramente passa de 1-2 erros/dia; 20/minuto eh largueza pra
+# casos de bug em loop sem virar vetor de DoS de logs.
+_JS_ERROR_WINDOW = 60
+_JS_ERROR_MAX    = 20
+_js_error_attempts: dict[str, list[float]] = collections.defaultdict(list)
+_js_error_lock = threading.Lock()
+
+
+def _js_error_rate_check(ip: str) -> bool:
+    """Retorna True se o IP pode reportar mais erros JS, False se bloqueado."""
+    now = time.monotonic()
+    with _js_error_lock:
+        _js_error_attempts[ip] = [t for t in _js_error_attempts[ip] if now - t < _JS_ERROR_WINDOW]
+        if len(_js_error_attempts[ip]) >= _JS_ERROR_MAX:
+            return False
+        _js_error_attempts[ip].append(now)
         return True
 
 def _email_is_blocked(email: str) -> float:
@@ -2344,7 +2403,11 @@ def master_api_sistema_saude():
 def api_log_js_error():
     """Coleta erros JS do frontend pra diagnostico. Sem auth (pra captar
     erros mesmo de tela de login). Aceita body small, ignora se gigante.
-    Rate limit informal: max 30 entries/min por sessao (in-memory)."""
+    Rate-limit por IP (20/minuto) — protege contra DoS de logs."""
+    ip = (request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()) or "unknown"
+    if not _js_error_rate_check(ip):
+        # 429 silencioso — frontend nao precisa retentar agressivamente
+        return _json({"ok": False, "rate_limited": True}, 429)
     try:
         data = request.get_json(force=True, silent=True) or {}
         msg = (data.get("message") or "")[:500]
