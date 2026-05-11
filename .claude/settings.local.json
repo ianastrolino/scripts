@@ -79,7 +79,8 @@
       "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"TINY_REFRESH_TOKEN\")",
       "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"RESEND_API_KEY\")",
       "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"B2_KEY\")",
-      "Bash(python -m pytest tests/test_security_hardening.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_security_hardening.py -x --tb=short)",
+      "Bash(python -m pytest tests/test_fa_vencimento.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"

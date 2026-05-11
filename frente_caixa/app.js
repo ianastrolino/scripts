@@ -774,12 +774,14 @@ function renderAlertasV2() {
         render();
       }
     }
-    // Acoplamento marcar_faturado → converte AV → FA na linha
+    // Acoplamento marcar_faturado → converte AV → FA na linha.
+    // avPagamento limpa pra is_av_paid retornar False no backend — assim o
+    // vencimento eh recalculado pra ultimo dia do mes (regra dos faturados).
     if (tipo === "marcar_faturado" && alvo.rid) {
       const rec = state.records.find((r) => r.id === alvo.rid);
       if (rec) {
         rec.fp = "FA";
-        rec.avPagamento = "faturado";
+        rec.avPagamento = "";
         _marcarEditado(rec, tipo, motivo);
         render();
       }

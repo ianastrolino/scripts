@@ -115,8 +115,23 @@ def _is_doc_already_registered(exc: Exception) -> bool:
 
 
 def is_av_paid(av_pagamento: str) -> bool:
-    """Retorna True apenas se o registro AV tem forma de pagamento definida (nao 'pendente')."""
-    return bool(av_pagamento) and av_pagamento.lower() not in ("pendente", "pending", "")
+    """Retorna True apenas se o registro AV tem forma de pagamento AV real definida.
+
+    Vazio / 'pendente' / 'pending' → False (AV nao pago ainda)
+    'faturado' / 'fa' / 'FA'      → False (eh FATURADO, nao AV — vencimento
+                                            deve ser ultimo dia do mes,
+                                            nao a data do servico)
+    'dinheiro' / 'pix' / 'debito' / 'credito' → True (AV pago de fato)
+    """
+    if not av_pagamento:
+        return False
+    norm = av_pagamento.lower().strip()
+    if norm in ("pendente", "pending", ""):
+        return False
+    # Faturado nunca eh AV pago — vai pro vencimento ultimo-dia-do-mes
+    if norm in ("faturado", "fa"):
+        return False
+    return True
 
 
 def resolve_categoria_id(config: dict[str, Any], servico: str) -> int | None:
