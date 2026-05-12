@@ -11,69 +11,150 @@
   <link rel="stylesheet" href="/assets/design-system.css">
   <link rel="stylesheet" href="/assets/app-shell.css">
   <style>
+    .wrap { max-width: 820px; }
+
+    /* ── Hero das regras ──────────────────────────────────────── */
+    .regras-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      margin-bottom: 22px;
+    }
+    @media (max-width: 640px) {
+      .regras-grid { grid-template-columns: 1fr; }
+    }
+    .regra-card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 16px 18px;
+      position: relative; overflow: hidden;
+    }
+    .regra-card::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; background: var(--accent);
+    }
+    .regra-card.q1 { --accent: #3b82f6; }
+    .regra-card.q2 { --accent: #f59e0b; }
+    .regra-card .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .06em; padding: 3px 9px; border-radius: 100px;
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .regra-card .periodo {
+      font-size: 13.5px; color: var(--ds-ink-muted); line-height: 1.45;
+    }
+    .regra-card .periodo strong { color: var(--ds-ink); font-weight: 700; }
+    .regra-card .seta {
+      font-size: 18px; color: var(--accent); margin: 8px 0; line-height: 1;
+    }
+    .regra-card .vence {
+      font-size: 16px; font-weight: 800; color: var(--ds-ink);
+      line-height: 1.2;
+    }
+    .regra-card .vence-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--ds-ink-muted);
+      margin-bottom: 2px;
+    }
+
+    /* ── Adicionar ────────────────────────────────────────────── */
     .card {
       background: var(--ds-surface); border: 1px solid var(--ds-line);
       border-radius: var(--ds-radius-lg);
-      padding: 18px 22px;
-      margin-bottom: 16px;
-      max-width: 720px;
+      padding: 18px 22px; margin-bottom: 16px;
     }
-    .card-title { font-size: 14px; font-weight: 800; color: var(--ds-ink); margin-bottom: 4px; }
-    .card-sub   { font-size: 12.5px; color: var(--ds-ink-muted); margin-bottom: 14px; line-height: 1.5; }
+    .card-title { font-size: 14px; font-weight: 800; color: var(--ds-ink); margin-bottom: 12px; }
 
-    .row-add {
-      display: flex; gap: 8px; margin-bottom: 14px;
+    .add-row {
+      display: flex; gap: 8px;
     }
-    .row-add input {
-      flex: 1; height: 36px;
-      border: 1px solid var(--ds-line); border-radius: 6px;
-      padding: 0 12px; font-family: inherit; font-size: 13.5px;
-      background: var(--ds-surface);
+    .add-row input {
+      flex: 1; height: 40px;
+      border: 1px solid var(--ds-line); border-radius: 8px;
+      padding: 0 14px; font-family: inherit; font-size: 14px;
+      background: var(--ds-surface); transition: border-color .15s, box-shadow .15s;
     }
-    .row-add input:focus {
-      outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    .add-row input:focus {
+      outline: none; border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.15);
     }
     .btn {
-      font: inherit; font-size: 13px; font-weight: 700;
-      padding: 8px 14px; border-radius: 6px;
+      font: inherit; font-size: 13.5px; font-weight: 700;
+      padding: 0 18px; height: 40px; border-radius: 8px;
       border: 1px solid var(--ds-line); background: var(--ds-surface);
       color: var(--ds-ink); cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: background .15s, transform .05s;
     }
+    .btn:active { transform: translateY(1px); }
     .btn:hover { background: var(--ds-surface-alt); }
     .btn.primary { background: #111827; color: #fff; border-color: #111827; }
     .btn.primary:hover { background: #000; }
-    .btn.danger { color: #dc2626; border-color: #fecaca; }
+    .btn.danger { color: #dc2626; border-color: transparent; padding: 6px 10px; height: auto; }
     .btn.danger:hover { background: #fee2e2; }
 
+    .hint {
+      font-size: 12px; color: var(--ds-ink-muted);
+      margin-top: 10px; line-height: 1.5;
+      padding: 10px 12px; background: var(--ds-surface-alt);
+      border-radius: 6px; border-left: 2px solid var(--ds-line-strong);
+    }
+    .hint strong { color: var(--ds-ink); }
+
+    /* ── Lista ────────────────────────────────────────────────── */
     .lista {
-      display: flex; flex-direction: column; gap: 6px;
+      display: flex; flex-direction: column; gap: 8px;
     }
     .item {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 14px;
-      background: var(--ds-surface-alt); border: 1px solid var(--ds-line);
-      border-radius: 6px; font-size: 13.5px;
+      padding: 12px 16px;
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: 8px;
+      animation: fadein .2s ease-out;
     }
-    .item-nome { font-weight: 700; color: var(--ds-ink); }
-    .item-meta { font-size: 11px; color: var(--ds-ink-muted); margin-top: 2px; }
-    .empty { padding: 20px; text-align: center; color: var(--ds-ink-muted); font-size: 13px; font-style: italic; }
-
-    .regra-box {
-      background: #fef3c7; border-left: 3px solid #f59e0b;
-      padding: 12px 16px; border-radius: 6px;
-      font-size: 12.5px; color: #78350f; line-height: 1.55;
-      margin-bottom: 14px;
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(-2px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    .regra-box strong { display: block; margin-bottom: 4px; }
+    .item:hover { border-color: var(--ds-line-strong); }
+    .item-info { display: flex; align-items: center; gap: 12px; }
+    .item-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; flex-shrink: 0;
+    }
+    .item-nome { font-weight: 700; font-size: 14px; color: var(--ds-ink); }
+    .item-meta { font-size: 11.5px; color: var(--ds-ink-muted); margin-top: 1px; }
 
+    .empty {
+      padding: 32px 20px; text-align: center;
+      color: var(--ds-ink-muted); font-size: 13px;
+      background: var(--ds-surface-alt);
+      border: 1px dashed var(--ds-line);
+      border-radius: 8px;
+    }
+    .empty-icone { font-size: 32px; margin-bottom: 8px; opacity: .5; }
+
+    .contador {
+      font-size: 11.5px; font-weight: 700;
+      color: var(--ds-ink-muted);
+      margin-bottom: 8px;
+    }
+
+    /* ── Toast ───────────────────────────────────────────────── */
     .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #111827; color: #fff; padding: 10px 18px;
-      border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: #111827; color: #fff; padding: 11px 20px;
+      border-radius: 10px; font-size: 13px; font-weight: 600;
+      opacity: 0; transition: all .25s ease;
       pointer-events: none; z-index: 100;
+      box-shadow: 0 6px 24px rgba(0,0,0,.18);
     }
-    .toast.show { opacity: 1; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .toast.err { background: #dc2626; }
+    .toast.ok  { background: #16a34a; }
   </style>
 </head>
 <body>
@@ -82,38 +163,49 @@
 
 <main id="app-main">
   <div class="app-content">
-    <div class="app-content-wrap">
+    <div class="app-content-wrap wrap">
       <div class="app-page-header">
         <div class="app-page-eyebrow">Sistema</div>
         <h1 class="app-page-title">Clientes com regra especial de vencimento</h1>
         <p class="app-page-sub">Faturados destes clientes vencem em datas diferentes do padrão (último dia do mês).</p>
       </div>
 
-      <div class="card">
-        <div class="card-title">Fechamento quinzenal</div>
-        <div class="card-sub">
-          Vistorias destes clientes seguem regra:
+      <!-- Cards visuais das duas quinzenas -->
+      <div class="regras-grid">
+        <div class="regra-card q1">
+          <span class="badge">📅 Quinzena 1</span>
+          <div class="periodo">Vistoria entre <strong>dia 1 e 15</strong></div>
+          <div class="seta">↓</div>
+          <div class="vence-label">Vencimento</div>
+          <div class="vence">Dia 15 do mesmo mês</div>
         </div>
-        <div class="regra-box">
-          <strong>Regra A — Fechamento quinzenal</strong>
-          • Vistoria entre <strong>dia 1 e 15</strong> → vence <strong>dia 15</strong> do mesmo mês<br>
-          • Vistoria entre <strong>dia 16 e fim do mês</strong> → vence <strong>último dia do mês</strong>
-        </div>
-
-        <div class="row-add">
-          <input id="inpNovo" type="text" placeholder="Nome do cliente (ex: KAVAK)" maxlength="100">
-          <button id="btnAdd" class="btn primary">+ Adicionar</button>
-        </div>
-
-        <div class="card-sub">
-          <strong>Match por substring:</strong> "KAVAK" reconhece "KAVAK BRASIL LTDA", "Kavak Soluções", etc.
-          Use a parte mais identificável do nome.
-        </div>
-
-        <div id="lista" class="lista">
-          <div class="empty">Carregando…</div>
+        <div class="regra-card q2">
+          <span class="badge">📅 Quinzena 2</span>
+          <div class="periodo">Vistoria entre <strong>dia 16 e fim</strong></div>
+          <div class="seta">↓</div>
+          <div class="vence-label">Vencimento</div>
+          <div class="vence">Último dia do mês</div>
         </div>
       </div>
+
+      <!-- Adicionar -->
+      <div class="card">
+        <div class="card-title">+ Adicionar cliente</div>
+        <div class="add-row">
+          <input id="inpNovo" type="text" placeholder="Nome do cliente (ex: KAVAK)" maxlength="100" autocomplete="off">
+          <button id="btnAdd" class="btn primary">Adicionar</button>
+        </div>
+        <div class="hint">
+          <strong>Match por substring:</strong> digite "KAVAK" e o sistema reconhece "KAVAK BRASIL LTDA", "Kavak Soluções", etc. Use a parte mais identificável e única do nome.
+        </div>
+      </div>
+
+      <!-- Lista -->
+      <div id="contador" class="contador"></div>
+      <div id="lista" class="lista">
+        <div class="empty"><div class="empty-icone">⏳</div>Carregando…</div>
+      </div>
+
     </div>
   </div>
 </main>
@@ -128,9 +220,12 @@ AstroShell.init({
 });
 
 const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-const toast = (msg, err) => {
+const toast = (msg, kind) => {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.classList.toggle("err", !!err);
+  t.textContent = msg;
+  t.classList.remove("err", "ok");
+  if (kind === "err") t.classList.add("err");
+  if (kind === "ok")  t.classList.add("ok");
   t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 1800);
 };
@@ -154,23 +249,36 @@ async function carregar() {
     render();
   } catch (e) {
     document.getElementById("lista").innerHTML =
-      `<div class="empty" style="color:#991b1b">Erro: ${esc(e.message)}</div>`;
+      `<div class="empty" style="color:#991b1b"><div class="empty-icone">⚠️</div>Erro: ${esc(e.message)}</div>`;
   }
 }
 
 function render() {
   const div = document.getElementById("lista");
+  const contador = document.getElementById("contador");
   if (!_lista.length) {
-    div.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    contador.textContent = "";
+    div.innerHTML = `
+      <div class="empty">
+        <div class="empty-icone">📋</div>
+        Nenhum cliente cadastrado ainda.<br>
+        <span style="font-size:11.5px">Adicione o primeiro acima.</span>
+      </div>`;
     return;
   }
+  contador.textContent = `${_lista.length} ${_lista.length === 1 ? "cliente cadastrado" : "clientes cadastrados"}`;
   div.innerHTML = _lista.map(nome => `
     <div class="item">
-      <div>
-        <div class="item-nome">${esc(nome)}</div>
-        <div class="item-meta">Match por substring</div>
+      <div class="item-info">
+        <div class="item-avatar">${esc(nome.charAt(0))}</div>
+        <div>
+          <div class="item-nome">${esc(nome)}</div>
+          <div class="item-meta">Quinzenal · match por substring</div>
+        </div>
       </div>
-      <button type="button" class="btn danger" data-nome="${esc(nome)}">Remover</button>
+      <button type="button" class="btn danger" data-nome="${esc(nome)}">
+        Remover
+      </button>
     </div>
   `).join("");
   div.querySelectorAll("button[data-nome]").forEach(b => {
@@ -195,21 +303,22 @@ async function salvarLista(nova) {
 async function adicionar() {
   const inp = document.getElementById("inpNovo");
   const nome = inp.value.trim().toUpperCase();
-  if (!nome) { toast("Digite o nome", true); return; }
-  if (_lista.includes(nome)) { toast("Já cadastrado", true); return; }
+  if (!nome) { toast("Digite o nome do cliente", "err"); inp.focus(); return; }
+  if (_lista.includes(nome)) { toast("Já cadastrado", "err"); return; }
   try {
     await salvarLista([..._lista, nome]);
     inp.value = "";
-    toast(`${nome} adicionado`);
-  } catch (e) { toast(`Erro: ${e.message}`, true); }
+    inp.focus();
+    toast(`${nome} adicionado`, "ok");
+  } catch (e) { toast(`Erro: ${e.message}`, "err"); }
 }
 
 async function remover(nome) {
-  if (!confirm(`Remover "${nome}" da lista?\n\nFaturados dele voltam a vencer no último dia do mês.`)) return;
+  if (!confirm(`Remover "${nome}" da lista?\n\nFaturados deste cliente voltam a vencer no último dia do mês.`)) return;
   try {
     await salvarLista(_lista.filter(n => n !== nome));
-    toast(`${nome} removido`);
-  } catch (e) { toast(`Erro: ${e.message}`, true); }
+    toast(`${nome} removido`, "ok");
+  } catch (e) { toast(`Erro: ${e.message}`, "err"); }
 }
 
 document.getElementById("btnAdd").addEventListener("click", adicionar);

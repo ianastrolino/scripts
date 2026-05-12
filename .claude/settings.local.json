@@ -81,7 +81,8 @@
       "Bash(git -C /home/astro/projeto/scripts log --all --oneline -S \"B2_KEY\")",
       "Bash(python -m pytest tests/test_security_hardening.py -x --tb=short)",
       "Bash(python -m pytest tests/test_fa_vencimento.py -x --tb=short)",
-      "Bash(python -m pytest tests/test_quinzenal.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_quinzenal.py -x --tb=short)",
+      "Bash(python -m pytest tests/test_quinzenal.py --tb=short -q)"
     ],
     "additionalDirectories": [
       "/home/astml/projeto/scripts/tests"
