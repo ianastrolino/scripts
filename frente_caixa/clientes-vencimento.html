@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Clientes Quinzenais</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 18px 22px;
+      margin-bottom: 16px;
+      max-width: 720px;
+    }
+    .card-title { font-size: 14px; font-weight: 800; color: var(--ds-ink); margin-bottom: 4px; }
+    .card-sub   { font-size: 12.5px; color: var(--ds-ink-muted); margin-bottom: 14px; line-height: 1.5; }
+
+    .row-add {
+      display: flex; gap: 8px; margin-bottom: 14px;
+    }
+    .row-add input {
+      flex: 1; height: 36px;
+      border: 1px solid var(--ds-line); border-radius: 6px;
+      padding: 0 12px; font-family: inherit; font-size: 13.5px;
+      background: var(--ds-surface);
+    }
+    .row-add input:focus {
+      outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+    .btn {
+      font: inherit; font-size: 13px; font-weight: 700;
+      padding: 8px 14px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-surface-alt); }
+    .btn.primary { background: #111827; color: #fff; border-color: #111827; }
+    .btn.primary:hover { background: #000; }
+    .btn.danger { color: #dc2626; border-color: #fecaca; }
+    .btn.danger:hover { background: #fee2e2; }
+
+    .lista {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px;
+      background: var(--ds-surface-alt); border: 1px solid var(--ds-line);
+      border-radius: 6px; font-size: 13.5px;
+    }
+    .item-nome { font-weight: 700; color: var(--ds-ink); }
+    .item-meta { font-size: 11px; color: var(--ds-ink-muted); margin-top: 2px; }
+    .empty { padding: 20px; text-align: center; color: var(--ds-ink-muted); font-size: 13px; font-style: italic; }
+
+    .regra-box {
+      background: #fef3c7; border-left: 3px solid #f59e0b;
+      padding: 12px 16px; border-radius: 6px;
+      font-size: 12.5px; color: #78350f; line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .regra-box strong { display: block; margin-bottom: 4px; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111827; color: #fff; padding: 10px 18px;
+      border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s;
+      pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .toast.err { background: #dc2626; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Sistema</div>
+        <h1 class="app-page-title">Clientes com regra especial de vencimento</h1>
+        <p class="app-page-sub">Faturados destes clientes vencem em datas diferentes do padrão (último dia do mês).</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Fechamento quinzenal</div>
+        <div class="card-sub">
+          Vistorias destes clientes seguem regra:
+        </div>
+        <div class="regra-box">
+          <strong>Regra A — Fechamento quinzenal</strong>
+          • Vistoria entre <strong>dia 1 e 15</strong> → vence <strong>dia 15</strong> do mesmo mês<br>
+          • Vistoria entre <strong>dia 16 e fim do mês</strong> → vence <strong>último dia do mês</strong>
+        </div>
+
+        <div class="row-add">
+          <input id="inpNovo" type="text" placeholder="Nome do cliente (ex: KAVAK)" maxlength="100">
+          <button id="btnAdd" class="btn primary">+ Adicionar</button>
+        </div>
+
+        <div class="card-sub">
+          <strong>Match por substring:</strong> "KAVAK" reconhece "KAVAK BRASIL LTDA", "Kavak Soluções", etc.
+          Use a parte mais identificável do nome.
+        </div>
+
+        <div id="lista" class="lista">
+          <div class="empty">Carregando…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "clientes-vencimento",
+  breadcrumbs: [{ label: "Sistema" }, { label: "Clientes Quinzenais", current: true }]
+});
+
+const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const toast = (msg, err) => {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.toggle("err", !!err);
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1800);
+};
+
+let _csrf = "";
+let _lista = [];
+
+async function loadCsrf() {
+  try {
+    const r = await fetch("/api/csrf-token", { credentials: "include", cache: "no-store" });
+    _csrf = (await r.json()).token || "";
+  } catch {}
+}
+
+async function carregar() {
+  try {
+    const r = await fetch("/master/api/clientes-vencimento", { credentials: "include" });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || "falha");
+    _lista = j.config.quinzenal || [];
+    render();
+  } catch (e) {
+    document.getElementById("lista").innerHTML =
+      `<div class="empty" style="color:#991b1b">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+function render() {
+  const div = document.getElementById("lista");
+  if (!_lista.length) {
+    div.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+    return;
+  }
+  div.innerHTML = _lista.map(nome => `
+    <div class="item">
+      <div>
+        <div class="item-nome">${esc(nome)}</div>
+        <div class="item-meta">Match por substring</div>
+      </div>
+      <button type="button" class="btn danger" data-nome="${esc(nome)}">Remover</button>
+    </div>
+  `).join("");
+  div.querySelectorAll("button[data-nome]").forEach(b => {
+    b.addEventListener("click", () => remover(b.dataset.nome));
+  });
+}
+
+async function salvarLista(nova) {
+  await loadCsrf();
+  const r = await fetch("/master/api/clientes-vencimento", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrf },
+    body: JSON.stringify({ quinzenal: nova }),
+  });
+  const j = await r.json().catch(() => ({success:false, error:`HTTP ${r.status}`}));
+  if (!j.success) throw new Error(j.error || "falha");
+  _lista = j.config.quinzenal || [];
+  render();
+}
+
+async function adicionar() {
+  const inp = document.getElementById("inpNovo");
+  const nome = inp.value.trim().toUpperCase();
+  if (!nome) { toast("Digite o nome", true); return; }
+  if (_lista.includes(nome)) { toast("Já cadastrado", true); return; }
+  try {
+    await salvarLista([..._lista, nome]);
+    inp.value = "";
+    toast(`${nome} adicionado`);
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+async function remover(nome) {
+  if (!confirm(`Remover "${nome}" da lista?\n\nFaturados dele voltam a vencer no último dia do mês.`)) return;
+  try {
+    await salvarLista(_lista.filter(n => n !== nome));
+    toast(`${nome} removido`);
+  } catch (e) { toast(`Erro: ${e.message}`, true); }
+}
+
+document.getElementById("btnAdd").addEventListener("click", adicionar);
+document.getElementById("inpNovo").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); adicionar(); }
+});
+
+(async () => { await loadCsrf(); await carregar(); })();
+</script>
+</body>
+</html>

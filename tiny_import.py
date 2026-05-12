@@ -134,6 +134,32 @@ def is_av_paid(av_pagamento: str) -> bool:
     return True
 
 
+def vencimento_quinzenal(data_iso: str) -> str:
+    """Calcula vencimento pra cliente em fechamento quinzenal.
+
+    Regra:
+      - Vistorias de dia 1 a 15 → vence dia 15 do mesmo mes
+      - Vistorias de dia 16 ao fim → vence ultimo dia do mes
+
+    Ex: 06/05 → 15/05 (vistoria dia 6, primeira quinzena, vence dia 15)
+        18/05 → 31/05 (segunda quinzena, vence fim do mes)
+
+    Aceita ISO ('2026-05-06') ou BR ('06/05/2026'). Retorna sempre ISO.
+    """
+    s = (data_iso or "").strip()
+    try:
+        if "/" in s:
+            d, m, y = s.split("/")
+            data = dt.date(int(y), int(m), int(d))
+        else:
+            data = dt.date.fromisoformat(s[:10])
+    except Exception:
+        return data_iso  # falha silenciosa — caller decide o que fazer
+    if data.day <= 15:
+        return data.replace(day=15).isoformat()
+    return last_day_of_month(data.isoformat())
+
+
 def resolve_categoria_id(config: dict[str, Any], servico: str) -> int | None:
     """Resolve o ID de categoria com base no servico, com fallback para categoria_id global."""
     categoria_ids: dict[str, Any] = config.get("categoria_ids") or {}
@@ -1010,8 +1036,18 @@ class TinyImporter:
         av = is_av_paid(record.av_pagamento)
         payment_key = record.av_pagamento if av else record.fp
         payment_id = self.resolve_payment(payment_key)
-        # AV: ja recebido na data do servico; FA: sempre ultimo dia do mes
-        due = record.data if av else last_day_of_month(record.data)
+        # Vencimento:
+        #   AV pago → dia do servico
+        #   FA com cliente quinzenal → vencimento_quinzenal (dia 15 ou ultimo)
+        #   FA padrao → ultimo dia do mes
+        if av:
+            due = record.data
+        else:
+            modo = (self.config.get("vencimento_modo_cliente_fn", lambda nome: None))(record.cliente)
+            if modo == "quinzenal":
+                due = vencimento_quinzenal(record.data)
+            else:
+                due = last_day_of_month(record.data)
 
         payload: dict[str, Any] = {
             "data": record.data,

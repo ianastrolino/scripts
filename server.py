@@ -1207,11 +1207,19 @@ def _build_unit_config(unit: str) -> dict[str, Any]:
     # Se nao existe, retorna {} — OmieImporter trata gracefully.
     omie_cfg = _load_omie_config(unit)
 
-    return merge_config(DEFAULT_CONFIG, {
+    merged = merge_config(DEFAULT_CONFIG, {
         "state_dir": str(_unit_state_dir(unit)),
         "tiny": tiny,
         "omie": omie_cfg,
     })
+    # Callback pra importer (Tiny/Omie) saber regras especiais por cliente.
+    # Nao serializa em JSON (eh funcao) — fica na config in-memory.
+    merged["vencimento_modo_cliente_fn"] = _modo_vencimento_cliente
+    # Importer le da raiz (config["vencimento_modo_cliente_fn"]) mas tiny tambem
+    # le do tiny["vencimento_modo_cliente_fn"] pra compatibilidade.
+    merged["tiny"]["vencimento_modo_cliente_fn"] = _modo_vencimento_cliente
+    merged["omie"]["vencimento_modo_cliente_fn"] = _modo_vencimento_cliente
+    return merged
 
 
 def _omie_config_path(unit: str) -> Path:
@@ -1260,6 +1268,65 @@ def _save_omie_config(unit: str, cfg: dict[str, Any]) -> None:
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(p)
+
+
+# ── Clientes com regras especiais de vencimento (ex: quinzenal) ─────────────
+# Storage simples em /data/clientes_vencimento.json. Lista de palavras-chave
+# (substring case-insensitive normalizada) que disparam a regra. Editavel
+# via /master/clientes-vencimento (master/matriz).
+_CLIENTES_VENC_FILE = DATA_DIR / "clientes_vencimento.json"
+
+
+def _load_clientes_vencimento() -> dict[str, list[str]]:
+    """Carrega config de regras de vencimento por cliente.
+
+    Formato: {"quinzenal": ["KAVAK", "..."]}
+    Cada item da lista eh palavra-chave de match por substring (normalize_key).
+    """
+    if not _CLIENTES_VENC_FILE.exists():
+        return {"quinzenal": []}
+    try:
+        data = json.loads(_CLIENTES_VENC_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"quinzenal": []}
+        # Normaliza
+        return {
+            "quinzenal": [str(c).strip().upper() for c in (data.get("quinzenal") or []) if str(c).strip()],
+        }
+    except Exception:
+        app.logger.warning("[clientes_vencimento] arquivo corrompido")
+        return {"quinzenal": []}
+
+
+def _save_clientes_vencimento(cfg: dict) -> None:
+    """Persiste config (so chaves conhecidas)."""
+    _CLIENTES_VENC_FILE.parent.mkdir(parents=True, exist_ok=True)
+    clean = {
+        "quinzenal": sorted({str(c).strip().upper() for c in (cfg.get("quinzenal") or []) if str(c).strip()}),
+    }
+    tmp = _CLIENTES_VENC_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_CLIENTES_VENC_FILE)
+
+
+def _modo_vencimento_cliente(cliente_nome: str) -> str | None:
+    """Verifica se o cliente cai em alguma regra especial.
+
+    Retorna 'quinzenal' se o nome contem alguma palavra-chave da lista, ou
+    None se nao bate em nenhuma regra (usa default — ultimo dia do mes).
+
+    Match por substring case-insensitive, ignora acentos. Ex: lista tem
+    'KAVAK' → bate com 'KAVAK BRASIL LTDA', 'Kavak Soluções', etc.
+    """
+    if not cliente_nome:
+        return None
+    from tiny_import import normalize_key
+    cliente_key = normalize_key(cliente_nome)
+    cfg = _load_clientes_vencimento()
+    for kw in cfg.get("quinzenal", []):
+        if normalize_key(kw) in cliente_key:
+            return "quinzenal"
+    return None
 
 
 def _seed_tokens(unit: str, config: dict[str, Any]) -> None:
@@ -2266,6 +2333,42 @@ def master_email_prefs_page():
 @master_only_required
 def master_erp_config_page():
     return _nocache(send_from_directory(UI_DIR, "erp-config.html"))
+
+
+# ── Clientes com regras especiais de vencimento ──────────────────────────────
+@app.route("/master/api/clientes-vencimento", methods=["GET"])
+@master_view_required
+def master_api_clientes_vencimento_get():
+    """Retorna a config atual de regras de vencimento por cliente."""
+    return _json({"success": True, "config": _load_clientes_vencimento()})
+
+
+@app.route("/master/api/clientes-vencimento", methods=["POST"])
+@csrf_required
+def master_api_clientes_vencimento_save():
+    """Salva lista de clientes com regra especial de vencimento.
+    Acesso: master + matriz (mesma logica da biblioteca)."""
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz."}, 403)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        cfg = {
+            "quinzenal": body.get("quinzenal") or [],
+        }
+        _save_clientes_vencimento(cfg)
+        _write_audit_log(user, "clientes_vencimento.save", target="quinzenal",
+                         payload={"count": len(cfg["quinzenal"])})
+        return _json({"success": True, "config": _load_clientes_vencimento()})
+    except Exception as exc:
+        app.logger.exception("[clientes-vencimento.save]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/clientes-vencimento")
+@master_view_required
+def master_clientes_vencimento_page():
+    return _nocache(send_from_directory(UI_DIR, "clientes-vencimento.html"))
 
 
 @app.route("/master/api/sistema/saude")

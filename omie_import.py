@@ -35,6 +35,7 @@ from tiny_import import (
     normalize_key,
     is_av_paid,
     money_as_float,
+    vencimento_quinzenal,
 )
 
 
@@ -314,9 +315,19 @@ class OmieImporter:
                 f"servico '{record.servico}' sem categoria mapeada — configurar em categoria_ids",
             )
 
-        # Vencimento: AV = mesma data do servico, FA = ultimo dia do mes
+        # Vencimento:
+        #   AV pago → dia do servico
+        #   FA com cliente quinzenal → vencimento_quinzenal
+        #   FA padrao → ultimo dia do mes
         av = is_av_paid(record.av_pagamento)
-        venc_iso = record.data if av else last_day_of_month(record.data)
+        if av:
+            venc_iso = record.data
+        else:
+            modo_fn = self.config.get("vencimento_modo_cliente_fn") or (lambda nome: None)
+            if modo_fn(record.cliente) == "quinzenal":
+                venc_iso = vencimento_quinzenal(record.data)
+            else:
+                venc_iso = last_day_of_month(record.data)
         venc_br = _iso_para_br(venc_iso)
 
         param = {
