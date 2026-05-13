@@ -5998,14 +5998,82 @@ def api_snapshot_create(unit: str):
 # Fonte: vistorias_planilha (populada quando a planilha eh importada,
 # independente de envio pro ERP). NAO conta avulsos do PDV.
 
+# Regra de premiacao (Fase 3 — definida com Ian em 2026-05-13):
+# - Meta: 171 vistorias no mes corrente
+# - Ao bater a meta, TODAS as vistorias do mes contam (retroativo)
+# - Valor por tipo:
+#     CAUTELAR + PINTURA → R$ 10,00
+#     CAUTELAR (sem pintura) → R$ 5,00
+#     TRANSFERENCIA / VISTORIA MOVEL → R$ 2,00
+#     Outros (verificacao, pesquisa, etc) → R$ 0,00 (mas contam pra meta)
+_PREMIO_META_VISTORIAS = 171
+_PREMIO_VALORES = {
+    "cautelar_pintura": 10.00,
+    "cautelar":         5.00,
+    "transferencia":    2.00,
+    "outros":           0.00,
+}
+
+
+def _classifica_servico_premio(servico: str) -> str:
+    """Categoriza servico pra calculo de premio.
+
+    Retorna uma das chaves de _PREMIO_VALORES.
+    Match por substring no nome ja normalizado em uppercase.
+    """
+    s = (servico or "").upper()
+    # CAUTELAR + PINTURA tem prioridade — checa antes de CAUTELAR generico
+    if "PINTURA" in s and "CAUTELAR" in s:
+        return "cautelar_pintura"
+    if "CAUTELAR" in s:
+        return "cautelar"
+    if "TRANSFERENCIA" in s or "VISTORIA MOVEL" in s:
+        return "transferencia"
+    return "outros"
+
+
+def _calcula_premio_perito(qtd_total: int, breakdown_categoria: dict[str, int]) -> dict:
+    """Calcula premio do perito a partir do total de vistorias e da quebra por
+    categoria de premio.
+
+    breakdown_categoria: {"cautelar_pintura": N, "cautelar": M, "transferencia": K, "outros": J}
+
+    Retorna:
+      {
+        "meta": 171,
+        "qtd_total": N,
+        "bate_meta": bool,
+        "premio_total": float,
+        "premio_por_categoria": {categoria: {qtd, valor_unit, subtotal}},
+      }
+    """
+    bate = qtd_total >= _PREMIO_META_VISTORIAS
+    por_cat: dict[str, dict] = {}
+    total = 0.0
+    for cat, vu in _PREMIO_VALORES.items():
+        qtd = int(breakdown_categoria.get(cat, 0))
+        subtotal = round(qtd * vu, 2) if bate else 0.0
+        por_cat[cat] = {"qtd": qtd, "valor_unit": vu, "subtotal": subtotal}
+        total += subtotal
+    return {
+        "meta":                 _PREMIO_META_VISTORIAS,
+        "qtd_total":            qtd_total,
+        "bate_meta":            bate,
+        "premio_total":         round(total, 2),
+        "premio_por_categoria": por_cat,
+    }
+
+
 def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
-    """Agrega vistorias por perito. Retorna lista ordenada por valor total desc."""
+    """Agrega vistorias por perito. Retorna lista ordenada por valor total desc.
+    Inclui calculo de premio (Fase 3)."""
     por_perito: dict[str, dict] = {}
     for r in rows:
         p = (r.get("perito") or "").strip() or "(sem perito)"
         bucket = por_perito.setdefault(p, {
             "perito": p, "qtd": 0, "valor": 0.0,
             "por_servico": {},  # nome → {qtd, valor}
+            "por_categoria_premio": {},  # categoria_premio → qtd
         })
         bucket["qtd"] += 1
         bucket["valor"] += float(r.get("valor") or 0)
@@ -6013,6 +6081,9 @@ def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
         s_bucket = bucket["por_servico"].setdefault(servico, {"qtd": 0, "valor": 0.0})
         s_bucket["qtd"] += 1
         s_bucket["valor"] += float(r.get("valor") or 0)
+        # Quebra por categoria de premio (pra calculo no fim)
+        cat = _classifica_servico_premio(servico)
+        bucket["por_categoria_premio"][cat] = bucket["por_categoria_premio"].get(cat, 0) + 1
     out: list[dict] = []
     for p, b in por_perito.items():
         ticket = round(b["valor"] / b["qtd"], 2) if b["qtd"] else 0.0
@@ -6024,12 +6095,14 @@ def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
         # Arredonda valores
         for s in servicos:
             s["valor"] = round(s["valor"], 2)
+        premio = _calcula_premio_perito(b["qtd"], b["por_categoria_premio"])
         out.append({
             "perito":       p,
             "qtd":          b["qtd"],
             "valor":        round(b["valor"], 2),
             "ticket_medio": ticket,
             "por_servico":  servicos,
+            "premio":       premio,
         })
     out.sort(key=lambda x: -x["valor"])
     return out
@@ -6127,14 +6200,23 @@ def api_relatorio_vistoriadores():
             p["pct_qtd"]   = round((p["qtd"] / total_qtd * 100), 1) if total_qtd else 0.0
             p["pct_valor"] = round((p["valor"] / total_val * 100), 1) if total_val else 0.0
 
+        total_premio = round(sum(p["premio"]["premio_total"] for p in por_perito), 2)
+        peritos_batendo = sum(1 for p in por_perito if p["premio"]["bate_meta"])
+
         resp: dict = {
             "success":  True,
             "periodo":  {"inicio": inicio, "fim": fim},
             "filtros":  {"unit": unit_filter or None, "servico": servico_filter, "perito": perito_filter},
             "totais":   {
-                "qtd":          total_qtd,
-                "valor":        round(total_val, 2),
-                "ticket_medio": round(total_val / total_qtd, 2) if total_qtd else 0.0,
+                "qtd":             total_qtd,
+                "valor":           round(total_val, 2),
+                "ticket_medio":    round(total_val / total_qtd, 2) if total_qtd else 0.0,
+                "premio_total":    total_premio,
+                "peritos_batendo": peritos_batendo,
+            },
+            "premio_regra": {
+                "meta":    _PREMIO_META_VISTORIAS,
+                "valores": _PREMIO_VALORES,
             },
             "peritos":  por_perito,
             "unidades_consideradas": unidades,

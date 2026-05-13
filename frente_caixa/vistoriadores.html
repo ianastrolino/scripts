@@ -32,10 +32,11 @@
     .toolbar button.primary:hover { opacity: .9; }
 
     .cards-row {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;
       margin-bottom: 18px;
     }
-    @media (max-width: 720px) { .cards-row { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 980px) { .cards-row { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px) { .cards-row { grid-template-columns: repeat(2, 1fr); } }
     .stat-card {
       background: var(--ds-surface); border: 1px solid var(--ds-line);
       border-radius: var(--ds-radius-lg);
@@ -50,10 +51,15 @@
       font-size: 22px; font-weight: 800; color: var(--ds-ink);
       margin-top: 4px; font-variant-numeric: tabular-nums;
     }
+    .stat-card .sub {
+      font-size: 11px; color: var(--ds-ink-muted); margin-top: 2px;
+    }
     .stat-card.qtd { border-top-color: #6366f1; }
     .stat-card.valor { border-top-color: #14b8a6; }
     .stat-card.ticket { border-top-color: #f59e0b; }
     .stat-card.peritos { border-top-color: #8b5cf6; }
+    .stat-card.premio { border-top-color: #059669; }
+    .stat-card.premio .val { color: #059669; }
 
     .ranking {
       background: var(--ds-surface); border: 1px solid var(--ds-line);
@@ -72,7 +78,7 @@
     .perito-row:last-child { border-bottom: none; }
     .perito-head {
       display: grid;
-      grid-template-columns: 36px 1fr 90px 130px 90px 70px;
+      grid-template-columns: 36px 1fr 90px 130px 130px 110px 70px;
       gap: 10px; align-items: center;
       padding: 12px 18px; cursor: pointer;
       transition: background .15s;
@@ -107,6 +113,45 @@
       text-align: right; font-size: 12px; color: var(--ds-ink-muted);
       font-variant-numeric: tabular-nums;
     }
+    .perito-premio {
+      text-align: right; font-variant-numeric: tabular-nums;
+      font-weight: 800; font-size: 13px;
+    }
+    .perito-premio.bateu { color: #059669; }
+    .perito-premio.nao   { color: var(--ds-ink-muted); }
+    .perito-premio .meta {
+      display: block; font-size: 10.5px; font-weight: 600;
+      margin-top: 1px; color: var(--ds-ink-muted);
+    }
+    .meta-bar {
+      height: 4px; background: var(--ds-surface-alt); border-radius: 2px;
+      overflow: hidden; margin-top: 4px;
+    }
+    .meta-bar > div {
+      height: 100%; background: #f59e0b; transition: width .3s;
+    }
+    .meta-bar > div.full { background: #059669; }
+    .premio-detail {
+      margin-top: 12px;
+      padding: 10px 12px; border-radius: 8px;
+      background: var(--ds-surface); border: 1px dashed var(--ds-line);
+      font-size: 12px;
+    }
+    .premio-detail .title {
+      font-weight: 800; color: var(--ds-ink);
+      margin-bottom: 6px; font-size: 11.5px;
+    }
+    .premio-detail .row {
+      display: grid; grid-template-columns: 1fr 60px 80px 90px;
+      gap: 8px; padding: 3px 0; font-variant-numeric: tabular-nums;
+    }
+    .premio-detail .row .lbl { color: var(--ds-ink-muted); }
+    .premio-detail .row .num { text-align: right; color: var(--ds-ink); }
+    .premio-detail .row.total {
+      border-top: 1px solid var(--ds-line); margin-top: 4px; padding-top: 6px;
+      font-weight: 800;
+    }
+    .premio-detail .row.total .num { color: #059669; }
     .perito-toggle {
       text-align: center; font-size: 14px; color: var(--ds-ink-muted);
       transition: transform .15s;
@@ -145,12 +190,19 @@
     }
     .empty.err { color: var(--ds-danger); }
 
-    @media (max-width: 720px) {
+    @media (max-width: 980px) {
       .perito-head {
-        grid-template-columns: 28px 1fr 70px 70px;
+        grid-template-columns: 28px 1fr 70px 90px 90px;
       }
       .perito-pct { display: none; }
       .perito-toggle { display: none; }
+    }
+    @media (max-width: 600px) {
+      .perito-head {
+        grid-template-columns: 28px 1fr 80px;
+      }
+      .perito-num:nth-of-type(2) { display: none; }
+      .perito-premio { display: none; }
     }
   </style>
 </head>
@@ -201,6 +253,12 @@
         <div class="stat-card peritos">
           <div class="lbl">Peritos</div>
           <div class="val" id="totPeritos">—</div>
+          <div class="sub" id="totPeritosBatendo">—</div>
+        </div>
+        <div class="stat-card premio">
+          <div class="lbl">Prêmio (total)</div>
+          <div class="val" id="totPremio">—</div>
+          <div class="sub" id="premioRegra">meta 171 vistorias/mês</div>
         </div>
       </div>
 
@@ -302,6 +360,15 @@ async function carregar() {
     document.getElementById("totValor").textContent   = brl(r.totais.valor);
     document.getElementById("totTicket").textContent  = brl(r.totais.ticket_medio);
     document.getElementById("totPeritos").textContent = num(r.peritos.length);
+    document.getElementById("totPeritosBatendo").textContent =
+      r.totais.peritos_batendo > 0
+        ? `${r.totais.peritos_batendo} batendo meta`
+        : "ninguém bateu meta";
+    document.getElementById("totPremio").textContent = brl(r.totais.premio_total || 0);
+    if (r.premio_regra) {
+      document.getElementById("premioRegra").textContent =
+        `meta ${r.premio_regra.meta} vistorias · CP R$ ${r.premio_regra.valores.cautelar_pintura.toFixed(0)} · C R$ ${r.premio_regra.valores.cautelar.toFixed(0)} · T R$ ${r.premio_regra.valores.transferencia.toFixed(0)}`;
+    }
 
     // Ranking
     const body = document.getElementById("rankingBody");
@@ -309,6 +376,7 @@ async function carregar() {
       body.innerHTML = `<div class="empty">Nenhuma vistoria nesse período. Importe a planilha e tente de novo.</div>`;
       return;
     }
+    const meta = r.premio_regra ? r.premio_regra.meta : 171;
     body.innerHTML = r.peritos.map((p, i) => {
       const rank = i + 1;
       const cls  = rankClass(rank);
@@ -321,6 +389,63 @@ async function carregar() {
           <span class="svc-val">${brl(s.valor)}</span>
         </div>
       `).join("");
+
+      // Bloco de premio
+      const premio = p.premio || {};
+      const bateu = premio.bate_meta;
+      const pctMeta = Math.min(100, Math.round((p.qtd / meta) * 100));
+      const premioCol = `
+        <div class="perito-premio ${bateu ? 'bateu' : 'nao'}">
+          ${bateu ? brl(premio.premio_total) : `${p.qtd}/${meta}`}
+          <span class="meta">${bateu ? '✓ bate meta' : 'falta ' + (meta - p.qtd)}</span>
+          <div class="meta-bar"><div class="${bateu ? 'full' : ''}" style="width:${pctMeta}%"></div></div>
+        </div>
+      `;
+
+      // Breakdown do premio (so mostra se bateu OU se tem alguma vistoria nas categorias)
+      const cats = premio.premio_por_categoria || {};
+      const labelCat = {
+        cautelar_pintura: "Cautelar + Pintura",
+        cautelar:         "Cautelar",
+        transferencia:    "Transferência",
+        outros:           "Outros (não pagam)",
+      };
+      const linhas = ["cautelar_pintura", "cautelar", "transferencia", "outros"]
+        .map(k => {
+          const c = cats[k] || {qtd:0, valor_unit:0, subtotal:0};
+          if (!c.qtd && k === "outros") return ""; // omite "outros" se zero
+          return `
+            <div class="row">
+              <span class="lbl">${labelCat[k]}</span>
+              <span class="num">${num(c.qtd)}</span>
+              <span class="num">${c.valor_unit ? brl(c.valor_unit) : "—"}</span>
+              <span class="num">${bateu ? brl(c.subtotal) : "—"}</span>
+            </div>
+          `;
+        }).join("");
+
+      const premioDetail = `
+        <div class="premio-detail">
+          <div class="title">${bateu
+            ? `Prêmio do mês — bateu a meta (${p.qtd}/${meta})`
+            : `Prêmio do mês — meta não atingida (${p.qtd}/${meta}, faltam ${meta - p.qtd})`}
+          </div>
+          <div class="row">
+            <span class="lbl"><strong>Tipo</strong></span>
+            <span class="num"><strong>Qtd</strong></span>
+            <span class="num"><strong>Valor unit</strong></span>
+            <span class="num"><strong>Subtotal</strong></span>
+          </div>
+          ${linhas}
+          <div class="row total">
+            <span class="lbl">Total</span>
+            <span class="num"></span>
+            <span class="num"></span>
+            <span class="num">${bateu ? brl(premio.premio_total) : "R$ 0,00"}</span>
+          </div>
+        </div>
+      `;
+
       return `
         <div class="perito-row" data-perito="${esc(p.perito)}">
           <div class="perito-head">
@@ -337,11 +462,13 @@ async function carregar() {
               ${brl(p.valor)}
               ${deltaVal}
             </div>
+            ${premioCol}
             <div class="perito-pct">${p.pct_valor.toFixed(1)}%</div>
             <div class="perito-toggle">›</div>
           </div>
           <div class="perito-detail">
-            <div class="svc-list">${servicos}</div>
+            ${premioDetail}
+            <div class="svc-list" style="margin-top:14px">${servicos}</div>
           </div>
         </div>
       `;
