@@ -1371,12 +1371,18 @@ async function conferirComPDV() {
     // Auto-preenche avPagamento para registros confirmados no PDV
     // ("ok" = match por placa+servico, "ok_fallback" = match por placa+valor
     // quando o servico diverge entre planilha e PDV).
+    // Tambem propaga CV/CPF do PDV pro record da planilha — bug 12/05: planilha
+    // nao tem CV, entao quando enviavamos pro Tiny ia sem CV no historico.
     for (const [id, conf] of Object.entries(result.conferencia)) {
       const matched = conf.status === "ok" || conf.status === "ok_fallback";
-      if (matched && conf.pdv_fp) {
+      if (matched) {
         const rec = state.records.find((r) => r.id === id);
-        if (rec && rec.avPagamento === "pendente") {
-          rec.avPagamento = conf.pdv_fp;
+        if (rec) {
+          if (conf.pdv_fp && rec.avPagamento === "pendente") {
+            rec.avPagamento = conf.pdv_fp;
+          }
+          if (conf.pdv_cv && !rec.cv) rec.cv = conf.pdv_cv;
+          if (conf.pdv_cpf && !rec.cpf) rec.cpf = conf.pdv_cpf;
         }
       }
     }

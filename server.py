@@ -7492,6 +7492,8 @@ def _compute_planilha_status(unit: str, data_iso: str) -> dict:
                 "hora":  pdv_match.get("hora"),
                 "fp":    pdv_match.get("fp"),
                 "valor": pdv_match.get("valor"),
+                "cv":    pdv_match.get("cv", ""),  # CV do cartao (debito/credito)
+                "cpf":   pdv_match.get("cpf", ""),
             } if pdv_match else None,
         })
 
@@ -7729,6 +7731,8 @@ def api_caixa_conferir(unit: str):
                     "pdv_valor": None,
                     "pdv_fp": None,
                     "pdv_hora": None,
+                    "pdv_cv":  "",
+                    "pdv_cpf": "",
                 }
             else:
                 consumed_pdv_keys.add(pdv_key)
@@ -7750,6 +7754,8 @@ def api_caixa_conferir(unit: str):
                     "pdv_valor": pdv_valor,
                     "pdv_fp": pdv_fp,
                     "pdv_hora": lc.get("hora"),
+                    "pdv_cv":   lc.get("cv", ""),
+                    "pdv_cpf":  lc.get("cpf", ""),
                 }
 
         # Segundo pass (fallback): casa planilha "sem_pdv" com PDV restante
@@ -7775,6 +7781,8 @@ def api_caixa_conferir(unit: str):
                     "pdv_valor": pdv_valor,
                     "pdv_fp": pdv_fp,
                     "pdv_hora": lc.get("hora"),
+                    "pdv_cv":   lc.get("cv", ""),
+                    "pdv_cpf":  lc.get("cpf", ""),
                     "pdv_servico_original": lc.get("servico"),  # dica para debug
                 }
                 break

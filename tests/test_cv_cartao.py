@@ -159,3 +159,76 @@ class TestEditarComCV:
             "cv": "999",
         })
         assert r3.status_code == 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /api/caixa/conferir devolve CV do PDV
+# ══════════════════════════════════════════════════════════════════════════════
+# Bug 12/05/2026: lancamentos em cartao na planilha vinham sem CV no Tiny.
+# Planilha nao tem CV — vinha do PDV. Match planilha×PDV precisa devolver o CV
+# do lancamento do PDV pro frontend propagar pro record antes de enviar pro ERP.
+
+class TestConferirDevolveCV:
+    def test_match_ok_inclui_pdv_cv(self, client):
+        # 1. Lanca debito no PDV com CV
+        client.post(f"/u/{UNIT}/api/caixa/lancar", json={
+            "placa": "XYZ9999", "cliente": "FULANO",
+            "servico": "VISTORIA CAUTELAR", "valor": 100.0, "fp": "debito",
+            "cv": "16618216",
+        })
+        # 2. Confere com record da planilha (mesmo placa/servico/preco)
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-1", "placa": "XYZ9999",
+                "servico": "VISTORIA CAUTELAR", "preco": 100.0, "fp": "AV",
+            }],
+        })
+        assert r.status_code == 200
+        conf = r.get_json()["conferencia"]["rec-1"]
+        assert conf["status"] == "ok"
+        assert conf["pdv_cv"] == "16618216"
+
+    def test_match_ok_fallback_inclui_pdv_cv(self, client):
+        # Servico no PDV difere da planilha → match por placa+valor (fallback)
+        client.post(f"/u/{UNIT}/api/caixa/lancar", json={
+            "placa": "XYZ8888", "cliente": "X",
+            "servico": "VISTORIA CAUTELAR", "valor": 200.0, "fp": "credito",
+            "cv": "55555",
+        })
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-2", "placa": "XYZ8888",
+                "servico": "LAUDO DE TRANSFERENCIA",  # divergente
+                "preco": 200.0, "fp": "AV",
+            }],
+        })
+        conf = r.get_json()["conferencia"]["rec-2"]
+        assert conf["status"] == "ok_fallback"
+        assert conf["pdv_cv"] == "55555"
+
+    def test_sem_pdv_pdv_cv_vazio(self, client):
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-x", "placa": "AAA0000",
+                "servico": "VISTORIA CAUTELAR", "preco": 100.0, "fp": "AV",
+            }],
+        })
+        conf = r.get_json()["conferencia"]["rec-x"]
+        assert conf["status"] == "sem_pdv"
+        assert conf["pdv_cv"] == ""
+
+    def test_pix_sem_cv_devolve_string_vazia(self, client):
+        # Lancamento sem cv (PIX) — match deve devolver string vazia, nao None
+        client.post(f"/u/{UNIT}/api/caixa/lancar", json={
+            "placa": "PIX0001", "cliente": "X",
+            "servico": "VISTORIA CAUTELAR", "valor": 100.0, "fp": "pix",
+        })
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-pix", "placa": "PIX0001",
+                "servico": "VISTORIA CAUTELAR", "preco": 100.0, "fp": "AV",
+            }],
+        })
+        conf = r.get_json()["conferencia"]["rec-pix"]
+        assert conf["status"] == "ok"
+        assert conf["pdv_cv"] == ""
