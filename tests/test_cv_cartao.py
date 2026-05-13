@@ -232,3 +232,116 @@ class TestConferirDevolveCV:
         conf = r.get_json()["conferencia"]["rec-pix"]
         assert conf["status"] == "ok"
         assert conf["pdv_cv"] == ""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /api/caixa/conferir devolve FP real do PDV pra planilha AV
+# ══════════════════════════════════════════════════════════════════════════════
+# Sispevi so manda 'AV' ou 'FA' na planilha. Quem define se eh pix/debito/
+# credito/dinheiro eh o PDV. Frontend usa esse pdv_fp pra hidratar
+# rec.avPagamento antes de mandar pro Tiny (senao a forma_recebimento vai vazia).
+
+class TestConferirDevolveFPdoPDV:
+    @pytest.mark.parametrize("fp_pdv,cv,fp_esperado", [
+        ("pix",      "",        "pix"),
+        ("debito",   "11111",   "debito"),
+        ("credito",  "22222",   "credito"),
+        ("dinheiro", "",        "dinheiro"),
+    ])
+    def test_av_planilha_recebe_fp_real_do_pdv(self, client, fp_pdv, cv, fp_esperado):
+        body = {
+            "placa": "AV0001", "cliente": "X",
+            "servico": "VISTORIA CAUTELAR", "valor": 100.0, "fp": fp_pdv,
+        }
+        if cv:
+            body["cv"] = cv
+        client.post(f"/u/{UNIT}/api/caixa/lancar", json=body)
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-av", "placa": "AV0001",
+                "servico": "VISTORIA CAUTELAR", "preco": 100.0, "fp": "AV",
+            }],
+        })
+        conf = r.get_json()["conferencia"]["rec-av"]
+        assert conf["status"] == "ok"
+        assert conf["pdv_fp"] == fp_esperado
+
+    def test_av_planilha_com_pdv_faturado_diverge(self, client):
+        """PDV faturado nao deve auto-preencher AV da planilha — eh divergencia."""
+        client.post(f"/u/{UNIT}/api/caixa/lancar", json={
+            "placa": "AV0002", "cliente": "X",
+            "servico": "VISTORIA CAUTELAR", "valor": 100.0, "fp": "faturado",
+        })
+        r = client.post(f"/u/{UNIT}/api/caixa/conferir", json={
+            "records": [{
+                "id": "rec-av2", "placa": "AV0002",
+                "servico": "VISTORIA CAUTELAR", "preco": 100.0, "fp": "AV",
+            }],
+        })
+        conf = r.get_json()["conferencia"]["rec-av2"]
+        assert conf["status"] == "divergencia_fp"
+        # pdv_fp ainda devolvido, mas o frontend so propaga em status=ok/ok_fallback
+        assert conf["pdv_fp"] == "faturado"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tiny payload: avPagamento (hidratado do PDV) define forma_recebimento
+# ══════════════════════════════════════════════════════════════════════════════
+# Confirma end-to-end: planilha vem com fp=AV e avPagamento hidratado pelo
+# conferir; Tiny recebe formaRecebimento mapeado pelo avPagamento, nao pelo fp.
+
+class TestTinyPayloadUsaAvPagamento:
+    def _cfg(self):
+        return {"tiny": {
+            "base_url": "x", "token_url": "x", "oauth_scope": "openid",
+            "timeout_seconds": 30, "client_id": "a", "client_secret": "b",
+            "redirect_uri": "c", "scope": "openid",
+            "cliente_ids": {}, "categoria_ids": {},
+            "forma_recebimento_ids": {
+                "pix": 500, "debito": 501, "credito": 502, "dinheiro": 503,
+                "AV": 599, "FA": 600,
+            },
+            "auto_create_contacts": False, "include_forma_recebimento": True,
+            "numero_documento_prefix": "PLA", "default_tipo_pessoa": "J",
+            "require_payment_mapping": False,
+            "vencimento_tipo": "ultimo_dia_mes", "vencimento_dias": 0,
+            "contas_receber_fp": ["AV", "FA"],
+            "servico_aliases": {}, "fp_aliases": {}, "cliente_aliases": {},
+        }}
+
+    @pytest.mark.parametrize("av_pag,id_esperado", [
+        ("pix",      500),
+        ("debito",   501),
+        ("credito",  502),
+        ("dinheiro", 503),
+    ])
+    def test_formaRecebimento_vem_do_avPagamento(self, tmp_path, av_pag, id_esperado):
+        from tiny_import import TinyImporter, NormalizedRecord
+        rec = NormalizedRecord(
+            data="2026-05-13", modelo="GOL", placa="ABC1234", cliente="X",
+            servico="VISTORIA CAUTELAR", fp="AV", preco="100",
+            origem_arquivo="t", linha_origem=1, chave_deduplicacao="x",
+            av_pagamento=av_pag, cpf="", cv="999",
+        )
+        imp = TinyImporter(self._cfg(), tmp_path)
+        imp.resolve_contact = lambda *a, **k: 999
+        p = imp.build_accounts_receivable_payload(rec)
+        assert p["formaRecebimento"] == id_esperado
+        # AV pago → vencimento = data do servico, nao fim do mes
+        assert p["dataVencimento"] == "2026-05-13"
+
+    def test_av_sem_avPagamento_cai_pra_fp_AV(self, tmp_path):
+        """Se conferirComPDV nao rodou, avPagamento fica 'pendente' e isTinySendable
+        bloqueia. Mas se algum bug deixar passar, FP=AV mapeia pra 599 (fallback)."""
+        from tiny_import import TinyImporter, NormalizedRecord
+        rec = NormalizedRecord(
+            data="2026-05-13", modelo="GOL", placa="ABC1234", cliente="X",
+            servico="VISTORIA CAUTELAR", fp="AV", preco="100",
+            origem_arquivo="t", linha_origem=1, chave_deduplicacao="x",
+            av_pagamento="pendente", cpf="", cv="",
+        )
+        imp = TinyImporter(self._cfg(), tmp_path)
+        imp.resolve_contact = lambda *a, **k: 999
+        p = imp.build_accounts_receivable_payload(rec)
+        # is_av_paid("pendente")=False → cai no fp=AV → mapeia pra 599
+        assert p["formaRecebimento"] == 599
