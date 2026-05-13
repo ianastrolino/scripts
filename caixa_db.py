@@ -46,6 +46,9 @@ _MIGRATE_CPF = "ALTER TABLE lancamentos ADD COLUMN cpf TEXT NOT NULL DEFAULT \"\
 _MIGRATE_CLIENT_UUID = "ALTER TABLE lancamentos ADD COLUMN client_uuid TEXT NOT NULL DEFAULT \"\""
 _MIGRATE_USUARIO = "ALTER TABLE lancamentos ADD COLUMN usuario TEXT NOT NULL DEFAULT \"\""
 _MIGRATE_CV = "ALTER TABLE lancamentos ADD COLUMN cv TEXT NOT NULL DEFAULT \"\""
+# perito = nome do vistoriador (coluna PERITO da planilha Sispevi/Megalaudo).
+# Coluna em envios_erp pra base do relatorio por vistoriador (Fase 1).
+_MIGRATE_ENVIOS_PERITO = "ALTER TABLE envios_erp ADD COLUMN perito TEXT NOT NULL DEFAULT \"\""
 
 _DDL_DIV = """
 CREATE TABLE IF NOT EXISTS divergencias (
@@ -105,12 +108,19 @@ CREATE TABLE IF NOT EXISTS envios_erp (
     linha              INTEGER NOT NULL DEFAULT 0,
     resposta_tiny      TEXT NOT NULL DEFAULT "",
     erro               TEXT NOT NULL DEFAULT "",
+    perito             TEXT NOT NULL DEFAULT "",
     UNIQUE(unit, chave_deduplicacao)
 );
 CREATE INDEX IF NOT EXISTS idx_envios_unit_data ON envios_erp(unit, data_lancamento);
 CREATE INDEX IF NOT EXISTS idx_envios_unit_ts   ON envios_erp(unit, timestamp);
 CREATE INDEX IF NOT EXISTS idx_envios_status    ON envios_erp(unit, status);
 CREATE INDEX IF NOT EXISTS idx_envios_unit_erp  ON envios_erp(unit, erp);
+"""
+
+# Indice em perito criado DEPOIS do _ensure_column — bancos legacy nao tem
+# a coluna no momento do DDL_ENVIOS.
+_DDL_INDICE_PERITO = """
+CREATE INDEX IF NOT EXISTS idx_envios_unit_perito ON envios_erp(unit, perito);
 """
 
 _DDL_HISTORICO_TINY = """
@@ -228,6 +238,12 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     # se necessario, pra que o DDL nao crie envios_erp vazia ao lado da legacy
     _migrate_envios_tiny_to_erp(conn)
     conn.executescript(_DDL_ENVIOS)
+    # Migration retroativa pro relatorio de peritos (Fase 1 — 2026-05-13).
+    # Bancos pre-existentes nao tem a coluna; adiciona via ALTER. Idempotente.
+    _ensure_column(conn, "envios_erp", "perito", _MIGRATE_ENVIOS_PERITO)
+    # Indice em perito SO POSSO criar depois do _ensure_column — bancos legacy
+    # nao tem a coluna no momento do DDL_ENVIOS.
+    conn.executescript(_DDL_INDICE_PERITO)
     conn.executescript(_DDL_HISTORICO_TINY)
     existing_hist = _table_columns(conn, "historico_tiny")
     for sql in _MIGRATE_HIST_EXTRA:
@@ -447,13 +463,14 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
         "linha":              int(payload.get("linha", 0) or 0),
         "resposta_tiny":      json.dumps(payload.get("resposta_tiny") or payload.get("resposta_erp"), ensure_ascii=False) if (payload.get("resposta_tiny") is not None or payload.get("resposta_erp") is not None) else "",
         "erro":               payload.get("erro", ""),
+        "perito":             payload.get("perito", ""),
     }
     with _connect(unit_dir) as conn:
         try:
             conn.execute(
                 "INSERT INTO envios_erp "
-                "(unit, erp, chave_deduplicacao, timestamp, data_lancamento, placa, cliente, servico, valor, fp, status, arquivo, linha, resposta_tiny, erro) "
-                "VALUES (:unit,:erp,:chave_deduplicacao,:timestamp,:data_lancamento,:placa,:cliente,:servico,:valor,:fp,:status,:arquivo,:linha,:resposta_tiny,:erro)",
+                "(unit, erp, chave_deduplicacao, timestamp, data_lancamento, placa, cliente, servico, valor, fp, status, arquivo, linha, resposta_tiny, erro, perito) "
+                "VALUES (:unit,:erp,:chave_deduplicacao,:timestamp,:data_lancamento,:placa,:cliente,:servico,:valor,:fp,:status,:arquivo,:linha,:resposta_tiny,:erro,:perito)",
                 row,
             )
             return True
@@ -462,7 +479,7 @@ def insert_envio_tiny(unit: str, unit_dir: Path, payload: dict[str, Any]) -> boo
             # Guard: so sobrescreve se o novo row tem dado; nao apaga dado bom com vazio.
             sets = []
             params = {"unit": row["unit"], "chave": row["chave_deduplicacao"]}
-            for col in ("erp", "data_lancamento", "placa", "cliente", "servico", "fp", "arquivo", "resposta_tiny", "erro"):
+            for col in ("erp", "data_lancamento", "placa", "cliente", "servico", "fp", "arquivo", "resposta_tiny", "erro", "perito"):
                 val = row.get(col, "")
                 if val:
                     sets.append(f"{col}=:{col}")

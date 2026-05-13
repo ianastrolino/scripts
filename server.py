@@ -5400,6 +5400,7 @@ def api_preview(unit: str):
                 chave_deduplicacao=chave, av_pagamento=av_pag,
                 cpf=r.get("cpf", ""),
                 cv=r.get("cv", ""),
+                perito=r.get("perito", ""),
             )
             _enrich_record_modelo(rec, _modelo_idx_for(rec.data))
 
@@ -5499,6 +5500,7 @@ def api_send(unit: str):
                 av_pagamento=r.get("avPagamento", ""),
                 cpf=r.get("cpf", ""),
                 cv=r.get("cv", ""),
+                perito=r.get("perito", ""),
             )
             if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
                 rec.chave_deduplicacao = record_key(asdict(rec))
@@ -5610,6 +5612,7 @@ def api_send(unit: str):
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
                     "resposta_tiny":      imported.get(chave, {}).get("resposta"),
+                    "perito":             (r.get("perito", "") or "").upper().strip(),
                 })
             for p in results["pulados"]:
                 chave = p["chave"]
@@ -5630,6 +5633,7 @@ def api_send(unit: str):
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
                     "erro":               motivo,
+                    "perito":             (r.get("perito", "") or "").upper().strip(),
                 })
             for f in results["falhas"]:
                 chave = f["chave"]
@@ -5648,6 +5652,7 @@ def api_send(unit: str):
                     "arquivo":            r.get("origemArquivo", "manual_ui"),
                     "linha":              int(r.get("linhaOrigem", 0) or 0),
                     "erro":               f.get("erro", ""),
+                    "perito":             (r.get("perito", "") or "").upper().strip(),
                 })
         except Exception as mirror_exc:
             app.logger.warning("[envios_erp:mirror] falha ao gravar tabela: %s", mirror_exc)

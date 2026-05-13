@@ -187,6 +187,7 @@ class NormalizedRecord:
     av_pagamento: str = ""  # preenchido pela frente de caixa para registros AV (dinheiro/debito/credito/pix)
     cpf: str = ""           # CPF do cliente B2C (opcional, usado para criar/localizar contato no Tiny)
     cv: str = ""            # Codigo de Verificacao do cartao (debito/credito) — operador digita do comprovante
+    perito: str = ""        # Nome do perito/vistoriador (coluna PERITO da planilha Sispevi/Megalaudo)
 
 
 class HtmlTableParser(HTMLParser):

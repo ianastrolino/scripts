@@ -328,7 +328,7 @@ function serviceType(service) {
 }
 
 function makeRecord(row, index, sourceFile) {
-  const [data, modelo, placa, cliente, servico, fp, preco] = row;
+  const [data, modelo, placa, cliente, servico, fp, preco, perito] = row;
   const normalizedService = normalizeService(servico);
   return {
     id: `${sourceFile}-${index}`,
@@ -340,6 +340,7 @@ function makeRecord(row, index, sourceFile) {
     tipoServico: serviceType(normalizedService),
     fp: cleanText(fp).toUpperCase(),
     preco: parseMoney(preco),
+    perito: cleanText(perito || "").toUpperCase(),
     origemArquivo: sourceFile,
     linhaOrigem: index + 2,
     avPagamento: "pendente",
@@ -382,6 +383,8 @@ function parseExportedHtml(text, sourceFile) {
   }
 
   const headers = rows[headerIndex].map(normalizeKey);
+  // PERITO eh opcional — planilhas antigas (pre-2026-05) nao tem essa coluna.
+  // Indice -1 vira string vazia no parsedRow; makeRecord trata.
   const column = {
     data: headers.indexOf("DATA"),
     modelo: headers.indexOf("MODELO"),
@@ -389,7 +392,8 @@ function parseExportedHtml(text, sourceFile) {
     cliente: headers.indexOf("CLIENTE"),
     servico: headers.indexOf("SERVICO"),
     fp: headers.indexOf("FP"),
-    preco: headers.indexOf("PRECO")
+    preco: headers.indexOf("PRECO"),
+    perito: headers.indexOf("PERITO")
   };
 
   return rows.slice(headerIndex + 1).reduce((records, row, rowIndex) => {
@@ -402,7 +406,8 @@ function parseExportedHtml(text, sourceFile) {
       row[column.cliente],
       row[column.servico],
       row[column.fp],
-      row[column.preco]
+      row[column.preco],
+      column.perito >= 0 ? row[column.perito] : ""
     ];
     records.push(makeRecord(parsedRow, rowIndex, sourceFile));
     return records;
