@@ -5992,6 +5992,200 @@ def api_snapshot_create(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Relatorio de vistoriadores (aba Vistoriadores) — gestao de produtividade
+# ══════════════════════════════════════════════════════════════════════════════
+# Fonte: vistorias_planilha (populada quando a planilha eh importada,
+# independente de envio pro ERP). NAO conta avulsos do PDV.
+
+def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
+    """Agrega vistorias por perito. Retorna lista ordenada por valor total desc."""
+    por_perito: dict[str, dict] = {}
+    for r in rows:
+        p = (r.get("perito") or "").strip() or "(sem perito)"
+        bucket = por_perito.setdefault(p, {
+            "perito": p, "qtd": 0, "valor": 0.0,
+            "por_servico": {},  # nome → {qtd, valor}
+        })
+        bucket["qtd"] += 1
+        bucket["valor"] += float(r.get("valor") or 0)
+        servico = (r.get("servico") or "").strip() or "(sem servico)"
+        s_bucket = bucket["por_servico"].setdefault(servico, {"qtd": 0, "valor": 0.0})
+        s_bucket["qtd"] += 1
+        s_bucket["valor"] += float(r.get("valor") or 0)
+    out: list[dict] = []
+    for p, b in por_perito.items():
+        ticket = round(b["valor"] / b["qtd"], 2) if b["qtd"] else 0.0
+        # Converte por_servico em lista ordenada por valor
+        servicos = sorted(
+            [{"servico": s, **vals} for s, vals in b["por_servico"].items()],
+            key=lambda x: -x["valor"],
+        )
+        # Arredonda valores
+        for s in servicos:
+            s["valor"] = round(s["valor"], 2)
+        out.append({
+            "perito":       p,
+            "qtd":          b["qtd"],
+            "valor":        round(b["valor"], 2),
+            "ticket_medio": ticket,
+            "por_servico":  servicos,
+        })
+    out.sort(key=lambda x: -x["valor"])
+    return out
+
+
+@app.route("/api/units-list")
+@login_required
+def api_units_list():
+    """Lista unidades visiveis pro usuario atual. Usado por telas que filtram
+    por unidade (Vistoriadores, etc). Master/matriz veem todas; demais so a sua."""
+    user = _current_user() or {}
+    is_global = user.get("master") or user.get("matriz")
+    if is_global:
+        units = [{"slug": s, "nome": c.get("nome", s)} for s, c in UNITS.items()]
+    elif user.get("unit"):
+        s = user["unit"]
+        units = [{"slug": s, "nome": UNITS.get(s, {}).get("nome", s)}]
+    else:
+        units = []
+    units.sort(key=lambda x: x["nome"].lower())
+    return _json({"success": True, "units": units})
+
+
+@app.route("/vistoriadores")
+@login_required
+def vistoriadores_page():
+    return _nocache(send_from_directory(UI_DIR, "vistoriadores.html"))
+
+
+@app.route("/api/relatorio/vistoriadores")
+@login_required
+def api_relatorio_vistoriadores():
+    """Relatorio agregado por perito.
+
+    Params:
+      inicio=YYYY-MM-DD (default: 1o dia do mes corrente)
+      fim=YYYY-MM-DD    (default: ultimo dia do mes corrente)
+      unit=<slug>       (default: todas que o usuario pode ver)
+      servico=<txt>     (filtra por substring no nome do servico)
+      perito=<nome>     (filtra por perito especifico)
+      comparativo=1     (inclui dados do mes anterior pra comparativo)
+    """
+    try:
+        user = _current_user() or {}
+        hoje = dt.date.today()
+
+        inicio = (request.args.get("inicio") or "").strip()
+        fim    = (request.args.get("fim") or "").strip()
+        if not inicio:
+            inicio = hoje.replace(day=1).isoformat()
+        if not fim:
+            # Ultimo dia do mes corrente
+            if hoje.month == 12:
+                prox = dt.date(hoje.year + 1, 1, 1)
+            else:
+                prox = dt.date(hoje.year, hoje.month + 1, 1)
+            fim = (prox - dt.timedelta(days=1)).isoformat()
+
+        unit_filter   = (request.args.get("unit") or "").strip()
+        servico_filter = (request.args.get("servico") or "").strip() or None
+        perito_filter  = (request.args.get("perito") or "").strip() or None
+        incluir_compar = request.args.get("comparativo") == "1"
+
+        # Resolve unidades visiveis
+        is_global = user.get("master") or user.get("matriz")
+        if is_global:
+            unidades = list(UNITS.keys())
+        else:
+            unidades = [user.get("unit")] if user.get("unit") else []
+        if unit_filter:
+            if not is_global and unit_filter != user.get("unit"):
+                return _json({"success": False, "error": "Sem acesso a essa unidade."}, 403)
+            unidades = [unit_filter]
+
+        # Carrega vistorias do periodo principal
+        rows: list[dict] = []
+        for uid in unidades:
+            try:
+                unit_rows = _db_load_vistorias(
+                    uid, _unit_state_dir(uid), inicio, fim,
+                    perito=perito_filter, servico=servico_filter,
+                )
+                for r in unit_rows:
+                    r["unit"] = uid
+                rows.extend(unit_rows)
+            except Exception as exc:
+                app.logger.warning("[relatorio-peritos] %s: %s", uid, exc)
+
+        por_perito = _agrega_vistorias_por_perito(rows)
+        total_qtd  = sum(p["qtd"] for p in por_perito)
+        total_val  = sum(p["valor"] for p in por_perito)
+
+        # % participacao no total
+        for p in por_perito:
+            p["pct_qtd"]   = round((p["qtd"] / total_qtd * 100), 1) if total_qtd else 0.0
+            p["pct_valor"] = round((p["valor"] / total_val * 100), 1) if total_val else 0.0
+
+        resp: dict = {
+            "success":  True,
+            "periodo":  {"inicio": inicio, "fim": fim},
+            "filtros":  {"unit": unit_filter or None, "servico": servico_filter, "perito": perito_filter},
+            "totais":   {
+                "qtd":          total_qtd,
+                "valor":        round(total_val, 2),
+                "ticket_medio": round(total_val / total_qtd, 2) if total_qtd else 0.0,
+            },
+            "peritos":  por_perito,
+            "unidades_consideradas": unidades,
+        }
+
+        # Comparativo com periodo anterior (mesmo tamanho de janela)
+        if incluir_compar:
+            try:
+                d_ini = dt.date.fromisoformat(inicio)
+                d_fim = dt.date.fromisoformat(fim)
+                delta = (d_fim - d_ini).days + 1
+                ant_fim = d_ini - dt.timedelta(days=1)
+                ant_ini = ant_fim - dt.timedelta(days=delta - 1)
+                rows_ant: list[dict] = []
+                for uid in unidades:
+                    try:
+                        unit_rows = _db_load_vistorias(
+                            uid, _unit_state_dir(uid),
+                            ant_ini.isoformat(), ant_fim.isoformat(),
+                            perito=perito_filter, servico=servico_filter,
+                        )
+                        rows_ant.extend(unit_rows)
+                    except Exception:
+                        pass
+                ant_por_perito = _agrega_vistorias_por_perito(rows_ant)
+                # Indexa por perito pra computar variacao
+                ant_idx = {p["perito"]: p for p in ant_por_perito}
+                for p in resp["peritos"]:
+                    anterior = ant_idx.get(p["perito"], {"qtd": 0, "valor": 0.0})
+                    p["anterior"] = {
+                        "qtd":   anterior["qtd"],
+                        "valor": anterior["valor"],
+                    }
+                    if anterior["qtd"]:
+                        p["var_qtd_pct"] = round((p["qtd"] / anterior["qtd"] - 1) * 100, 1)
+                    else:
+                        p["var_qtd_pct"] = None
+                    if anterior["valor"]:
+                        p["var_valor_pct"] = round((p["valor"] / anterior["valor"] - 1) * 100, 1)
+                    else:
+                        p["var_valor_pct"] = None
+                resp["periodo_anterior"] = {"inicio": ant_ini.isoformat(), "fim": ant_fim.isoformat()}
+            except Exception as exc:
+                app.logger.warning("[relatorio-peritos:comparativo] %s", exc)
+
+        return _json(resp)
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/u/<unit>/api/snapshots", methods=["GET"])
 @unit_access_required
 def api_snapshot_list(unit: str):

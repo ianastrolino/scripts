@@ -133,7 +133,8 @@
     {
       group: "Gestão da unidade",
       items: [
-        { id: "gerencial-unit", label: "Gerencial",   icon: "gerencial",  hrefUnit: "/gerencial", requires: "gerencial" },
+        { id: "gerencial-unit",  label: "Gerencial",     icon: "gerencial",  hrefUnit: "/gerencial", requires: "gerencial" },
+        { id: "vistoriadores",   label: "Vistoriadores", icon: "relatorios", href: "/vistoriadores" },
       ],
     },
     {
