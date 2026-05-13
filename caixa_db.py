@@ -123,6 +123,30 @@ _DDL_INDICE_PERITO = """
 CREATE INDEX IF NOT EXISTS idx_envios_unit_perito ON envios_erp(unit, perito);
 """
 
+# Tabela dedicada ao relatorio de vistoriadores (aba "Vistoriadores").
+# Independente de envios_erp — registra vistorias da planilha importada,
+# mesmo que nunca cheguem ao ERP. Base pra ranking, comparativo e metas.
+# Dedup por (unit, data, placa, servico) — reimport atualiza demais campos.
+_DDL_VISTORIAS_PLANILHA = """
+CREATE TABLE IF NOT EXISTS vistorias_planilha (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit         TEXT NOT NULL,
+    data         TEXT NOT NULL,
+    placa        TEXT NOT NULL,
+    cliente      TEXT NOT NULL DEFAULT "",
+    servico      TEXT NOT NULL DEFAULT "",
+    valor        REAL NOT NULL DEFAULT 0,
+    fp           TEXT NOT NULL DEFAULT "",
+    perito       TEXT NOT NULL DEFAULT "",
+    arquivo      TEXT NOT NULL DEFAULT "",
+    importado_em TEXT NOT NULL,
+    UNIQUE(unit, data, placa, servico)
+);
+CREATE INDEX IF NOT EXISTS idx_visto_unit_data    ON vistorias_planilha(unit, data);
+CREATE INDEX IF NOT EXISTS idx_visto_unit_perito  ON vistorias_planilha(unit, perito);
+CREATE INDEX IF NOT EXISTS idx_visto_unit_servico ON vistorias_planilha(unit, servico);
+"""
+
 _DDL_HISTORICO_TINY = """
 CREATE TABLE IF NOT EXISTS historico_tiny (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,6 +268,8 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     # Indice em perito SO POSSO criar depois do _ensure_column — bancos legacy
     # nao tem a coluna no momento do DDL_ENVIOS.
     conn.executescript(_DDL_INDICE_PERITO)
+    # Tabela vistorias_planilha (aba Vistoriadores). Idempotente.
+    conn.executescript(_DDL_VISTORIAS_PLANILHA)
     conn.executescript(_DDL_HISTORICO_TINY)
     existing_hist = _table_columns(conn, "historico_tiny")
     for sql in _MIGRATE_HIST_EXTRA:
@@ -547,6 +573,97 @@ def list_envios_tiny(unit: str, unit_dir: Path, date_from: str | None = None,
                 pass
         out.append(d)
     return out
+
+
+# ───────────────────────── vistorias_planilha (aba Vistoriadores) ─────────────
+# Tabela alimentada quando o operador importa a planilha (independente de envio
+# pro ERP). Base do ranking, comparativo e metas por perito.
+
+def upsert_vistorias_planilha(unit: str, unit_dir: Path,
+                              vistorias: list[dict[str, Any]]) -> dict[str, int]:
+    """Insere/atualiza vistorias da planilha importada. Dedup por
+    (unit, data, placa, servico) — reimport atualiza demais campos.
+
+    Retorna {"inseridas": N, "atualizadas": M}.
+    """
+    import datetime as _dt
+    now = _dt.datetime.now().isoformat(timespec="seconds")
+    inseridas = 0
+    atualizadas = 0
+    with _connect(unit_dir) as conn:
+        for v in vistorias:
+            data    = (v.get("data") or "").strip()
+            placa   = (v.get("placa") or "").strip().upper()
+            servico = (v.get("servico") or "").strip().upper()
+            if not (data and placa and servico):
+                continue  # skip malformados
+            row = {
+                "unit":         unit,
+                "data":         data[:10],
+                "placa":        placa,
+                "cliente":      (v.get("cliente") or "").strip().upper(),
+                "servico":      servico,
+                "valor":        float(v.get("valor", 0) or 0),
+                "fp":           (v.get("fp") or "").strip().upper(),
+                "perito":       (v.get("perito") or "").strip().upper(),
+                "arquivo":      v.get("arquivo", ""),
+                "importado_em": now,
+            }
+            try:
+                conn.execute(
+                    "INSERT INTO vistorias_planilha "
+                    "(unit, data, placa, cliente, servico, valor, fp, perito, arquivo, importado_em) "
+                    "VALUES (:unit,:data,:placa,:cliente,:servico,:valor,:fp,:perito,:arquivo,:importado_em)",
+                    row,
+                )
+                inseridas += 1
+            except sqlite3.IntegrityError:
+                # Reimport: atualiza campos preenchidos. Guard: vazio NAO sobrescreve.
+                sets = ["importado_em=:importado_em"]
+                params = {
+                    "unit": row["unit"], "data": row["data"],
+                    "placa": row["placa"], "servico": row["servico"],
+                    "importado_em": now,
+                }
+                for col in ("cliente", "fp", "perito", "arquivo"):
+                    val = row.get(col, "")
+                    if val:
+                        sets.append(f"{col}=:{col}")
+                        params[col] = val
+                if float(row.get("valor", 0) or 0) > 0:
+                    sets.append("valor=:valor")
+                    params["valor"] = row["valor"]
+                conn.execute(
+                    "UPDATE vistorias_planilha SET " + ", ".join(sets) +
+                    " WHERE unit=:unit AND data=:data AND placa=:placa AND servico=:servico",
+                    params,
+                )
+                atualizadas += 1
+        conn.commit()
+    return {"inseridas": inseridas, "atualizadas": atualizadas}
+
+
+def load_vistorias_planilha(unit: str, unit_dir: Path,
+                            date_from: str, date_to: str,
+                            perito: str | None = None,
+                            servico: str | None = None) -> list[dict[str, Any]]:
+    """Le vistorias_planilha no periodo. Filtros opcionais por perito e servico.
+    Servico aceita substring (LIKE %x%) pra agrupar variações.
+    """
+    sql = ("SELECT data, placa, cliente, servico, valor, fp, perito, arquivo "
+           "FROM vistorias_planilha "
+           "WHERE unit=? AND data>=? AND data<=? ")
+    params: list[Any] = [unit, date_from, date_to]
+    if perito:
+        sql += "AND perito = ? "
+        params.append(perito.upper())
+    if servico:
+        sql += "AND servico LIKE ? "
+        params.append(f"%{servico.upper()}%")
+    sql += "ORDER BY data DESC, placa ASC"
+    with _connect(unit_dir) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
 
 
 def load_envios_validos_range(unit: str, unit_dir: Path, date_from: str, date_to: str,

@@ -78,7 +78,9 @@ from caixa_db import (migrate_from_json as _db_migrate, load_lancamentos as _db_
                        upsert_historico_tiny as _db_upsert_hist,
                        load_historico_tiny_mes as _db_load_hist_mes,
                        count_historico_tiny as _db_count_hist,
-                       migrate_imported_json_to_envios as _db_migrate_imported)
+                       migrate_imported_json_to_envios as _db_migrate_imported,
+                       upsert_vistorias_planilha as _db_upsert_vistorias,
+                       load_vistorias_planilha as _db_load_vistorias)
 
 # ── Importa logica de negocio do tiny_import.py ────────────────────────────────
 _HERE = Path(__file__).resolve().parent
@@ -5952,7 +5954,35 @@ def api_snapshot_create(unit: str):
         }
         if not payload["records"]:
             raise ValueError("records vazio")
-        snap_id = _db_insert_snap(unit, _unit_state_dir(unit), payload)
+        unit_dir = _unit_state_dir(unit)
+        snap_id = _db_insert_snap(unit, unit_dir, payload)
+
+        # Popula vistorias_planilha (base do relatorio de vistoriadores).
+        # Falha silenciosa — nao bloqueia o snapshot principal.
+        try:
+            arquivo_default = (payload["arquivos"][0] if payload["arquivos"] else "") or ""
+            vistorias = []
+            for r in payload["records"]:
+                # Ignora extras vindos do PDV (fora do escopo do relatorio)
+                if r.get("pdvExtra"):
+                    continue
+                if r.get("ignorar"):
+                    continue
+                vistorias.append({
+                    "data":    r.get("data", "") or payload["data"],
+                    "placa":   r.get("placa", ""),
+                    "cliente": r.get("cliente", ""),
+                    "servico": r.get("servico", ""),
+                    "valor":   r.get("preco", 0),
+                    "fp":      r.get("fp", ""),
+                    "perito":  r.get("perito", ""),
+                    "arquivo": r.get("origemArquivo", "") or arquivo_default,
+                })
+            if vistorias:
+                _db_upsert_vistorias(unit, unit_dir, vistorias)
+        except Exception as vexc:
+            app.logger.warning("[snapshot:vistorias] falha: %s", vexc)
+
         return _json({"success": True, "id": snap_id})
     except Exception as exc:
         from werkzeug.exceptions import HTTPException
