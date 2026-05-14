@@ -6176,41 +6176,77 @@ def _calcula_premio_perito(qtd_total: int, breakdown_categoria: dict[str, int]) 
     }
 
 
+def _normaliza_nome_perito(nome: str) -> str:
+    """Normaliza nome de perito pra comparacao byte-perfect.
+
+    Sispevi exporta caracteres acentuados em NFC ("Ç" = U+00C7, 1 codepoint),
+    Megalaudo em NFD ("Ç" = C + U+0327, 2 codepoints). Visualmente iguais,
+    mas == retorna False — fazia "DIEGO CARVALHO GONÇ" aparecer 2x no ranking.
+    Tambem colapsa whitespace e remove zeros invisiveis (BOM, ZWJ).
+    """
+    import unicodedata
+    if not nome:
+        return ""
+    # NFC unifica precomposto vs decomposto
+    n = unicodedata.normalize("NFC", str(nome))
+    # Remove zero-width chars que ocasionalmente vem de copy/paste
+    n = n.replace("﻿", "").replace("​", "").replace("‌", "").replace("‍", "")
+    # Collapse whitespace (NBSP, tabs, etc) e trim
+    return " ".join(n.split()).strip()
+
+
 def _canonicaliza_peritos_map(nomes: set[str],
                               manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
     """Cria mapping nome_truncado -> nome_canonico.
 
-    Estrategia em 2 camadas:
-    1. Aliases manuais (cadastrados em /master/peritos-aliases): prioridade
+    Estrategia em 3 camadas:
+    1. Normalizacao Unicode (NFC + whitespace) — resolve "Ç" precomposto vs
+       decomposto, NBSP vs espaco normal, BOM invisivel.
+    2. Aliases manuais (cadastrados em /master/peritos-aliases): prioridade
        absoluta. Ex: "VICTOR CRECHI DA SI" -> "VICTOR CRECHI DA SILVA".
-    2. Automerge por prefixo: dois nomes sao o mesmo perito se um eh prefixo
+    3. Automerge por prefixo: dois nomes sao o mesmo perito se um eh prefixo
        do outro com pelo menos 15 chars iguais. Mais longo vira canonico.
-       Resolve truncamentos automaticos do Sispevi (19) vs Megalaudo (20).
+       Resolve truncamentos do Sispevi (19) vs Megalaudo (20).
 
     Threshold de 15 chars no automerge eh conservador pra evitar falso merge
     em nomes curtos. Aliases manuais nao tem essa restricao.
+
+    Retorna mapping {nome_cru: nome_canonico_normalizado}.
     """
     MIN_PREFIX = 15
-    aliases = manual_aliases or {}
+    aliases_raw = manual_aliases or {}
 
-    out: dict[str, str] = {}
-    nomes_limpos = {n for n in nomes if n}
-
-    # Camada 2 primeiro: automerge por prefixo. Aliases manuais sobreescrevem.
-    ordenados = sorted(nomes_limpos, key=len, reverse=True)
-    for canonical in ordenados:
-        if canonical in out:
+    # Camada 1: normaliza tanto nomes vistos quanto aliases pra forma canonica
+    cru_pra_norm: dict[str, str] = {}
+    for n in nomes:
+        if not n:
             continue
-        out[canonical] = canonical
+        cru_pra_norm[n] = _normaliza_nome_perito(n)
+    aliases = {
+        _normaliza_nome_perito(k): _normaliza_nome_perito(v)
+        for k, v in aliases_raw.items()
+        if k and v
+    }
+
+    # Conjunto unico de nomes normalizados
+    nomes_norm = set(cru_pra_norm.values())
+
+    # Camada 3 (rodada primeiro): automerge por prefixo no espaco normalizado
+    norm_canon: dict[str, str] = {}
+    ordenados = sorted(nomes_norm, key=len, reverse=True)
+    for canonical in ordenados:
+        if canonical in norm_canon:
+            continue
+        norm_canon[canonical] = canonical
         for n in ordenados:
-            if n == canonical or n in out:
+            if n == canonical or n in norm_canon:
                 continue
             ml = min(len(canonical), len(n))
             if ml >= MIN_PREFIX and canonical[:ml] == n[:ml]:
-                out[n] = canonical
+                norm_canon[n] = canonical
 
-    # Camada 1: aliases manuais (prioridade). Resolve chains transitivos
-    # (A -> B, B -> C => A -> C) iterativamente, ate 5 niveis pra evitar loop.
+    # Camada 2: aliases manuais (prioridade absoluta). Resolve chains
+    # transitivos (A -> B, B -> C => A -> C). Limite de 5 niveis evita loop.
     def _resolve(name: str) -> str:
         seen = set()
         cur = name
@@ -6222,18 +6258,17 @@ def _canonicaliza_peritos_map(nomes: set[str],
             cur = nxt
         return cur
 
-    # Aplica aliases tanto nos nomes vistos quanto nos canonicos
-    for raw in list(out.keys()):
-        # 1. Se o nome cru tem alias, ele vai pro destino do alias
-        if raw in aliases:
-            out[raw] = _resolve(raw)
+    # Aplica aliases tanto nos nomes vistos quanto nos canonicos do automerge
+    for norm in list(norm_canon.keys()):
+        if norm in aliases:
+            norm_canon[norm] = _resolve(norm)
         else:
-            # 2. Se o canonico atual (do automerge) tem alias, redireciona
-            current_canon = out[raw]
-            if current_canon in aliases:
-                out[raw] = _resolve(current_canon)
+            current = norm_canon[norm]
+            if current in aliases:
+                norm_canon[norm] = _resolve(current)
 
-    return out
+    # Retorna mapping pra nomes crus apontando pro canonico normalizado
+    return {cru: norm_canon.get(norm, norm) for cru, norm in cru_pra_norm.items()}
 
 
 def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:

@@ -154,6 +154,55 @@ class TestAgregaComMerge:
 # End-to-end via endpoint /api/relatorio/vistoriadores
 # ══════════════════════════════════════════════════════════════════════════════
 
+class TestNormalizacaoUnicode:
+    """Sispevi exporta acentos em NFC, Megalaudo em NFD. Bytes diferentes pro
+    mesmo nome visivelmente igual — antes do fix faziam aparecer 2x no ranking.
+    """
+
+    def test_nfc_vs_nfd_mergeia_no_canonico(self):
+        import unicodedata
+        nfc = "DIEGO CARVALHO GONÇ"
+        nfd = unicodedata.normalize("NFD", nfc)
+        # Sanity: realmente sao bytes diferentes
+        assert nfc != nfd
+        assert nfc.encode() != nfd.encode()
+
+        m = server._canonicaliza_peritos_map({nfc, nfd})
+        # Ambos apontam pro mesmo canonico (NFC unificado)
+        assert m[nfc] == m[nfd]
+        # Canonico esta em NFC (forma precomposta)
+        assert m[nfc] == nfc
+
+    def test_nfc_curto_nfd_longo_mergeia(self):
+        """Reproduz screenshot Ian: GONÇ (NFC, Sispevi) + GONÇA (NFD, Megalaudo)."""
+        import unicodedata
+        gonc_nfc  = "DIEGO CARVALHO GONÇ"
+        gonca_nfd = unicodedata.normalize("NFD", "DIEGO CARVALHO GONÇA")
+        m = server._canonicaliza_peritos_map({gonc_nfc, gonca_nfd})
+        # Mais longo (normalizado) vira canonico — ambos apontam pra ele
+        canon = m[gonc_nfc]
+        assert canon == m[gonca_nfd]
+        assert canon == "DIEGO CARVALHO GONÇA"  # NFC
+
+    def test_whitespace_extra_colapsa(self):
+        m = server._canonicaliza_peritos_map({
+            "JOAO  DA SILVA SANTOS",   # double space
+            "JOAO DA SILVA SANTOS",
+        })
+        # Ambos colapsam pro mesmo nome → mesmo canonico
+        canon = m["JOAO  DA SILVA SANTOS"]
+        assert canon == m["JOAO DA SILVA SANTOS"]
+        assert canon == "JOAO DA SILVA SANTOS"
+
+    def test_nbsp_unifica(self):
+        """Non-breaking space (U+00A0) vira espaco normal."""
+        m = server._canonicaliza_peritos_map({
+            "JOAO DA SILVA SANTOS",
+            "JOAO DA SILVA SANTOS",
+        })
+        assert m["JOAO DA SILVA SANTOS"] == m["JOAO DA SILVA SANTOS"]
+
+
 class TestEndpointComMerge:
     def test_endpoint_consolida_truncamentos(self, master_client, setup):
         unit_dir = server._unit_state_dir("sp")
