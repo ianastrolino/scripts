@@ -6064,12 +6064,49 @@ def _calcula_premio_perito(qtd_total: int, breakdown_categoria: dict[str, int]) 
     }
 
 
+def _canonicaliza_peritos_map(nomes: set[str]) -> dict[str, str]:
+    """Cria mapping nome_truncado -> nome_canonico (mais longo do grupo).
+
+    Sispevi e Megalaudo truncam o nome a ~19-20 chars na exportacao, com tamanhos
+    diferentes entre sistemas. Resultado: o mesmo perito aparece como "EDMILSON
+    APARECIDO" (Megalaudo) e "EDMILSON APARECIDO N" (Sispevi). Mergeia ambos
+    pro nome mais longo encontrado.
+
+    Heuristica: dois nomes sao o mesmo perito se um eh prefixo do outro com
+    pelo menos 15 caracteres iguais. Threshold conservador pra evitar falso
+    merge em nomes curtos ("JOSE", "JOSE SILVA" etc).
+    """
+    MIN_PREFIX = 15
+    out: dict[str, str] = {}
+    ordenados = sorted({n for n in nomes if n}, key=len, reverse=True)
+    for canonical in ordenados:
+        if canonical in out:
+            continue
+        out[canonical] = canonical
+        for n in ordenados:
+            if n == canonical or n in out:
+                continue
+            ml = min(len(canonical), len(n))
+            if ml >= MIN_PREFIX and canonical[:ml] == n[:ml]:
+                out[n] = canonical
+    return out
+
+
 def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
     """Agrega vistorias por perito. Retorna lista ordenada por valor total desc.
-    Inclui calculo de premio (Fase 3)."""
+    Inclui calculo de premio (Fase 3).
+
+    Aplica canonicalizacao de nome antes da agregacao — mergeia versoes
+    truncadas do mesmo perito (vide _canonicaliza_peritos_map).
+    """
+    # Mapeia nomes truncados pro canonico (mais longo)
+    nomes = {(r.get("perito") or "").strip() for r in rows}
+    canonical_map = _canonicaliza_peritos_map(nomes)
+
     por_perito: dict[str, dict] = {}
     for r in rows:
-        p = (r.get("perito") or "").strip() or "(sem perito)"
+        raw = (r.get("perito") or "").strip()
+        p = canonical_map.get(raw, raw) or "(sem perito)"
         bucket = por_perito.setdefault(p, {
             "perito": p, "qtd": 0, "valor": 0.0,
             "por_servico": {},  # nome → {qtd, valor}
