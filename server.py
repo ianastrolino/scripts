@@ -1311,6 +1311,51 @@ def _save_clientes_vencimento(cfg: dict) -> None:
     tmp.replace(_CLIENTES_VENC_FILE)
 
 
+# ── Aliases manuais de peritos ──────────────────────────────────────────────
+# Sispevi/Megalaudo truncam nome a ~19-20 chars na exportacao XLS — info
+# perdida. _canonicaliza_peritos_map() resolve mergeo automatico quando ha
+# tamanhos diferentes, mas nao consegue reconstruir o nome completo a partir
+# do truncado. Aliases manuais cobrem isso: master mapeia "VICTOR CRECHI DA SI"
+# → "VICTOR CRECHI DA SILVA" via UI, sistema aplica em todos os relatorios.
+_PERITOS_ALIASES_FILE = DATA_DIR / "peritos_aliases.json"
+
+
+def _load_peritos_aliases() -> dict[str, str]:
+    """Carrega aliases manuais. Formato: {nome_truncado_upper: nome_canonico_upper}."""
+    if not _PERITOS_ALIASES_FILE.exists():
+        return {}
+    try:
+        data = json.loads(_PERITOS_ALIASES_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        # Normaliza chaves e valores (uppercase + trim). Descarta entradas vazias.
+        out: dict[str, str] = {}
+        for k, v in data.items():
+            kk = str(k or "").strip().upper()
+            vv = str(v or "").strip().upper()
+            if kk and vv and kk != vv:
+                out[kk] = vv
+        return out
+    except Exception:
+        app.logger.warning("[peritos_aliases] arquivo corrompido")
+        return {}
+
+
+def _save_peritos_aliases(aliases: dict[str, str]) -> None:
+    """Persiste aliases. Normaliza tudo pra uppercase, descarta inválidos."""
+    _PERITOS_ALIASES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    clean: dict[str, str] = {}
+    for k, v in (aliases or {}).items():
+        kk = str(k or "").strip().upper()
+        vv = str(v or "").strip().upper()
+        if kk and vv and kk != vv:
+            clean[kk] = vv
+    tmp = _PERITOS_ALIASES_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2, sort_keys=True),
+                   encoding="utf-8")
+    tmp.replace(_PERITOS_ALIASES_FILE)
+
+
 def _modo_vencimento_cliente(cliente_nome: str) -> str | None:
     """Verifica se o cliente cai em alguma regra especial.
 
@@ -2371,6 +2416,73 @@ def master_api_clientes_vencimento_save():
 @master_view_required
 def master_clientes_vencimento_page():
     return _nocache(send_from_directory(UI_DIR, "clientes-vencimento.html"))
+
+
+# ── Aliases de peritos (admin) ──────────────────────────────────────────────
+@app.route("/master/api/peritos-aliases", methods=["GET"])
+@master_view_required
+def master_api_peritos_aliases_get():
+    """Retorna aliases manuais cadastrados. Inclui tambem a lista de peritos
+    'em uso' (que aparecem em vistorias_planilha) pra UI sugerir o que falta
+    cadastrar."""
+    aliases = _load_peritos_aliases()
+    # Coleta nomes em uso na rede (todas unidades, ultimos 60 dias)
+    em_uso: set[str] = set()
+    try:
+        from datetime import date, timedelta
+        hoje = date.today()
+        de = (hoje - timedelta(days=60)).isoformat()
+        ate = hoje.isoformat()
+        for uid in UNITS.keys():
+            try:
+                rows = _db_load_vistorias(uid, _unit_state_dir(uid), de, ate)
+                for r in rows:
+                    n = (r.get("perito") or "").strip()
+                    if n:
+                        em_uso.add(n)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # Ordena: nomes em uso que NAO tem alias primeiro (mais relevantes)
+    sem_alias = sorted(n for n in em_uso if n not in aliases)
+    return _json({
+        "success":   True,
+        "aliases":   aliases,
+        "em_uso":    sorted(em_uso),
+        "sem_alias": sem_alias,
+    })
+
+
+@app.route("/master/api/peritos-aliases", methods=["POST"])
+@csrf_required
+def master_api_peritos_aliases_save():
+    """Salva aliases manuais. Substitui o conjunto inteiro.
+
+    Body: {aliases: {"VICTOR CRECHI DA SI": "VICTOR CRECHI DA SILVA", ...}}
+    Acesso: master/matriz.
+    """
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz."}, 403)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        aliases = body.get("aliases") or {}
+        if not isinstance(aliases, dict):
+            return _json({"success": False, "error": "aliases deve ser objeto"}, 400)
+        _save_peritos_aliases(aliases)
+        _write_audit_log(user, "peritos_aliases.save",
+                         payload={"count": len(_load_peritos_aliases())})
+        return _json({"success": True, "aliases": _load_peritos_aliases()})
+    except Exception as exc:
+        app.logger.exception("[peritos-aliases.save]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/peritos-aliases")
+@master_view_required
+def master_peritos_aliases_page():
+    return _nocache(send_from_directory(UI_DIR, "peritos-aliases.html"))
 
 
 @app.route("/master/api/sistema/saude")
@@ -6064,21 +6176,28 @@ def _calcula_premio_perito(qtd_total: int, breakdown_categoria: dict[str, int]) 
     }
 
 
-def _canonicaliza_peritos_map(nomes: set[str]) -> dict[str, str]:
-    """Cria mapping nome_truncado -> nome_canonico (mais longo do grupo).
+def _canonicaliza_peritos_map(nomes: set[str],
+                              manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
+    """Cria mapping nome_truncado -> nome_canonico.
 
-    Sispevi e Megalaudo truncam o nome a ~19-20 chars na exportacao, com tamanhos
-    diferentes entre sistemas. Resultado: o mesmo perito aparece como "EDMILSON
-    APARECIDO" (Megalaudo) e "EDMILSON APARECIDO N" (Sispevi). Mergeia ambos
-    pro nome mais longo encontrado.
+    Estrategia em 2 camadas:
+    1. Aliases manuais (cadastrados em /master/peritos-aliases): prioridade
+       absoluta. Ex: "VICTOR CRECHI DA SI" -> "VICTOR CRECHI DA SILVA".
+    2. Automerge por prefixo: dois nomes sao o mesmo perito se um eh prefixo
+       do outro com pelo menos 15 chars iguais. Mais longo vira canonico.
+       Resolve truncamentos automaticos do Sispevi (19) vs Megalaudo (20).
 
-    Heuristica: dois nomes sao o mesmo perito se um eh prefixo do outro com
-    pelo menos 15 caracteres iguais. Threshold conservador pra evitar falso
-    merge em nomes curtos ("JOSE", "JOSE SILVA" etc).
+    Threshold de 15 chars no automerge eh conservador pra evitar falso merge
+    em nomes curtos. Aliases manuais nao tem essa restricao.
     """
     MIN_PREFIX = 15
+    aliases = manual_aliases or {}
+
     out: dict[str, str] = {}
-    ordenados = sorted({n for n in nomes if n}, key=len, reverse=True)
+    nomes_limpos = {n for n in nomes if n}
+
+    # Camada 2 primeiro: automerge por prefixo. Aliases manuais sobreescrevem.
+    ordenados = sorted(nomes_limpos, key=len, reverse=True)
     for canonical in ordenados:
         if canonical in out:
             continue
@@ -6089,6 +6208,31 @@ def _canonicaliza_peritos_map(nomes: set[str]) -> dict[str, str]:
             ml = min(len(canonical), len(n))
             if ml >= MIN_PREFIX and canonical[:ml] == n[:ml]:
                 out[n] = canonical
+
+    # Camada 1: aliases manuais (prioridade). Resolve chains transitivos
+    # (A -> B, B -> C => A -> C) iterativamente, ate 5 niveis pra evitar loop.
+    def _resolve(name: str) -> str:
+        seen = set()
+        cur = name
+        for _ in range(5):
+            nxt = aliases.get(cur)
+            if not nxt or nxt == cur or nxt in seen:
+                return cur
+            seen.add(cur)
+            cur = nxt
+        return cur
+
+    # Aplica aliases tanto nos nomes vistos quanto nos canonicos
+    for raw in list(out.keys()):
+        # 1. Se o nome cru tem alias, ele vai pro destino do alias
+        if raw in aliases:
+            out[raw] = _resolve(raw)
+        else:
+            # 2. Se o canonico atual (do automerge) tem alias, redireciona
+            current_canon = out[raw]
+            if current_canon in aliases:
+                out[raw] = _resolve(current_canon)
+
     return out
 
 
@@ -6099,9 +6243,9 @@ def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
     Aplica canonicalizacao de nome antes da agregacao — mergeia versoes
     truncadas do mesmo perito (vide _canonicaliza_peritos_map).
     """
-    # Mapeia nomes truncados pro canonico (mais longo)
+    # Mapeia nomes truncados pro canonico (aliases manuais + automerge)
     nomes = {(r.get("perito") or "").strip() for r in rows}
-    canonical_map = _canonicaliza_peritos_map(nomes)
+    canonical_map = _canonicaliza_peritos_map(nomes, manual_aliases=_load_peritos_aliases())
 
     por_perito: dict[str, dict] = {}
     for r in rows:

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Aliases de Peritos</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .panel {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 18px 22px; margin-bottom: 18px;
+    }
+    .panel h2 {
+      margin: 0 0 4px; font-size: 13px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--ds-ink-muted);
+    }
+    .panel p { margin: 0 0 14px; font-size: 13px; color: var(--ds-ink); }
+
+    .add-form {
+      display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px;
+      align-items: center;
+    }
+    .add-form input, .add-form select {
+      font: inherit; font-size: 13px;
+      padding: 9px 12px; border-radius: 8px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); width: 100%;
+    }
+    .add-form input:focus, .add-form select:focus {
+      outline: none; border-color: var(--ds-ink);
+    }
+    .add-form button {
+      font: inherit; font-size: 13px; font-weight: 700;
+      padding: 9px 18px; border-radius: 8px;
+      background: var(--ds-ink); color: var(--ds-surface);
+      border: 1px solid var(--ds-ink); cursor: pointer;
+      white-space: nowrap;
+    }
+    .add-form button:disabled { opacity: .5; cursor: not-allowed; }
+    .add-form .arrow {
+      font-size: 18px; color: var(--ds-ink-muted); text-align: center;
+    }
+
+    .pending-list {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+    }
+    .pending-list .chip {
+      font-size: 11.5px; font-weight: 600;
+      padding: 4px 10px; border-radius: 100px;
+      background: #fef3c7; color: #92400e;
+      cursor: pointer; transition: background .15s;
+    }
+    .pending-list .chip:hover { background: #fde68a; }
+    .pending-list .empty {
+      font-size: 12px; color: var(--ds-ink-muted); font-style: italic;
+    }
+
+    .aliases-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px;
+    }
+    .aliases-table th, .aliases-table td {
+      padding: 10px 12px; text-align: left;
+      border-bottom: 1px solid var(--ds-line);
+    }
+    .aliases-table th {
+      font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ds-ink-muted);
+      background: var(--ds-surface-alt);
+    }
+    .aliases-table .truncado {
+      color: #b45309; font-weight: 600;
+    }
+    .aliases-table .canonico {
+      color: var(--ds-ink); font-weight: 700;
+    }
+    .aliases-table .arrow { color: var(--ds-ink-muted); }
+    .aliases-table .rm {
+      cursor: pointer; color: var(--ds-ink-muted);
+      font-size: 16px; user-select: none;
+    }
+    .aliases-table .rm:hover { color: var(--ds-danger); }
+    .aliases-table tbody tr:hover td { background: var(--ds-surface-alt); }
+
+    .empty-state {
+      padding: 30px; text-align: center;
+      color: var(--ds-ink-muted); font-size: 13px;
+    }
+
+    .toast {
+      position: fixed; bottom: 20px; right: 20px;
+      padding: 12px 20px; border-radius: 8px;
+      font-size: 13px; font-weight: 600;
+      opacity: 0; transform: translateY(10px);
+      transition: all .25s;
+      pointer-events: none; z-index: 1000;
+      background: var(--ds-ink); color: var(--ds-surface);
+    }
+    .toast.ok  { background: #059669; color: white; }
+    .toast.err { background: #dc2626; color: white; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap" style="max-width:1000px;">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Sistema</div>
+        <h1 class="app-page-title">Aliases de Peritos</h1>
+        <p class="app-page-sub">Sispevi e Megalaudo truncam o nome do perito ao exportar (~19-20 chars). Aqui você mapeia o nome truncado para o nome completo — o relatório passa a mostrar a versão correta.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Adicionar alias</h2>
+        <p>Selecione um nome truncado da lista (peritos detectados nos últimos 60 dias) ou digite manualmente, e informe o nome completo correto.</p>
+        <div class="add-form">
+          <input list="peritos-list" id="inpTruncado" placeholder="Nome truncado (ex: VICTOR CRECHI DA SI)">
+          <input id="inpCanonico" placeholder="Nome completo (ex: VICTOR CRECHI DA SILVA)">
+          <button id="btnAdd" disabled>+ Adicionar</button>
+        </div>
+        <datalist id="peritos-list"></datalist>
+
+        <div style="margin-top:14px">
+          <span style="font-size:11.5px;font-weight:700;color:var(--ds-ink-muted);text-transform:uppercase;letter-spacing:.04em">Peritos sem alias (clique pra preencher)</span>
+          <div class="pending-list" id="pendingList"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 style="display:flex;justify-content:space-between;align-items:center">
+          Aliases cadastrados <span id="countLabel" style="font-size:12px;font-weight:600;text-transform:none;letter-spacing:0">—</span>
+        </h2>
+        <table class="aliases-table">
+          <thead>
+            <tr>
+              <th>Nome truncado (como vem da planilha)</th>
+              <th style="width:30px"></th>
+              <th>Nome canônico (como aparece no relatório)</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="aliasesBody">
+            <tr><td colspan="4" class="empty-state">Carregando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "peritos-aliases",
+  breadcrumbs: [{ label: "Sistema" }, { label: "Aliases de Peritos", current: true }]
+});
+
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function showToast(msg, kind) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast " + (kind || "") + " show";
+  setTimeout(() => t.className = "toast " + (kind || ""), 2500);
+}
+
+let STATE = { aliases: {}, em_uso: [], sem_alias: [] };
+let CSRF = "";
+
+async function getCsrf() {
+  if (CSRF) return CSRF;
+  const r = await fetch("/api/csrf-token").then(r => r.json());
+  CSRF = r.token || r.csrf_token || "";
+  return CSRF;
+}
+
+async function carregar() {
+  try {
+    const r = await fetch("/master/api/peritos-aliases").then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    STATE = r;
+    render();
+  } catch (e) {
+    document.getElementById("aliasesBody").innerHTML =
+      `<tr><td colspan="4" class="empty-state">Erro: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function render() {
+  // Datalist com nomes em uso
+  const dl = document.getElementById("peritos-list");
+  dl.innerHTML = STATE.em_uso.map(n => `<option value="${esc(n)}"></option>`).join("");
+
+  // Chips de peritos sem alias
+  const pendingList = document.getElementById("pendingList");
+  if (!STATE.sem_alias.length) {
+    pendingList.innerHTML = `<span class="empty">Todos os peritos detectados já têm alias (ou não há truncados).</span>`;
+  } else {
+    pendingList.innerHTML = STATE.sem_alias.map(n =>
+      `<span class="chip" data-fill="${esc(n)}">${esc(n)}</span>`
+    ).join("");
+    pendingList.querySelectorAll(".chip[data-fill]").forEach(el => {
+      el.addEventListener("click", () => {
+        document.getElementById("inpTruncado").value = el.dataset.fill;
+        document.getElementById("inpCanonico").focus();
+        updateAddBtn();
+      });
+    });
+  }
+
+  // Tabela de aliases existentes
+  const tbody = document.getElementById("aliasesBody");
+  const keys = Object.keys(STATE.aliases).sort();
+  document.getElementById("countLabel").textContent =
+    `${keys.length} alias${keys.length === 1 ? "" : "es"} cadastrado${keys.length === 1 ? "" : "s"}`;
+  if (!keys.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Nenhum alias cadastrado ainda. Use o formulário acima.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = keys.map(k => `
+    <tr>
+      <td class="truncado">${esc(k)}</td>
+      <td class="arrow">→</td>
+      <td class="canonico">${esc(STATE.aliases[k])}</td>
+      <td><span class="rm" data-rm="${esc(k)}" title="Remover">×</span></td>
+    </tr>
+  `).join("");
+  tbody.querySelectorAll(".rm[data-rm]").forEach(el => {
+    el.addEventListener("click", () => removeAlias(el.dataset.rm));
+  });
+}
+
+function updateAddBtn() {
+  const t = document.getElementById("inpTruncado").value.trim();
+  const c = document.getElementById("inpCanonico").value.trim();
+  document.getElementById("btnAdd").disabled = !(t && c && t.toUpperCase() !== c.toUpperCase());
+}
+
+async function salvarTudo(novosAliases, mensagemOk) {
+  const token = await getCsrf();
+  try {
+    const r = await fetch("/master/api/peritos-aliases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify({ aliases: novosAliases }),
+    }).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    STATE.aliases = r.aliases;
+    // Re-fetch pra atualizar lista de sem_alias
+    await carregar();
+    showToast(mensagemOk || "Salvo!", "ok");
+  } catch (e) {
+    showToast("Erro: " + e.message, "err");
+  }
+}
+
+async function addAlias() {
+  const t = document.getElementById("inpTruncado").value.trim().toUpperCase();
+  const c = document.getElementById("inpCanonico").value.trim().toUpperCase();
+  if (!t || !c || t === c) return;
+  const novos = { ...STATE.aliases, [t]: c };
+  await salvarTudo(novos, `Alias "${t}" → "${c}" salvo`);
+  document.getElementById("inpTruncado").value = "";
+  document.getElementById("inpCanonico").value = "";
+  updateAddBtn();
+}
+
+async function removeAlias(truncado) {
+  if (!confirm(`Remover alias "${truncado}" → "${STATE.aliases[truncado]}"?`)) return;
+  const novos = { ...STATE.aliases };
+  delete novos[truncado];
+  await salvarTudo(novos, "Alias removido");
+}
+
+document.getElementById("inpTruncado").addEventListener("input", updateAddBtn);
+document.getElementById("inpCanonico").addEventListener("input", updateAddBtn);
+document.getElementById("inpCanonico").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); addAlias(); }
+});
+document.getElementById("btnAdd").addEventListener("click", addAlias);
+
+carregar();
+</script>
+</body>
+</html>
