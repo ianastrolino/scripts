@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Backfill Vistoriadores</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .panel {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: var(--ds-radius-lg);
+      padding: 18px 22px; margin-bottom: 18px;
+    }
+    .panel h2 {
+      margin: 0 0 4px; font-size: 14px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--ds-ink-muted);
+    }
+    .panel p { margin: 0 0 14px; font-size: 13px; color: var(--ds-ink); }
+
+    .uploader {
+      border: 2px dashed var(--ds-line); border-radius: var(--ds-radius-lg);
+      padding: 30px; text-align: center;
+      transition: all .15s; cursor: pointer;
+      background: var(--ds-surface-alt);
+    }
+    .uploader:hover, .uploader.drag {
+      border-color: var(--ds-ink); background: var(--ds-surface);
+    }
+    .uploader .ic { font-size: 32px; margin-bottom: 8px; opacity: .5; }
+    .uploader .t { font-weight: 700; color: var(--ds-ink); }
+    .uploader .h { font-size: 12px; color: var(--ds-ink-muted); margin-top: 4px; }
+    .uploader input { display: none; }
+
+    .file-list { display: grid; gap: 10px; margin-top: 18px; }
+    .file-card {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: 10px; padding: 12px 14px;
+      display: grid; grid-template-columns: 1fr 200px 80px 100px 30px;
+      gap: 12px; align-items: center;
+    }
+    .file-name { font-weight: 700; color: var(--ds-ink); font-size: 13px; }
+    .file-name .sub { font-size: 11px; color: var(--ds-ink-muted); font-weight: 500; margin-top: 2px; }
+    .file-unit select {
+      width: 100%; font: inherit; font-size: 13px;
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+    }
+    .file-qty {
+      text-align: right; font-variant-numeric: tabular-nums;
+      font-weight: 700; color: var(--ds-ink); font-size: 13px;
+    }
+    .file-status {
+      text-align: center; font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 100px;
+    }
+    .file-status.pending { background: var(--ds-surface-alt); color: var(--ds-ink-muted); }
+    .file-status.parsing { background: #fef3c7; color: #92400e; }
+    .file-status.ok      { background: #d1fae5; color: #065f46; }
+    .file-status.err     { background: #fee2e2; color: #991b1b; }
+    .file-rm {
+      cursor: pointer; color: var(--ds-ink-muted); text-align: center;
+      font-size: 18px; user-select: none;
+    }
+    .file-rm:hover { color: var(--ds-danger); }
+
+    .actions {
+      display: flex; gap: 10px; align-items: center; margin-top: 16px;
+    }
+    .actions button {
+      font: inherit; font-size: 13px; font-weight: 700;
+      padding: 9px 18px; border-radius: 6px;
+      cursor: pointer; border: 1px solid var(--ds-line);
+      background: var(--ds-surface); color: var(--ds-ink);
+    }
+    .actions button.primary {
+      background: var(--ds-ink); color: var(--ds-surface);
+      border-color: var(--ds-ink);
+    }
+    .actions button.primary:disabled { opacity: .5; cursor: not-allowed; }
+    .actions .info { margin-left: auto; font-size: 12.5px; color: var(--ds-ink-muted); }
+
+    .summary {
+      margin-top: 18px; padding: 14px 18px;
+      background: #f0fdf4; border: 1px solid #bbf7d0;
+      border-radius: 10px; font-size: 13px; color: #166534;
+      display: none;
+    }
+    .summary.has { display: block; }
+    .summary .err { color: #991b1b; }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap" style="max-width:1100px;">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Admin</div>
+        <h1 class="app-page-title">Backfill — Vistoriadores</h1>
+        <p class="app-page-sub">Importa planilhas históricas direto pra base de vistoriadores. Não envia pro ERP — só alimenta o relatório. Dedup automático por (data, placa, serviço): reimport é seguro.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Como funciona</h2>
+        <p>
+          Arraste as planilhas exportadas do <strong>Sispevi</strong> e <strong>Megalaudo</strong> (XLS/HTML).
+          Selecione a unidade de cada arquivo no dropdown. Clique <strong>Processar</strong> — o sistema
+          parsa as linhas, captura o PERITO e popula a base. Repita pra cada unidade.
+        </p>
+
+        <label class="uploader" id="uploader">
+          <div class="ic">⤓</div>
+          <div class="t">Arraste arquivos ou clique pra escolher</div>
+          <div class="h">Planilhas .xls / .html exportadas do Sispevi/Megalaudo</div>
+          <input type="file" id="fileInput" multiple accept=".xls,.xlsx,.html,.htm,.csv">
+        </label>
+
+        <div class="file-list" id="fileList"></div>
+
+        <div class="actions">
+          <button id="btnProcess" class="primary" disabled>↑ Processar tudo</button>
+          <button id="btnClear">Limpar lista</button>
+          <span class="info" id="info"></span>
+        </div>
+
+        <div class="summary" id="summary"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "backfill-vistoriadores",
+  breadcrumbs: [{ label: "Admin" }, { label: "Backfill Vistoriadores", current: true }]
+});
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const cleanText = s => String(s ?? "").replace(/\s+/g, " ").trim();
+const normalizeKey = s => cleanText(s).toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const parseDateBr = s => {
+  const m = String(s ?? "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : "";
+};
+const parseMoney = s => {
+  if (typeof s === "number") return s;
+  return Number(String(s ?? "0").replace(/[^\d,-]/g, "").replace(",", ".")) || 0;
+};
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Parser igual ao app.js — extrai records da planilha HTML/XLS exportada
+function parseExportedHtml(text) {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const rows = [...doc.querySelectorAll("tr")].map(tr => [...tr.children].map(c => cleanText(c.textContent)));
+  const headerIndex = rows.findIndex(row => {
+    const keys = row.map(normalizeKey);
+    return ["DATA", "PLACA", "CLIENTE", "SERVICO", "FP", "PRECO"].every(k => keys.includes(k));
+  });
+  if (headerIndex < 0) throw new Error("Colunas obrigatorias nao encontradas (DATA/PLACA/CLIENTE/SERVICO/FP/PRECO)");
+  const headers = rows[headerIndex].map(normalizeKey);
+  const col = {
+    data:    headers.indexOf("DATA"),
+    placa:   headers.indexOf("PLACA"),
+    cliente: headers.indexOf("CLIENTE"),
+    servico: headers.indexOf("SERVICO"),
+    fp:      headers.indexOf("FP"),
+    preco:   headers.indexOf("PRECO"),
+    perito:  headers.indexOf("PERITO"),
+  };
+  if (col.perito < 0) {
+    throw new Error("Coluna PERITO nao encontrada. Re-exporte a planilha incluindo essa coluna.");
+  }
+  return rows.slice(headerIndex + 1).reduce((out, row) => {
+    const d = row[col.data] || "";
+    if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) return out;
+    out.push({
+      data:    parseDateBr(d),
+      placa:   String(row[col.placa] || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
+      cliente: cleanText(row[col.cliente]).toUpperCase(),
+      servico: cleanText(row[col.servico]).toUpperCase(),
+      fp:      cleanText(row[col.fp]).toUpperCase(),
+      valor:   parseMoney(row[col.preco]),
+      perito:  cleanText(row[col.perito]).toUpperCase(),
+    });
+    return out;
+  }, []);
+}
+
+// ── State ───────────────────────────────────────────────────────────────────
+let UNITS = [];         // [{slug, nome}]
+let FILES = [];         // [{id, file, vistorias, status, unit, error, result}]
+
+// Tenta adivinhar unidade pelo nome do arquivo
+function guessUnit(filename) {
+  const norm = normalizeKey(filename);
+  for (const u of UNITS) {
+    const slug = u.slug.toUpperCase();
+    const nome = normalizeKey(u.nome).split(" ")[0];
+    if (norm.includes(slug) || norm.includes(nome)) return u.slug;
+  }
+  return "";
+}
+
+async function carregarUnidades() {
+  try {
+    const r = await fetch("/api/units-list").then(r => r.json());
+    if (r.success) UNITS = r.units;
+  } catch { /* silencioso */ }
+}
+
+// CSRF token
+let CSRF = "";
+async function getCsrf() {
+  if (CSRF) return CSRF;
+  const r = await fetch("/api/csrf-token").then(r => r.json());
+  CSRF = r.token || r.csrf_token || "";
+  return CSRF;
+}
+
+// ── Render ──────────────────────────────────────────────────────────────────
+function render() {
+  const list = document.getElementById("fileList");
+  if (!FILES.length) {
+    list.innerHTML = "";
+    document.getElementById("btnProcess").disabled = true;
+    document.getElementById("info").textContent = "";
+    return;
+  }
+  list.innerHTML = FILES.map(f => {
+    const opts = UNITS.map(u =>
+      `<option value="${u.slug}" ${u.slug === f.unit ? "selected" : ""}>${esc(u.nome)}</option>`
+    ).join("");
+    return `
+      <div class="file-card" data-id="${f.id}">
+        <div class="file-name">
+          ${esc(f.file.name)}
+          <div class="sub">${f.error ? `Erro: ${esc(f.error)}` : (f.result ? `${f.result.inseridas} inseridas · ${f.result.atualizadas} atualizadas` : "Aguardando")}</div>
+        </div>
+        <div class="file-unit">
+          <select data-unit-for="${f.id}" ${f.status === "ok" ? "disabled" : ""}>
+            <option value="">Selecione unidade…</option>
+            ${opts}
+          </select>
+        </div>
+        <div class="file-qty">${(f.vistorias || []).length}</div>
+        <div class="file-status ${f.status}">${
+          f.status === "pending" ? "Pendente" :
+          f.status === "parsing" ? "Lendo…" :
+          f.status === "ok"      ? "✓ OK" :
+          f.status === "err"     ? "Erro" : f.status
+        }</div>
+        <div class="file-rm" data-rm-for="${f.id}" title="Remover">×</div>
+      </div>
+    `;
+  }).join("");
+
+  // Bind selects
+  list.querySelectorAll("select[data-unit-for]").forEach(sel => {
+    sel.addEventListener("change", e => {
+      const id = e.target.dataset.unitFor;
+      const f = FILES.find(x => x.id === id);
+      if (f) f.unit = e.target.value;
+      updateProcessBtn();
+    });
+  });
+  list.querySelectorAll("[data-rm-for]").forEach(el => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.rmFor;
+      FILES = FILES.filter(f => f.id !== id);
+      render();
+    });
+  });
+
+  updateProcessBtn();
+}
+
+function updateProcessBtn() {
+  const podeProcessar = FILES.some(f => f.status === "pending" && f.unit);
+  document.getElementById("btnProcess").disabled = !podeProcessar;
+  const total = FILES.reduce((acc, f) => acc + (f.vistorias?.length || 0), 0);
+  document.getElementById("info").textContent =
+    `${FILES.length} arquivo${FILES.length === 1 ? "" : "s"} · ${total} vistoria${total === 1 ? "" : "s"} no total`;
+}
+
+// ── Upload handler ──────────────────────────────────────────────────────────
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    const id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const entry = {
+      id, file, vistorias: [], status: "parsing", unit: guessUnit(file.name),
+      error: null, result: null,
+    };
+    FILES.push(entry);
+    render();
+    try {
+      const text = await file.text();
+      entry.vistorias = parseExportedHtml(text);
+      entry.status = "pending";
+      if (!entry.vistorias.length) {
+        entry.status = "err"; entry.error = "Planilha vazia ou sem dados validos";
+      }
+    } catch (e) {
+      entry.status = "err"; entry.error = e.message;
+    }
+    render();
+  }
+}
+
+document.getElementById("fileInput").addEventListener("change", e => {
+  handleFiles(e.target.files);
+  e.target.value = "";
+});
+
+const dropZone = document.getElementById("uploader");
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault(); dropZone.classList.remove("drag");
+  handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById("btnClear").addEventListener("click", () => {
+  FILES = [];
+  document.getElementById("summary").classList.remove("has");
+  render();
+});
+
+document.getElementById("btnProcess").addEventListener("click", async () => {
+  const btn = document.getElementById("btnProcess");
+  btn.disabled = true;
+  const token = await getCsrf();
+
+  let totIns = 0, totUpd = 0, totErr = 0;
+  for (const f of FILES) {
+    if (f.status !== "pending" || !f.unit) continue;
+    f.status = "parsing"; render();
+    try {
+      const r = await fetch("/master/api/backfill-vistorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+        body: JSON.stringify({
+          unit:      f.unit,
+          arquivo:   f.file.name,
+          vistorias: f.vistorias,
+        }),
+      }).then(r => r.json());
+      if (!r.success) throw new Error(r.error || "falha");
+      f.status = "ok"; f.result = { inseridas: r.inseridas, atualizadas: r.atualizadas };
+      totIns += r.inseridas; totUpd += r.atualizadas;
+    } catch (e) {
+      f.status = "err"; f.error = e.message; totErr++;
+    }
+    render();
+  }
+
+  const sum = document.getElementById("summary");
+  sum.className = "summary has";
+  sum.innerHTML = `
+    <strong>Resultado:</strong>
+    ${totIns} vistoria${totIns === 1 ? "" : "s"} inserida${totIns === 1 ? "" : "s"} ·
+    ${totUpd} atualizada${totUpd === 1 ? "" : "s"}
+    ${totErr ? `<span class="err">· ${totErr} arquivo${totErr === 1 ? "" : "s"} com erro</span>` : ""}
+    <br><small>Já pode abrir <a href="/vistoriadores">Vistoriadores</a> pra ver o relatório.</small>
+  `;
+});
+
+// Init
+carregarUnidades().then(() => { render(); });
+</script>
+</body>
+</html>

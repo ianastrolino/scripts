@@ -170,6 +170,7 @@
         { id: "erp-config",       label: "Configuração ERP",  icon: "wrench",     href: "/master/erp-config", requires: "master" },
         { id: "erp-comparativo",     label: "Comparativo ERP",       icon: "relatorios", href: "/master/erp-comparativo", requires: "master" },
         { id: "clientes-vencimento", label: "Clientes Quinzenais",   icon: "usuarios",    href: "/master/clientes-vencimento", requires: "master" },
+        { id: "backfill-vistoriadores", label: "Backfill Vistoriadores", icon: "wrench", href: "/master/backfill-vistoriadores", requires: "master" },
         { id: "email-prefs",   label: "Emails",         icon: "mail",       href: "/master/email-prefs", requires: "master" },
         { id: "roadmap",       label: "Roadmap",        icon: "relatorios", href: "/master/roadmap", requires: "master" },
         { id: "manual",        label: "Manual da Marca", icon: "manual", hrefUnit: "/manual", href: "/manual" },

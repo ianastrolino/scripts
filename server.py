@@ -6108,6 +6108,66 @@ def _agrega_vistorias_por_perito(rows: list[dict]) -> list[dict]:
     return out
 
 
+# Backfill admin pra alimentar vistorias_planilha em massa.
+# Cenario: relatorio retroativo (1-12 de Maio) — operador exporta planilha
+# consolidada e popula a tabela de uma vez. Master/matriz so.
+@app.route("/master/api/backfill-vistorias", methods=["POST"])
+@matriz_or_master
+@csrf_required
+def master_api_backfill_vistorias():
+    """Recebe um batch de vistorias (parseadas no frontend) e popula
+    vistorias_planilha de uma unidade. Dedup por (unit, data, placa, servico)
+    — reimport eh seguro.
+
+    Body: {
+      unit: "sp",
+      arquivo: "planilha_maio.xls",
+      vistorias: [{data, placa, cliente, servico, valor, fp, perito}, ...]
+    }
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        unit = (data.get("unit") or "").strip()
+        if not unit or unit not in UNITS:
+            return _json({"success": False, "error": f"Unidade invalida: {unit!r}"}, 400)
+        vistorias = data.get("vistorias") or []
+        if not isinstance(vistorias, list) or not vistorias:
+            return _json({"success": False, "error": "vistorias vazio"}, 400)
+        arquivo = (data.get("arquivo") or "backfill").strip()
+
+        # Normaliza cada vistoria — usa apply_alias pra servico (igual no
+        # snapshot_create) pra padronizar variacoes do Sispevi/Megalaudo.
+        config = _build_unit_config(unit)
+        normalizadas: list[dict] = []
+        for v in vistorias:
+            servico_raw = (v.get("servico") or "").strip().upper()
+            servico = apply_alias(config, "servico", servico_raw)
+            normalizadas.append({
+                "data":    (v.get("data") or "").strip(),
+                "placa":   (v.get("placa") or "").strip().upper(),
+                "cliente": (v.get("cliente") or "").strip().upper(),
+                "servico": servico,
+                "valor":   v.get("valor", 0),
+                "fp":      (v.get("fp") or "").strip().upper(),
+                "perito":  (v.get("perito") or "").strip().upper(),
+                "arquivo": arquivo,
+            })
+
+        unit_dir = _unit_state_dir(unit)
+        unit_dir.mkdir(parents=True, exist_ok=True)
+        result = _db_upsert_vistorias(unit, unit_dir, normalizadas)
+        return _json({"success": True, "unit": unit, **result})
+    except Exception as exc:
+        app.logger.exception("[server] %s", request.path)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/backfill-vistoriadores")
+@matriz_or_master
+def master_backfill_vistoriadores_page():
+    return _nocache(send_from_directory(UI_DIR, "backfill-vistoriadores.html"))
+
+
 @app.route("/api/units-list")
 @login_required
 def api_units_list():
