@@ -358,6 +358,72 @@
     });
   }
 
+  // Normaliza string pra match de servico: NFC + uppercase + collapse spaces
+  function _normServ(s) {
+    return String(s || "").normalize("NFC").toUpperCase().replace(/\s+/g, " ").trim();
+  }
+
+  // Acha a opcao mais especifica do select que case com o servico da planilha.
+  // Sistema de score:
+  //   1000 — match exato (apos normalizacao)
+  //    500 + len(opt) — planilha COMECA com nome do opt (ex: "CAUTELAR + PINTURA"
+  //                     planilha vs opt="CAUTELAR + PINTURA" no select)
+  //    400 + len(plan) — opt comeca com planilha
+  //    200 + len(opt)  — planilha CONTEM nome do opt (substring)
+  //    100 + len(plan) — opt contem nome da planilha
+  //  Mais longo vence sempre — evita "CAUTELAR" generico ganhar de
+  //  "CAUTELAR + PINTURA" especifico.
+  function findBestServicoMatch(targetRaw, options) {
+    const t = _normServ(targetRaw);
+    if (!t) return { match: null, score: 0 };
+    let best = null;
+    let bestScore = 0;
+    for (const opt of options) {
+      if (!opt.value) continue;  // pula placeholder vazio
+      const o = _normServ(opt.text);
+      if (!o) continue;
+      let score = 0;
+      if (o === t)               score = 1000;
+      else if (t.startsWith(o))  score = 500 + o.length;
+      else if (o.startsWith(t))  score = 400 + t.length;
+      else if (t.includes(o))    score = 200 + o.length;
+      else if (o.includes(t))    score = 100 + t.length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = opt;
+      }
+    }
+    // Match minimo: precisa pegar pelo menos uma palavra inteira
+    return bestScore >= 100 ? { match: best, score: bestScore } : { match: null, score: 0 };
+  }
+
+  // Mostra/oculta hint do servico vindo da planilha. Visivel ate o usuario
+  // mudar o select manualmente — guia visual do que a planilha sugeriu.
+  function _showServicoHint(fServico, servicoOriginal, matched) {
+    const wrap = fServico.parentElement;
+    if (!wrap) return;
+    let hint = wrap.querySelector("[data-planilha-hint]");
+    if (!hint) {
+      hint = document.createElement("div");
+      hint.setAttribute("data-planilha-hint", "1");
+      hint.style.cssText = "font-size:11.5px;margin-top:4px;font-weight:600;line-height:1.35";
+      wrap.appendChild(hint);
+    }
+    if (matched) {
+      hint.style.color = "var(--ds-ink-muted, #64748b)";
+      hint.innerHTML = `📄 Planilha sugeriu: <strong>${_escHtml(servicoOriginal)}</strong>`;
+    } else {
+      hint.style.color = "#b45309";
+      hint.innerHTML = `⚠️ Planilha trouxe: <strong>${_escHtml(servicoOriginal)}</strong> — nenhuma opção bateu, escolha manualmente.`;
+    }
+    // Limpa o hint quando operador trocar o select (assume que viu)
+    const clearOnChange = () => {
+      hint.remove();
+      fServico.removeEventListener("change", clearOnChange);
+    };
+    fServico.addEventListener("change", clearOnChange);
+  }
+
   // Pré-preenche o form #formCard do PDV com os dados da vistoria selecionada
   function fillFormPdv({ placa, cliente, servico, valor, fp }) {
     const fPlaca = document.getElementById("fPlaca");
@@ -377,17 +443,18 @@
     fValor.value = Number(valor || 0).toFixed(2);
     fValor.dispatchEvent(new Event("input", { bubbles: true }));
 
-    // Tenta selecionar serviço por matching de texto
+    // Seleciona servico priorizando match mais especifico (vide findBestServicoMatch)
     if (servico && fServico.tagName === "SELECT") {
-      const target = String(servico).toUpperCase().trim();
-      let match = null;
-      for (const opt of fServico.options) {
-        const t = (opt.text || "").toUpperCase();
-        if (t.includes(target) || target.includes(t.trim())) { match = opt; break; }
-      }
+      const { match } = findBestServicoMatch(servico, fServico.options);
       if (match) {
         fServico.value = match.value;
         fServico.dispatchEvent(new Event("change", { bubbles: true }));
+        _showServicoHint(fServico, servico, true);
+      } else {
+        // Nada bateu — limpa selecao e avisa
+        fServico.value = "";
+        fServico.dispatchEvent(new Event("change", { bubbles: true }));
+        _showServicoHint(fServico, servico, false);
       }
     }
 
