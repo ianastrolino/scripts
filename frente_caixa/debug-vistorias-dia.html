@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astro Vistorias — Debug Vistorias do Dia</title>
+  <link rel="icon" type="image/png" href="/assets/img/astro-a.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/design-system.css">
+  <link rel="stylesheet" href="/assets/app-shell.css">
+  <style>
+    .toolbar {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .toolbar input[type="date"], .toolbar select, .toolbar button {
+      font: inherit; font-size: 13px;
+      padding: 7px 14px; border-radius: 6px;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); cursor: pointer;
+    }
+    .toolbar button.primary {
+      background: var(--ds-ink); color: var(--ds-surface); font-weight: 700;
+    }
+
+    .resumo-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 760px) { .resumo-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: 10px; padding: 12px 16px;
+      border-top: 3px solid var(--ds-ink-muted);
+    }
+    .stat .lbl {
+      font-size: 10px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ds-ink-muted);
+    }
+    .stat .val {
+      font-size: 22px; font-weight: 800; color: var(--ds-ink);
+      font-variant-numeric: tabular-nums; margin-top: 2px;
+    }
+    .stat.alert { border-top-color: #dc2626; }
+    .stat.alert .val { color: #dc2626; }
+    .stat.warn  { border-top-color: #d97706; }
+    .stat.warn  .val { color: #d97706; }
+    .stat.ok    { border-top-color: #059669; }
+
+    .panel {
+      background: var(--ds-surface); border: 1px solid var(--ds-line);
+      border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+    }
+    .panel h2 {
+      margin: 0 0 10px; font-size: 13px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .04em;
+      color: var(--ds-ink-muted);
+    }
+    .panel .desc { font-size: 12.5px; color: var(--ds-ink); margin: -6px 0 12px; }
+
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12.5px; font-variant-numeric: tabular-nums;
+    }
+    th, td {
+      padding: 7px 10px; text-align: left;
+      border-bottom: 1px solid var(--ds-line);
+    }
+    th {
+      font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--ds-ink-muted);
+      background: var(--ds-surface-alt);
+    }
+    td.num { text-align: right; }
+    .pill {
+      display: inline-block; padding: 1px 8px; border-radius: 100px;
+      font-size: 10.5px; font-weight: 700;
+    }
+    .pill.dup     { background: #fee2e2; color: #991b1b; }
+    .pill.av      { background: #d1fae5; color: #065f46; }
+    .pill.fa      { background: #e0e7ff; color: #3730a3; }
+    .pill.outro   { background: var(--ds-surface-alt); color: var(--ds-ink-muted); }
+    .pill.status-falha   { background: #fee2e2; color: #991b1b; }
+    .pill.status-enviado { background: #d1fae5; color: #065f46; }
+    .pill.status-pulado  { background: #fef3c7; color: #92400e; }
+
+    .empty { padding: 20px; text-align: center; color: var(--ds-ink-muted); font-size: 12px; }
+    .raw {
+      max-height: 280px; overflow: auto;
+      background: var(--ds-surface-alt); border: 1px solid var(--ds-line);
+      border-radius: 8px; padding: 12px; font-size: 11px;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+
+<div id="app-shell"></div>
+
+<main id="app-main">
+  <div class="app-content">
+    <div class="app-content-wrap" style="max-width:1200px;">
+      <div class="app-page-header">
+        <div class="app-page-eyebrow">Debug</div>
+        <h1 class="app-page-title">Anatomia das vistorias do dia</h1>
+        <p class="app-page-sub">Quebra detalhada do número que aparece em "Lançamentos" no painel master. Útil pra entender duplicações no Tiny, avulsos do PDV ou divergências planilha × PDV.</p>
+      </div>
+
+      <div class="toolbar">
+        <select id="selUnit"></select>
+        <input type="date" id="inpData">
+        <button id="btnGo" class="primary">↻ Buscar</button>
+        <span id="info" style="font-size:12px;color:var(--ds-ink-muted);margin-left:auto"></span>
+      </div>
+
+      <div id="content">
+        <div class="empty">Selecione unidade e data, clique Buscar.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="/assets/app-shell.js"></script>
+<script>
+AstroShell.init({
+  active: "debug-vistorias-dia",
+  breadcrumbs: [{ label: "Debug" }, { label: "Vistorias do Dia", current: true }]
+});
+
+const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const num = v => Number(v || 0).toLocaleString("pt-BR");
+const brl = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2});
+
+async function carregarUnidades() {
+  try {
+    const r = await fetch("/api/units-list").then(r => r.json());
+    if (!r.success) return;
+    const sel = document.getElementById("selUnit");
+    sel.innerHTML = r.units.map(u => `<option value="${u.slug}">${esc(u.nome)}</option>`).join("");
+  } catch {}
+}
+
+function setHoje() {
+  const now = new Date();
+  document.getElementById("inpData").value = now.toISOString().slice(0, 10);
+}
+
+function statusPill(s) {
+  const cls = s === "falha" ? "status-falha"
+            : s === "enviado" ? "status-enviado"
+            : "status-pulado";
+  return `<span class="pill ${cls}">${esc(s || "?")}</span>`;
+}
+
+async function buscar() {
+  const unit = document.getElementById("selUnit").value;
+  const data = document.getElementById("inpData").value;
+  if (!unit || !data) return;
+  const cont = document.getElementById("content");
+  cont.innerHTML = `<div class="empty">Carregando…</div>`;
+  try {
+    const r = await fetch(`/master/api/debug/vistorias-dia?unit=${encodeURIComponent(unit)}&data=${encodeURIComponent(data)}`).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+
+    const res = r.resumo;
+    document.getElementById("info").textContent =
+      `${unit} · ${data} · painel mostraria ${res.vistorias_painel} vistoria${res.vistorias_painel === 1 ? "" : "s"}`;
+
+    cont.innerHTML = `
+      <div class="resumo-grid">
+        <div class="stat ${res.vistorias_painel > res.vistorias_planilha ? 'warn' : 'ok'}">
+          <div class="lbl">Painel mostra</div>
+          <div class="val">${num(res.vistorias_painel)}</div>
+        </div>
+        <div class="stat ok">
+          <div class="lbl">Planilha do dia</div>
+          <div class="val">${num(res.vistorias_planilha)}</div>
+        </div>
+        <div class="stat ${res.envios_extras_duplicados ? 'alert' : 'ok'}">
+          <div class="lbl">Envios duplicados</div>
+          <div class="val">${num(res.envios_extras_duplicados)}</div>
+        </div>
+        <div class="stat ${res.avulsos_pdv ? 'warn' : 'ok'}">
+          <div class="lbl">Avulsos no PDV</div>
+          <div class="val">${num(res.avulsos_pdv)}</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Conta detalhada</h2>
+        <p class="desc">Painel = chaves únicas em envios_erp + lançamentos PDV não-pareados com o Tiny.</p>
+        <table>
+          <tr><th>Métrica</th><th class="num">Valor</th><th>Observação</th></tr>
+          <tr><td>Total envios pro Tiny (envios_erp)</td><td class="num">${num(res.envios_total)}</td><td>${res.envios_total > res.envios_chaves_distintas ? '⚠️ tem duplicatas' : 'sem duplicatas'}</td></tr>
+          <tr><td>Chaves únicas em envios_erp</td><td class="num">${num(res.envios_chaves_distintas)}</td><td>(placa, servico, valor, fp)</td></tr>
+          <tr><td>Lançamentos PDV totais</td><td class="num">${num(res.lancamentos_pdv)}</td><td></td></tr>
+          <tr><td>PDV pareados com Tiny</td><td class="num">${num(res.pdv_pareados_com_tiny)}</td><td>contam 1 vez (via chave Tiny)</td></tr>
+          <tr><td>PDV NÃO pareados</td><td class="num">${num(res.pdv_nao_pareados)}</td><td>somam ao painel além das chaves Tiny</td></tr>
+          <tr style="font-weight:800"><td>Resultado painel</td><td class="num">${num(res.envios_chaves_distintas)} + ${num(res.pdv_nao_pareados)} = ${num(res.vistorias_painel)}</td><td></td></tr>
+          <tr><td colspan="3" style="border-top:2px solid var(--ds-line);background:var(--ds-surface-alt)"></td></tr>
+          <tr><td>Vistorias na planilha do dia</td><td class="num">${num(res.vistorias_planilha)}</td><td>fonte: vistorias_planilha</td></tr>
+          <tr><td>No PDV/Tiny mas SEM planilha</td><td class="num">${num(res.em_pdv_nao_planilha)}</td><td>avulsos ou divergência de placa/serviço</td></tr>
+          <tr><td>Na planilha mas SEM PDV/Tiny</td><td class="num">${num(res.em_planilha_nao_pdv)}</td><td>vistoria não lançada</td></tr>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h2>Duplicatas detectadas em envios_erp (${r.duplicatas_envios.length} chaves)</h2>
+        <p class="desc">Mesma vistoria foi enviada pro Tiny mais de uma vez. Provável causa do número inflado no painel se as chaves divergem entre si (fp normalizado, espaço, etc).</p>
+        ${r.duplicatas_envios.length === 0
+          ? `<div class="empty">Nenhuma duplicata detectada por (placa, servico, valor, fp).</div>`
+          : `<table>
+              <thead><tr>
+                <th>Placa</th><th>Serviço</th><th class="num">Valor</th><th>FP</th><th class="num">Vezes</th><th>IDs/timestamp</th>
+              </tr></thead>
+              <tbody>
+                ${r.duplicatas_envios.map(d => `
+                  <tr>
+                    <td><strong>${esc(d.placa)}</strong></td>
+                    <td>${esc(d.servico)}</td>
+                    <td class="num">${brl(d.valor)}</td>
+                    <td>${esc(d.fp)}</td>
+                    <td class="num"><span class="pill dup">${d.count}×</span></td>
+                    <td style="font-size:11px">${d.envios.map(e => `#${e.id} ${esc((e.timestamp || '').slice(11, 19))} ${statusPill(e.status)}`).join("<br>")}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>`}
+      </div>
+
+      <div class="panel">
+        <h2>Avulsos no PDV (${r.avulsos_pdv.length})</h2>
+        <p class="desc">Lançamentos no PDV cujo serviço não vem da planilha (PESQUISA AVULSA, BAIXA PERMANENTE, DETRAN, etc). Devem ser ignorados pra comparar com Sispevi/Megalaudo.</p>
+        ${r.avulsos_pdv.length === 0
+          ? `<div class="empty">Nenhum avulso identificado.</div>`
+          : `<table>
+              <thead><tr>
+                <th>Hora</th><th>Placa</th><th>Cliente</th><th>Serviço</th><th class="num">Valor</th><th>FP</th>
+              </tr></thead>
+              <tbody>
+                ${r.avulsos_pdv.map(a => `
+                  <tr>
+                    <td>${esc(a.hora || "—")}</td>
+                    <td><strong>${esc(a.placa)}</strong></td>
+                    <td>${esc(a.cliente)}</td>
+                    <td>${esc(a.servico)}</td>
+                    <td class="num">${brl(a.valor)}</td>
+                    <td>${esc(a.fp)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>`}
+      </div>
+
+      <div class="panel">
+        <h2>Diff PDV/Tiny vs Planilha</h2>
+        <p class="desc">Combinações (placa, serviço) que estão em uma fonte e não na outra.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <h3 style="font-size:12px;font-weight:800;color:var(--ds-ink-muted);margin:0 0 6px;text-transform:uppercase">No PDV/Tiny — sem planilha (${r.diff_pdv_planilha.no_pdv_sem_planilha.length})</h3>
+            ${r.diff_pdv_planilha.no_pdv_sem_planilha.length === 0
+              ? `<div class="empty">—</div>`
+              : `<div class="raw">${r.diff_pdv_planilha.no_pdv_sem_planilha.map(p => `${esc(p[0])} | ${esc(p[1])}`).join("\n")}</div>`}
+          </div>
+          <div>
+            <h3 style="font-size:12px;font-weight:800;color:var(--ds-ink-muted);margin:0 0 6px;text-transform:uppercase">Na planilha — sem PDV/Tiny (${r.diff_pdv_planilha.na_planilha_sem_pdv.length})</h3>
+            ${r.diff_pdv_planilha.na_planilha_sem_pdv.length === 0
+              ? `<div class="empty">—</div>`
+              : `<div class="raw">${r.diff_pdv_planilha.na_planilha_sem_pdv.map(p => `${esc(p[0])} | ${esc(p[1])}`).join("\n")}</div>`}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    cont.innerHTML = `<div class="empty" style="color:var(--ds-danger)">Erro: ${esc(e.message)}</div>`;
+  }
+}
+
+document.getElementById("btnGo").addEventListener("click", buscar);
+
+setHoje();
+carregarUnidades().then(buscar);
+</script>
+</body>
+</html>

@@ -2612,6 +2612,205 @@ def master_peritos_aliases_page():
     return _nocache(send_from_directory(UI_DIR, "peritos-aliases.html"))
 
 
+# ── Debug: anatomia das vistorias contadas num dia ──────────────────────────
+# Quando o painel master mostra "X lancamentos" pra uma unidade num dia, esse
+# numero vem de _resumo_dia_unit() = envios_erp dedupados + PDV nao-pareado.
+# Quando o numero parece inflado (ex: Moema 69 quando esperado eram 45),
+# este endpoint quebra a conta detalhadamente: chaves duplicadas no Tiny,
+# avulsos legitimos do PDV, divergencias de servico/fp que romperam o dedup.
+
+# Servicos considerados "avulso legitimo" — nao vem da planilha (nao deve
+# entrar na contagem da planilha, mas eh esperado aparecer no PDV/Tiny).
+_AVULSOS_SERVICOS = {"PESQUISA AVULSA", "BAIXA PERMANENTE", "VISTORIA DETRAN", "TAXA DETRAN"}
+
+
+def _eh_avulso(servico: str) -> bool:
+    s = (servico or "").upper().strip()
+    if not s:
+        return False
+    if s in _AVULSOS_SERVICOS:
+        return True
+    # Heuristica: contem alguma palavra-chave classica de avulso
+    return any(p in s for p in ("PESQUISA", "BAIXA PERMANENTE", "DETRAN", "AVULSA"))
+
+
+@app.route("/master/api/debug/vistorias-dia")
+@master_view_required
+def master_api_debug_vistorias_dia():
+    """Anatomia das vistorias contadas pro painel num dia/unidade.
+
+    Query: ?unit=<slug>&data=YYYY-MM-DD (default hoje).
+
+    Retorna:
+    - envios: lista de envios_erp do dia (incluindo falhas/pulados)
+    - duplicatas_envios: chaves (placa, servico, valor, fp) que aparecem >1x
+      em envios_erp — provavel duplicacao no Tiny
+    - lancamentos_pdv: lista do PDV do dia
+    - vistorias_planilha: lista do que veio da planilha do dia
+    - avulsos_pdv: subset do PDV cujo servico eh avulso (nao vem da planilha)
+    - resumo: contadores conciliados (igual o painel master)
+    """
+    try:
+        unit = (request.args.get("unit") or "").strip()
+        if not unit or unit not in UNITS:
+            return _json({"success": False, "error": f"Unidade invalida: {unit!r}"}, 400)
+        data_iso = (request.args.get("data") or "").strip()
+        if not data_iso:
+            data_iso = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+
+        unit_dir = _unit_state_dir(unit)
+        try:
+            envios = _db_list_envios(unit, unit_dir, date_from=data_iso, date_to=data_iso, limit=5000)
+        except Exception as exc:
+            envios = []
+            app.logger.warning("[debug:envios] %s", exc)
+        try:
+            lanc = _db_load(unit, unit_dir, data_iso)
+        except Exception:
+            lanc = []
+        try:
+            vistorias = _db_load_vistorias(unit, unit_dir, data_iso, data_iso)
+        except Exception:
+            vistorias = []
+
+        # Agrupa envios_erp por chave de dedup pra detectar duplicatas
+        envios_por_chave: dict[tuple, list[dict]] = {}
+        for e in envios:
+            placa   = (e.get("placa") or "").upper().strip()
+            servico = (e.get("servico") or "").upper().strip()
+            valor   = round(float(e.get("valor", 0) or 0), 2)
+            fp_raw  = (e.get("fp") or "").lower().strip()
+            fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
+            key = (placa, servico, valor, fp_norm)
+            envios_por_chave.setdefault(key, []).append(e)
+
+        duplicatas_envios = []
+        for (placa, servico, valor, fp), lista in envios_por_chave.items():
+            if len(lista) > 1:
+                duplicatas_envios.append({
+                    "placa":   placa,
+                    "servico": servico,
+                    "valor":   valor,
+                    "fp":      fp,
+                    "count":   len(lista),
+                    "envios":  [{
+                        "id":         e.get("id"),
+                        "timestamp":  e.get("timestamp"),
+                        "status":     e.get("status"),
+                        "erp":        e.get("erp"),
+                        "chave":      e.get("chave_deduplicacao"),
+                        "arquivo":    e.get("arquivo"),
+                        "erro":       e.get("erro"),
+                    } for e in lista]
+                })
+        # Total de envios "extras" alem do unico esperado por chave
+        envios_extras = sum(d["count"] - 1 for d in duplicatas_envios)
+
+        # Subset de avulsos no PDV
+        avulsos_pdv = [
+            {
+                "id":      lc.get("id"),
+                "hora":    lc.get("hora"),
+                "placa":   lc.get("placa"),
+                "cliente": lc.get("cliente"),
+                "servico": lc.get("servico"),
+                "valor":   lc.get("valor"),
+                "fp":      lc.get("fp"),
+            }
+            for lc in lanc
+            if _eh_avulso(lc.get("servico", ""))
+        ]
+
+        # Replica EXATAMENTE a logica de _resumo_dia_unit
+        chaves_tiny: set[tuple] = set()
+        for e in envios:
+            placa   = (e.get("placa") or "").upper().strip()
+            servico = (e.get("servico") or "").upper().strip()
+            valor   = round(float(e.get("valor", 0) or 0), 2)
+            fp_raw  = (e.get("fp") or "").lower().strip()
+            fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
+            chaves_tiny.add((placa, servico, valor, fp_norm))
+
+        pdv_pareados = []
+        pdv_nao_pareados = []
+        for lc in lanc:
+            placa   = (lc.get("placa") or "").upper().strip()
+            servico = (lc.get("servico") or "").upper().strip()
+            valor   = round(float(lc.get("valor", 0) or 0), 2)
+            fp      = (lc.get("fp") or "").lower().strip()
+            key = (placa, servico, valor, fp)
+            if key in chaves_tiny:
+                pdv_pareados.append(lc)
+            else:
+                pdv_nao_pareados.append(lc)
+
+        vistorias_count_painel = len(chaves_tiny) + len(pdv_nao_pareados)
+
+        # Diff com vistorias_planilha — o que esta no PDV/Tiny mas NAO ta na
+        # planilha (avulso) e o que ta na planilha mas NAO foi PRO PDV/Tiny
+        chaves_planilha: set[tuple] = set()
+        for v in vistorias:
+            placa   = (v.get("placa") or "").upper().strip()
+            servico = (v.get("servico") or "").upper().strip()
+            chaves_planilha.add((placa, servico))
+
+        chaves_pdv_tiny_2 = set()
+        for e in envios:
+            chaves_pdv_tiny_2.add((
+                (e.get("placa") or "").upper().strip(),
+                (e.get("servico") or "").upper().strip(),
+            ))
+        for lc in lanc:
+            chaves_pdv_tiny_2.add((
+                (lc.get("placa") or "").upper().strip(),
+                (lc.get("servico") or "").upper().strip(),
+            ))
+
+        em_pdv_nao_planilha = sorted(
+            list(chaves_pdv_tiny_2 - chaves_planilha)
+        )[:200]
+        em_planilha_nao_pdv = sorted(
+            list(chaves_planilha - chaves_pdv_tiny_2)
+        )[:200]
+
+        return _json({
+            "success":         True,
+            "unit":            unit,
+            "data":            data_iso,
+            "resumo": {
+                "vistorias_painel":         vistorias_count_painel,
+                "envios_total":             len(envios),
+                "envios_chaves_distintas":  len(chaves_tiny),
+                "envios_extras_duplicados": envios_extras,
+                "lancamentos_pdv":          len(lanc),
+                "pdv_pareados_com_tiny":    len(pdv_pareados),
+                "pdv_nao_pareados":         len(pdv_nao_pareados),
+                "avulsos_pdv":              len(avulsos_pdv),
+                "vistorias_planilha":       len(vistorias),
+                "em_pdv_nao_planilha":      len(em_pdv_nao_planilha),
+                "em_planilha_nao_pdv":      len(em_planilha_nao_pdv),
+            },
+            "duplicatas_envios":  duplicatas_envios,
+            "avulsos_pdv":        avulsos_pdv,
+            "diff_pdv_planilha": {
+                "no_pdv_sem_planilha": em_pdv_nao_planilha,
+                "na_planilha_sem_pdv": em_planilha_nao_pdv,
+            },
+            "envios":             envios,
+            "lancamentos":        lanc,
+            "vistorias_planilha": vistorias,
+        })
+    except Exception as exc:
+        app.logger.exception("[debug:vistorias-dia]")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/master/debug-vistorias-dia")
+@master_view_required
+def master_debug_vistorias_dia_page():
+    return _nocache(send_from_directory(UI_DIR, "debug-vistorias-dia.html"))
+
+
 @app.route("/master/api/peritos-aliases/sugestoes", methods=["GET"])
 @master_view_required
 def master_api_peritos_sugestoes():
