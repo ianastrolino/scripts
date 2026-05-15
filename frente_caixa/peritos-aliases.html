@@ -62,6 +62,39 @@
       font-size: 12px; color: var(--ds-ink-muted); font-style: italic;
     }
 
+    .sugestao-card {
+      background: #fefce8; border: 1px solid #fde68a;
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 12px; align-items: center;
+    }
+    .sugestao-card .info { font-size: 12.5px; color: #78350f; }
+    .sugestao-card .info .nomes {
+      font-weight: 700; color: var(--ds-ink); font-size: 13px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .sugestao-card .info .qtd {
+      font-size: 11px; font-weight: 600; color: var(--ds-ink-muted);
+      background: var(--ds-surface); padding: 2px 8px; border-radius: 100px;
+    }
+    .sugestao-card .info .hint {
+      margin-top: 4px; font-size: 11.5px; color: #78350f;
+    }
+    .sugestao-card .actions { display: flex; gap: 6px; }
+    .sugestao-card .actions button {
+      font: inherit; font-size: 12px; font-weight: 700;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--ds-line); background: var(--ds-surface);
+      color: var(--ds-ink); white-space: nowrap;
+    }
+    .sugestao-card .actions button.primary {
+      background: #059669; color: white; border-color: #059669;
+    }
+    .sugestao-card .actions button.primary:hover { background: #047857; }
+    .sugestao-card .actions button.ghost:hover {
+      background: var(--ds-surface-alt);
+    }
+
     .aliases-table {
       width: 100%; border-collapse: collapse;
       font-size: 13px;
@@ -137,6 +170,15 @@
         </div>
       </div>
 
+      <div class="panel" id="sugestoesPanel" style="display:none">
+        <h2 style="display:flex;justify-content:space-between;align-items:center">
+          Sugestões de merge
+          <span id="sugestoesCount" style="font-size:12px;font-weight:600;text-transform:none;letter-spacing:0">—</span>
+        </h2>
+        <p>Pares de nomes parecidos que podem ser o mesmo perito. Decida caso a caso: <strong>Mergear</strong> abre prompt pra escolher o nome canônico; <strong>Distintos</strong> dispensa o par pra sempre.</p>
+        <div id="sugestoesList"></div>
+      </div>
+
       <div class="panel">
         <h2 style="display:flex;justify-content:space-between;align-items:center">
           Aliases cadastrados <span id="countLabel" style="font-size:12px;font-weight:600;text-transform:none;letter-spacing:0">—</span>
@@ -193,9 +235,90 @@ async function carregar() {
     if (!r.success) throw new Error(r.error || "falha");
     STATE = r;
     render();
+    carregarSugestoes(); // assincrono, nao bloqueia
   } catch (e) {
     document.getElementById("aliasesBody").innerHTML =
       `<tr><td colspan="4" class="empty-state">Erro: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function carregarSugestoes() {
+  const panel   = document.getElementById("sugestoesPanel");
+  const lista   = document.getElementById("sugestoesList");
+  const counter = document.getElementById("sugestoesCount");
+  try {
+    const r = await fetch("/master/api/peritos-aliases/sugestoes").then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    if (!r.sugestoes.length) {
+      panel.style.display = "none";
+      return;
+    }
+    panel.style.display = "";
+    counter.textContent = `${r.total} par${r.total === 1 ? "" : "es"} pra revisar`;
+    lista.innerHTML = r.sugestoes.map(s => {
+      const hint = `${s.palavras_comuns} palavra${s.palavras_comuns === 1 ? "" : "s"} em comum, ${s.prefixo_chars} caracteres de prefixo`;
+      return `
+        <div class="sugestao-card" data-a="${esc(s.nome_a)}" data-b="${esc(s.nome_b)}">
+          <div class="info">
+            <div class="nomes">
+              ${esc(s.nome_a)} <span class="qtd">${s.qtd_a}</span>
+              <span style="opacity:.4">vs</span>
+              ${esc(s.nome_b)} <span class="qtd">${s.qtd_b}</span>
+            </div>
+            <div class="hint">${hint}</div>
+          </div>
+          <div class="actions">
+            <button class="primary" data-action="mergear">Mergear</button>
+            <button class="ghost"   data-action="distintos">Distintos</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    // Bind acoes
+    lista.querySelectorAll(".sugestao-card").forEach(card => {
+      const a = card.dataset.a;
+      const b = card.dataset.b;
+      card.querySelector("[data-action='mergear']").addEventListener("click", () => mergearSugestao(a, b));
+      card.querySelector("[data-action='distintos']").addEventListener("click", () => dispensarSugestao(a, b));
+    });
+  } catch (e) {
+    panel.style.display = "";
+    counter.textContent = "";
+    lista.innerHTML = `<div style="font-size:12px;color:var(--ds-danger);padding:10px">Erro carregando sugestoes: ${esc(e.message)}</div>`;
+  }
+}
+
+async function mergearSugestao(a, b) {
+  // Default: nome mais longo dos dois (provavelmente o mais completo)
+  const sugerido = a.length >= b.length ? a : b;
+  const canon = prompt(
+    `Mergear esses 2 nomes em qual nome canônico?\n\nA: ${a}\nB: ${b}\n\n(Edite se quiser corrigir/completar)`,
+    sugerido
+  );
+  if (!canon || !canon.trim()) return;
+  const canonUpper = canon.trim().toUpperCase();
+  // Aliases novos: A → canon, B → canon (se diferentes do canon)
+  const novos = { ...STATE.aliases };
+  if (a !== canonUpper) novos[a] = canonUpper;
+  if (b !== canonUpper) novos[b] = canonUpper;
+  await salvarTudo(novos, `Merge: A e B → "${canonUpper}"`);
+  // carregar() ja atualiza sugestoes
+}
+
+async function dispensarSugestao(a, b) {
+  if (!confirm(`Confirma que "${a}" e "${b}" são peritos DIFERENTES?\n\nO sistema não vai mais sugerir mergear esses dois.`)) return;
+  const token = await getCsrf();
+  try {
+    const r = await fetch("/master/api/peritos-aliases/dispensar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+      body: JSON.stringify({ nome_a: a, nome_b: b }),
+    }).then(r => r.json());
+    if (!r.success) throw new Error(r.error || "falha");
+    showToast("Par marcado como distintos", "ok");
+    carregarSugestoes();
+  } catch (e) {
+    showToast("Erro: " + e.message, "err");
   }
 }
 

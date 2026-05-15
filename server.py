@@ -1317,7 +1317,11 @@ def _save_clientes_vencimento(cfg: dict) -> None:
 # tamanhos diferentes, mas nao consegue reconstruir o nome completo a partir
 # do truncado. Aliases manuais cobrem isso: master mapeia "VICTOR CRECHI DA SI"
 # → "VICTOR CRECHI DA SILVA" via UI, sistema aplica em todos os relatorios.
-_PERITOS_ALIASES_FILE = DATA_DIR / "peritos_aliases.json"
+_PERITOS_ALIASES_FILE   = DATA_DIR / "peritos_aliases.json"
+# Pares de nomes que o master ja confirmou serem peritos DIFERENTES (ex:
+# Elton Flavio Oliveira vs Elton Flavio Fernandes). Sistema nao sugere mais
+# esses pares na lista de "Sugestoes de merge".
+_PERITOS_DISTINTOS_FILE = DATA_DIR / "peritos_distintos.json"
 
 
 def _load_peritos_aliases() -> dict[str, str]:
@@ -1354,6 +1358,129 @@ def _save_peritos_aliases(aliases: dict[str, str]) -> None:
     tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=2, sort_keys=True),
                    encoding="utf-8")
     tmp.replace(_PERITOS_ALIASES_FILE)
+
+
+def _load_peritos_distintos() -> set[tuple[str, str]]:
+    """Carrega pares de nomes ja confirmados como distintos pelo master.
+    Cada par eh ordenado alfabeticamente pra dedup automatico (A,B == B,A)."""
+    if not _PERITOS_DISTINTOS_FILE.exists():
+        return set()
+    try:
+        data = json.loads(_PERITOS_DISTINTOS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return set()
+        out: set[tuple[str, str]] = set()
+        for par in data:
+            if isinstance(par, list) and len(par) == 2:
+                a = str(par[0] or "").strip().upper()
+                b = str(par[1] or "").strip().upper()
+                if a and b and a != b:
+                    out.add(tuple(sorted([a, b])))
+        return out
+    except Exception:
+        app.logger.warning("[peritos_distintos] arquivo corrompido")
+        return set()
+
+
+def _save_peritos_distintos(pares: set[tuple[str, str]]) -> None:
+    """Persiste pares como lista de listas pra serialicao JSON estavel."""
+    _PERITOS_DISTINTOS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    clean = sorted(set(tuple(sorted([str(a or "").strip().upper(),
+                                     str(b or "").strip().upper()]))
+                       for a, b in (pares or [])
+                       if a and b and str(a).strip() != str(b).strip()))
+    tmp = _PERITOS_DISTINTOS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps([list(p) for p in clean],
+                              ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    tmp.replace(_PERITOS_DISTINTOS_FILE)
+
+
+def _palavras_em_comum_inicio(a: str, b: str) -> int:
+    """Conta quantas palavras (separadas por espaco) batem no inicio dos 2 nomes.
+    Ex: "ELTON FLAVIO OLIVEIRA" vs "ELTON FLAVIO FERNANDES" → 2."""
+    pa = a.split()
+    pb = b.split()
+    count = 0
+    for i in range(min(len(pa), len(pb))):
+        if pa[i] == pb[i]:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _sugestoes_merge_peritos(nomes: set[str],
+                             ja_aliases: dict[str, str],
+                             distintos: set[tuple[str, str]],
+                             contagens: dict[str, int] | None = None) -> list[dict]:
+    """Detecta pares de nomes parecidos que talvez sejam o mesmo perito.
+
+    Criterios (todos precisam bater):
+    - Prefixo comum em chars >= MIN_PREFIX (10)
+    - Pelo menos 2 palavras em comum no inicio
+    - Prefixo < 15 chars (>=15 ja eh tratado pelo automerge)
+    - Nenhum dos dois tem alias cadastrado pro outro
+    - Par nao esta em "distintos confirmados"
+
+    Retorna lista de {nome_a, nome_b, prefixo, palavras_comuns, qtd_a, qtd_b}
+    ordenada por total de vistorias (mais relevantes primeiro).
+    """
+    MIN_PREFIX_CHARS = 10
+    MAX_PREFIX_CHARS = 14  # 15+ ja eh automerge
+    MIN_PALAVRAS = 2
+
+    nomes_limpos = sorted({_normaliza_nome_perito(n) for n in nomes if n})
+    cont = contagens or {}
+
+    # Resolve aliases pra nao sugerir merge entre nomes que ja apontam pro mesmo
+    def _resolvido(n: str) -> str:
+        for _ in range(5):
+            nxt = ja_aliases.get(n)
+            if not nxt or nxt == n:
+                return n
+            n = nxt
+        return n
+
+    out: list[dict] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for i, a in enumerate(nomes_limpos):
+        for b in nomes_limpos[i+1:]:
+            par = tuple(sorted([a, b]))
+            if par in seen_pairs:
+                continue
+            seen_pairs.add(par)
+            if par in distintos:
+                continue
+            # Se um aponta pro outro via alias, ja esta resolvido
+            if _resolvido(a) == _resolvido(b):
+                continue
+            # Calcula prefixo comum
+            ml = min(len(a), len(b))
+            prefix = 0
+            for k in range(ml):
+                if a[k] == b[k]:
+                    prefix += 1
+                else:
+                    break
+            if prefix < MIN_PREFIX_CHARS:
+                continue
+            if prefix >= 15:  # ja eh automerge
+                continue
+            pc = _palavras_em_comum_inicio(a, b)
+            if pc < MIN_PALAVRAS:
+                continue
+            out.append({
+                "nome_a":           a,
+                "nome_b":           b,
+                "prefixo_chars":    prefix,
+                "palavras_comuns":  pc,
+                "qtd_a":            int(cont.get(a, 0)),
+                "qtd_b":            int(cont.get(b, 0)),
+            })
+    # Ordena: mais vistorias primeiro (relevancia), depois prefixo mais longo
+    out.sort(key=lambda s: (-(s["qtd_a"] + s["qtd_b"]), -s["prefixo_chars"]))
+    return out
 
 
 def _modo_vencimento_cliente(cliente_nome: str) -> str | None:
@@ -2483,6 +2610,66 @@ def master_api_peritos_aliases_save():
 @master_view_required
 def master_peritos_aliases_page():
     return _nocache(send_from_directory(UI_DIR, "peritos-aliases.html"))
+
+
+@app.route("/master/api/peritos-aliases/sugestoes", methods=["GET"])
+@master_view_required
+def master_api_peritos_sugestoes():
+    """Retorna pares de nomes parecidos sugeridos pra merge manual.
+
+    Calcula em tempo real a partir de vistorias_planilha (ultimos 60 dias),
+    aliases ja cadastrados e pares ja marcados como distintos.
+    """
+    import datetime as _dt
+    hoje = _dt.date.today()
+    de = (hoje - _dt.timedelta(days=60)).isoformat()
+    ate = hoje.isoformat()
+
+    em_uso: set[str] = set()
+    contagens: dict[str, int] = {}
+    for uid in UNITS.keys():
+        try:
+            rows = _db_load_vistorias(uid, _unit_state_dir(uid), de, ate)
+        except Exception:
+            continue
+        for r in rows:
+            n = _normaliza_nome_perito(r.get("perito") or "")
+            if not n:
+                continue
+            em_uso.add(n)
+            contagens[n] = contagens.get(n, 0) + 1
+
+    sugestoes = _sugestoes_merge_peritos(
+        em_uso,
+        ja_aliases=_load_peritos_aliases(),
+        distintos=_load_peritos_distintos(),
+        contagens=contagens,
+    )
+    return _json({"success": True, "sugestoes": sugestoes, "total": len(sugestoes)})
+
+
+@app.route("/master/api/peritos-aliases/dispensar", methods=["POST"])
+@csrf_required
+def master_api_peritos_dispensar():
+    """Marca um par de nomes como confirmadamente DISTINTOS (peritos diferentes).
+    Nao aparecera mais em /sugestoes. Body: {nome_a, nome_b}."""
+    user = _current_user()
+    if not _is_master_or_matriz(user):
+        return _json({"success": False, "error": "Apenas master/matriz."}, 403)
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        a = (body.get("nome_a") or "").strip().upper()
+        b = (body.get("nome_b") or "").strip().upper()
+        if not a or not b or a == b:
+            return _json({"success": False, "error": "nome_a e nome_b obrigatorios e distintos"}, 400)
+        distintos = _load_peritos_distintos()
+        distintos.add(tuple(sorted([a, b])))
+        _save_peritos_distintos(distintos)
+        _write_audit_log(user, "peritos_aliases.dispensar", payload={"a": a, "b": b})
+        return _json({"success": True, "total": len(distintos)})
+    except Exception as exc:
+        app.logger.exception("[peritos-aliases.dispensar]")
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route("/master/api/sistema/saude")
