@@ -168,9 +168,10 @@ async function buscar() {
     document.getElementById("info").textContent =
       `${unit} · ${data} · painel mostraria ${res.vistorias_painel} vistoria${res.vistorias_painel === 1 ? "" : "s"}`;
 
+    const temPlanilha = res.vistorias_planilha > 0;
     cont.innerHTML = `
       <div class="resumo-grid">
-        <div class="stat ${res.vistorias_painel > res.vistorias_planilha ? 'warn' : 'ok'}">
+        <div class="stat ${res.vistorias_painel > 0 ? 'ok' : 'warn'}">
           <div class="lbl">Painel mostra</div>
           <div class="val">${num(res.vistorias_painel)}</div>
         </div>
@@ -178,31 +179,34 @@ async function buscar() {
           <div class="lbl">Planilha do dia</div>
           <div class="val">${num(res.vistorias_planilha)}</div>
         </div>
-        <div class="stat ${res.envios_extras_duplicados ? 'alert' : 'ok'}">
-          <div class="lbl">Envios duplicados</div>
-          <div class="val">${num(res.envios_extras_duplicados)}</div>
+        <div class="stat ${res.avulsos_pdv_vs_planilha ? 'warn' : 'ok'}">
+          <div class="lbl">Avulsos PDV (vs planilha)</div>
+          <div class="val">${num(res.avulsos_pdv_vs_planilha || 0)}</div>
         </div>
-        <div class="stat ${res.avulsos_pdv ? 'warn' : 'ok'}">
-          <div class="lbl">Avulsos no PDV</div>
-          <div class="val">${num(res.avulsos_pdv)}</div>
+        <div class="stat ${res.envios_extras_duplicados ? 'alert' : 'ok'}">
+          <div class="lbl">Envios duplicados Tiny</div>
+          <div class="val">${num(res.envios_extras_duplicados)}</div>
         </div>
       </div>
 
       <div class="panel">
         <h2>Conta detalhada</h2>
-        <p class="desc">Painel = chaves únicas em envios_erp + lançamentos PDV não-pareados com o Tiny.</p>
+        <p class="desc">${temPlanilha
+          ? 'Modelo novo (com planilha): Painel = Vistorias na planilha + avulsos PDV (lançamentos PDV cuja placa+categoria NÃO aparece na planilha).'
+          : 'Modelo legado (sem planilha do dia): Painel = chaves únicas envios_erp + PDV não-pareados.'}</p>
         <table>
           <tr><th>Métrica</th><th class="num">Valor</th><th>Observação</th></tr>
+          <tr><td>Vistorias na planilha do dia</td><td class="num">${num(res.vistorias_planilha)}</td><td>fonte: vistorias_planilha (Sispevi+Megalaudo)</td></tr>
+          <tr><td>Lançamentos PDV totais</td><td class="num">${num(res.lancamentos_pdv)}</td><td>AV pagos no caixa</td></tr>
+          <tr><td>PDV pareado com planilha</td><td class="num">${num(res.pdv_pareados_planilha || 0)}</td><td>(placa, categoria) bate → é pagamento</td></tr>
+          <tr><td>Avulsos PDV (sem planilha)</td><td class="num">${num(res.avulsos_pdv_vs_planilha || 0)}</td><td>placa nao tem vistoria correspondente — soma como vistoria extra</td></tr>
+          <tr style="font-weight:800"><td>Resultado painel ${temPlanilha ? '(novo)' : '(legado)'}</td><td class="num">${temPlanilha ? `${num(res.vistorias_planilha)} + ${num(res.avulsos_pdv_vs_planilha)} = ${num(res.vistorias_painel)}` : num(res.vistorias_painel)}</td><td></td></tr>
+          ${temPlanilha ? `
+          <tr><td colspan="3" style="border-top:2px solid var(--ds-line);background:var(--ds-surface-alt)"><strong style="font-size:11px;letter-spacing:.04em">REFERÊNCIA — LÓGICA ANTIGA (descontinuada)</strong></td></tr>
+          <tr><td>Painel pela lógica antiga</td><td class="num" style="opacity:.6">${num(res.vistorias_painel_legado)}</td><td style="opacity:.6">envios Tiny únicos + PDV não-pareado por (placa,servico,valor,fp)</td></tr>` : ''}
+          <tr><td colspan="3" style="border-top:2px solid var(--ds-line);background:var(--ds-surface-alt)"><strong style="font-size:11px;letter-spacing:.04em">TINY (CONTROLE FINANCEIRO)</strong></td></tr>
           <tr><td>Total envios pro Tiny (envios_erp)</td><td class="num">${num(res.envios_total)}</td><td>${res.envios_total > res.envios_chaves_distintas ? '⚠️ tem duplicatas' : 'sem duplicatas'}</td></tr>
           <tr><td>Chaves únicas em envios_erp</td><td class="num">${num(res.envios_chaves_distintas)}</td><td>(placa, servico, valor, fp)</td></tr>
-          <tr><td>Lançamentos PDV totais</td><td class="num">${num(res.lancamentos_pdv)}</td><td></td></tr>
-          <tr><td>PDV pareados com Tiny</td><td class="num">${num(res.pdv_pareados_com_tiny)}</td><td>contam 1 vez (via chave Tiny)</td></tr>
-          <tr><td>PDV NÃO pareados</td><td class="num">${num(res.pdv_nao_pareados)}</td><td>somam ao painel além das chaves Tiny</td></tr>
-          <tr style="font-weight:800"><td>Resultado painel</td><td class="num">${num(res.envios_chaves_distintas)} + ${num(res.pdv_nao_pareados)} = ${num(res.vistorias_painel)}</td><td></td></tr>
-          <tr><td colspan="3" style="border-top:2px solid var(--ds-line);background:var(--ds-surface-alt)"></td></tr>
-          <tr><td>Vistorias na planilha do dia</td><td class="num">${num(res.vistorias_planilha)}</td><td>fonte: vistorias_planilha</td></tr>
-          <tr><td>No PDV/Tiny mas SEM planilha</td><td class="num">${num(res.em_pdv_nao_planilha)}</td><td>avulsos ou divergência de placa/serviço</td></tr>
-          <tr><td>Na planilha mas SEM PDV/Tiny</td><td class="num">${num(res.em_planilha_nao_pdv)}</td><td>vistoria não lançada</td></tr>
         </table>
       </div>
 

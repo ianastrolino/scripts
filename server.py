@@ -2127,10 +2127,43 @@ def master_categorias_page():
     return _nocache(send_from_directory(UI_DIR, "categorias.html"))
 
 
+def _categoria_pra_dedup(servico: str) -> str:
+    """Categoria grossa pra parear vistorias entre planilha e PDV.
+
+    Regra de negocio (Ian 2026-05-15): cliente faz OU cautelar OU cautelar+pintura
+    no mesmo carro/dia (pintura eh upsell, nunca vendido junto). Entao ambos
+    caem em "cautelar" — pareio (placa, "cautelar") nao gera ambiguidade.
+    Demais servicos (gravame, baixa etc) ficam individuais por nome.
+    """
+    s = (servico or "").upper().strip()
+    if not s:
+        return "outros:"
+    if "CAUTELAR" in s:
+        return "cautelar"  # absorve CAUTELAR e CAUTELAR + PINTURA (upsell)
+    if "TRANSFERENCIA" in s or "TRANSFERÊNCIA" in s or "VISTORIA MOVEL" in s:
+        return "transferencia"
+    return f"outros:{s}"
+
+
 def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
     """Resumo agregado de lançamentos de uma unidade num dia.
 
-    Combina PDV + envios_tiny com dedup (mesma logica do units/status).
+    Modelo (Ian 2026-05-15):
+    - Planilha (Sispevi/Megalaudo) eh fonte do VOLUME real de vistorias
+      (inclui AV + FA — toda vistoria sobe pra um dos dois sistemas)
+    - PDV eh o registro dos AV pagos no caixa (pix/cartao/dinheiro)
+    - Avulsos = lancamentos PDV cujo (placa, categoria) NAO bate com nada
+      da planilha. Ex: CONSULTA DE GRAVAME pra uma placa que nao foi
+      vistoriada hoje. Conta como vistoria extra.
+
+    Pareio por (placa, categoria_grossa) — categoria absorve variacoes
+    (CAUTELAR + PINTURA conta como CAUTELAR; LAUDO TRANSF conta como
+    TRANSFERENCIA). Vide _categoria_pra_dedup.
+
+    Fallback: sem planilha do dia importada, usa logica antiga (dedup PDV
+    × Tiny por placa+servico+valor+fp) — cobre unidades que ainda nao
+    operam com planilha ou perda de dados.
+
     Retorna {vistorias, total, av, fa, lancamentos_pdv}.
     """
     try:
@@ -2141,10 +2174,14 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
         envios = _db_load_envios_range(uid, unit_dir, data_iso, data_iso)
     except Exception:
         envios = []
+    try:
+        planilha = _db_load_vistorias(uid, unit_dir, data_iso, data_iso)
+    except Exception:
+        planilha = []
 
-    # Dedup por (placa, servico, valor, fp) — varios envios pra mesma chave
-    # contam 1 so vez. Importante quando record_key divergiu entre envios e
-    # gerou duplicatas em envios_tiny.
+    # Total financeiro: vem dos envios_erp (espelho do Tiny/Omie) — eh o
+    # numero real que entra na cobranca, independente de quem (planilha ou PDV)
+    # gerou. Dedup por chave classica pra ignorar duplicatas em envios_erp.
     chaves_tiny: set[tuple] = set()
     total_tiny_av = 0.0
     total_tiny_fa = 0.0
@@ -2156,38 +2193,72 @@ def _resumo_dia_unit(uid: str, unit_dir: Path, data_iso: str) -> dict:
         fp_norm = "faturado" if fp_raw in ("fa", "faturado") else fp_raw
         key = (placa, servico, round(valor, 2), fp_norm)
         if key in chaves_tiny:
-            continue  # ja contabilizado
+            continue
         chaves_tiny.add(key)
         if fp_norm in ("faturado", "fa"):
             total_tiny_fa += valor
         else:
             total_tiny_av += valor
 
-    total_pdv_av = 0.0
-    total_pdv_fa = 0.0
-    pdv_dedupe_count = 0
-    for lc in lancamentos:
-        placa   = (lc.get("placa") or "").upper().strip()
-        servico = (lc.get("servico") or "").upper().strip()
-        valor   = float(lc.get("valor", 0) or 0)
-        fp      = (lc.get("fp") or "").lower().strip()
-        if (placa, servico, round(valor, 2), fp) in chaves_tiny:
-            continue
-        pdv_dedupe_count += 1
-        if fp == "faturado":
-            total_pdv_fa += valor
-        else:
-            total_pdv_av += valor
+    # Se nao tem planilha do dia: fallback pra logica antiga (PDV nao-pareado
+    # com envios_tiny soma como vistoria adicional).
+    if not planilha:
+        total_pdv_av = 0.0
+        total_pdv_fa = 0.0
+        pdv_dedupe_count = 0
+        for lc in lancamentos:
+            placa   = (lc.get("placa") or "").upper().strip()
+            servico = (lc.get("servico") or "").upper().strip()
+            valor   = float(lc.get("valor", 0) or 0)
+            fp      = (lc.get("fp") or "").lower().strip()
+            if (placa, servico, round(valor, 2), fp) in chaves_tiny:
+                continue
+            pdv_dedupe_count += 1
+            if fp == "faturado":
+                total_pdv_fa += valor
+            else:
+                total_pdv_av += valor
+        total_av = total_tiny_av + total_pdv_av
+        total_fa = total_tiny_fa + total_pdv_fa
+        return {
+            "vistorias":       len(chaves_tiny) + pdv_dedupe_count,
+            "total":           round(total_av + total_fa, 2),
+            "av":              round(total_av, 2),
+            "fa":              round(total_fa, 2),
+            "lancamentos_pdv": len(lancamentos),
+        }
 
-    total_av = total_tiny_av + total_pdv_av
-    total_fa = total_tiny_fa + total_pdv_fa
+    # Caso tipico: planilha do dia importada — eh a fonte do volume.
+    # Vistorias = planilha + avulsos PDV que nao pareiam.
+    chaves_planilha: set[tuple] = set()
+    for v in planilha:
+        placa = (v.get("placa") or "").upper().strip()
+        cat   = _categoria_pra_dedup(v.get("servico") or "")
+        chaves_planilha.add((placa, cat))
+
+    # Lancamentos PDV cuja (placa, categoria) NAO bate com a planilha = avulsos
+    avulsos_count = 0
+    avulsos_chaves_unicas: set[tuple] = set()
+    for lc in lancamentos:
+        placa = (lc.get("placa") or "").upper().strip()
+        cat   = _categoria_pra_dedup(lc.get("servico") or "")
+        key   = (placa, cat)
+        if key in chaves_planilha:
+            continue  # eh pagamento de vistoria que ja esta na planilha
+        if key in avulsos_chaves_unicas:
+            continue  # mesmo avulso lancado >1x no PDV — conta 1 vez
+        avulsos_chaves_unicas.add(key)
+        avulsos_count += 1
+
+    vistorias = len(planilha) + avulsos_count
+    total_av = round(total_tiny_av, 2)
+    total_fa = round(total_tiny_fa, 2)
+
     return {
-        # chaves_tiny eh um set — conta vistorias unicas mesmo se houver
-        # duplicatas em envios_tiny (ex: reenvio com record_key divergente).
-        "vistorias":       len(chaves_tiny) + pdv_dedupe_count,
+        "vistorias":       vistorias,
         "total":           round(total_av + total_fa, 2),
-        "av":              round(total_av, 2),
-        "fa":              round(total_fa, 2),
+        "av":              total_av,
+        "fa":              total_fa,
         "lancamentos_pdv": len(lancamentos),
     }
 
@@ -2744,15 +2815,44 @@ def master_api_debug_vistorias_dia():
             else:
                 pdv_nao_pareados.append(lc)
 
-        vistorias_count_painel = len(chaves_tiny) + len(pdv_nao_pareados)
+        # Pareio antigo (legado): exato por (placa, servico, valor, fp) — usado
+        # como fallback quando nao ha planilha do dia
+        vistorias_painel_fallback = len(chaves_tiny) + len(pdv_nao_pareados)
 
-        # Diff com vistorias_planilha — o que esta no PDV/Tiny mas NAO ta na
-        # planilha (avulso) e o que ta na planilha mas NAO foi PRO PDV/Tiny
-        chaves_planilha: set[tuple] = set()
+        # ── Nova logica (Ian 2026-05-15): planilha eh fonte de verdade do
+        # volume. PDV pareia por (placa, categoria) — avulsos sao lancamentos
+        # PDV cuja chave nao bate com nada da planilha.
+        chaves_planilha_cat: set[tuple] = set()
+        for v in vistorias:
+            placa = (v.get("placa") or "").upper().strip()
+            cat   = _categoria_pra_dedup(v.get("servico") or "")
+            chaves_planilha_cat.add((placa, cat))
+
+        pdv_pareados_planilha = []
+        avulsos_legitimos_planilha = []  # PDV que NAO bate com planilha
+        avulsos_chaves_unicas: set[tuple] = set()
+        for lc in lanc:
+            placa = (lc.get("placa") or "").upper().strip()
+            cat   = _categoria_pra_dedup(lc.get("servico") or "")
+            key   = (placa, cat)
+            if key in chaves_planilha_cat:
+                pdv_pareados_planilha.append({**lc, "_cat": cat})
+            else:
+                if key not in avulsos_chaves_unicas:
+                    avulsos_chaves_unicas.add(key)
+                    avulsos_legitimos_planilha.append({**lc, "_cat": cat})
+
+        vistorias_painel_novo = (
+            len(vistorias) + len(avulsos_legitimos_planilha)
+            if vistorias else vistorias_painel_fallback
+        )
+
+        # Diff antigo (mantido pra UI): por (placa, servico) cru — diagnostico
+        chaves_planilha_diff: set[tuple] = set()
         for v in vistorias:
             placa   = (v.get("placa") or "").upper().strip()
             servico = (v.get("servico") or "").upper().strip()
-            chaves_planilha.add((placa, servico))
+            chaves_planilha_diff.add((placa, servico))
 
         chaves_pdv_tiny_2 = set()
         for e in envios:
@@ -2767,10 +2867,10 @@ def master_api_debug_vistorias_dia():
             ))
 
         em_pdv_nao_planilha = sorted(
-            list(chaves_pdv_tiny_2 - chaves_planilha)
+            list(chaves_pdv_tiny_2 - chaves_planilha_diff)
         )[:200]
         em_planilha_nao_pdv = sorted(
-            list(chaves_planilha - chaves_pdv_tiny_2)
+            list(chaves_planilha_diff - chaves_pdv_tiny_2)
         )[:200]
 
         return _json({
@@ -2778,20 +2878,28 @@ def master_api_debug_vistorias_dia():
             "unit":            unit,
             "data":            data_iso,
             "resumo": {
-                "vistorias_painel":         vistorias_count_painel,
-                "envios_total":             len(envios),
-                "envios_chaves_distintas":  len(chaves_tiny),
-                "envios_extras_duplicados": envios_extras,
-                "lancamentos_pdv":          len(lanc),
-                "pdv_pareados_com_tiny":    len(pdv_pareados),
-                "pdv_nao_pareados":         len(pdv_nao_pareados),
-                "avulsos_pdv":              len(avulsos_pdv),
-                "vistorias_planilha":       len(vistorias),
-                "em_pdv_nao_planilha":      len(em_pdv_nao_planilha),
-                "em_planilha_nao_pdv":      len(em_planilha_nao_pdv),
+                # Numero novo (planilha + avulsos por categoria) — eh o que o
+                # painel master mostra agora
+                "vistorias_painel":              vistorias_painel_novo,
+                "vistorias_painel_legado":       vistorias_painel_fallback,
+                "envios_total":                  len(envios),
+                "envios_chaves_distintas":       len(chaves_tiny),
+                "envios_extras_duplicados":      envios_extras,
+                "lancamentos_pdv":               len(lanc),
+                "pdv_pareados_com_tiny":         len(pdv_pareados),
+                "pdv_nao_pareados":              len(pdv_nao_pareados),
+                # PDV que pareia com planilha por (placa, categoria) — pagamentos
+                "pdv_pareados_planilha":         len(pdv_pareados_planilha),
+                # PDV que NAO pareia — sao avulsos legitimos que somam ao volume
+                "avulsos_pdv_vs_planilha":       len(avulsos_legitimos_planilha),
+                "avulsos_pdv":                   len(avulsos_pdv),
+                "vistorias_planilha":            len(vistorias),
+                "em_pdv_nao_planilha":           len(em_pdv_nao_planilha),
+                "em_planilha_nao_pdv":           len(em_planilha_nao_pdv),
             },
             "duplicatas_envios":  duplicatas_envios,
             "avulsos_pdv":        avulsos_pdv,
+            "avulsos_pdv_vs_planilha": avulsos_legitimos_planilha,
             "diff_pdv_planilha": {
                 "no_pdv_sem_planilha": em_pdv_nao_planilha,
                 "na_planilha_sem_pdv": em_planilha_nao_pdv,
