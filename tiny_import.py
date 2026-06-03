@@ -787,7 +787,7 @@ class TinyClient:
     
             tokens = self._load_tokens()
             expires_at = float(tokens.get("expires_at", 0))
-            if tokens.get("access_token") and expires_at > time.time() + 60:
+            if tokens.get("access_token") and expires_at > time.time() + 1800:  # 30min margem
                 self._access_token = tokens["access_token"]
                 return self._access_token
     

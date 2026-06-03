@@ -10,6 +10,7 @@ SQLite é stdlib — zero novas dependências. O arquivo .db fica em
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -794,7 +795,8 @@ def migrate_imported_json_to_envios(unit: str, unit_dir: Path) -> dict[str, int]
         return {"migrados": 0, "duplicados": 0, "invalidos": 0}
     try:
         raw = json.loads(json_path.read_text())
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning("[caixa_db] falha ao ler JSON %s: %s", json_path, exc)
         return {"migrados": 0, "duplicados": 0, "invalidos": 0}
     imported = raw.get("imported", {}) if isinstance(raw, dict) else {}
     migrados = 0

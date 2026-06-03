@@ -156,7 +156,7 @@ def _maintenance_gate():
     try:
         _state_maybe_reload()
     except Exception:
-        pass
+        app.logger.warning("[maintenance] falha ao recarregar state: %s", __import__('traceback').format_exc())
     # Registra presenca do usuario logado (para painel "Usuarios conectados")
     try:
         email = session.get("email")
@@ -165,7 +165,7 @@ def _maintenance_gate():
             if user:
                 _mark_user_active(email, user)
     except Exception:
-        pass
+        app.logger.warning("[maintenance] falha ao marcar usuario ativo: %s", __import__('sys').exc_info()[1])
     if not _is_maintenance():
         return None
     path = request.path or ""
@@ -443,7 +443,8 @@ def _load_units_custom() -> dict[str, Any]:
         return {}
     try:
         return json.loads(_UNITS_CUSTOM_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        app.logger.warning("[units] falha ao ler units_custom.json: %s", exc)
         return {}
 
 
@@ -4784,7 +4785,7 @@ def master_api_unidades_criar():
                 return _json({"success": False, "error": "client_id e client_secret obrigatorios pra ERP tiny"}, 400)
             cfg["client_id"]     = client_id
             cfg["client_secret"] = client_secret
-        else:  # omie — placeholder, integracao completa vem depois
+        else:  # omie
             app_key    = (data.get("app_key") or "").strip()
             app_secret = (data.get("app_secret") or "").strip()
             if not app_key or not app_secret:
@@ -11519,8 +11520,7 @@ def _cron_loop() -> None:
     tz           = ZoneInfo("America/Sao_Paulo")
     last_alerta   = ""
     last_backup   = ""
-    last_renew_am = ""    # 07:00 — token fresco antes da abertura (8h)
-    last_renew_pm = ""    # 15:00 — recarrega pra cobrir a tarde
+    last_renew: dict[int, str] = {}   # {hora: today_iso} — renova tokens 6x/dia (a cada 3h)
     last_rotation = ""
     last_test_restore = ""  # dia 1 do mes 03:00 — valida backup
     last_warm_cr  = {}    # {hora: today_iso} — pra cada slot 8/12/16/20
@@ -11543,13 +11543,12 @@ def _cron_loop() -> None:
                 last_test_restore = today
                 app.logger.info("[cron] Test restore mensal do backup B2")
                 _cron_test_restore_backup()
-            if now.hour == 7 and now.minute == 0 and last_renew_am != today:
-                last_renew_am = today
-                app.logger.info("[cron] Renovacao tokens Tiny (07:00 — abertura)")
-                _verificar_saude_tokens()
-            if now.hour == 15 and now.minute == 0 and last_renew_pm != today:
-                last_renew_pm = today
-                app.logger.info("[cron] Renovacao tokens Tiny (15:00 — tarde)")
+            # Renova tokens 6x/dia (a cada 3h): 06, 09, 12, 15, 18, 21
+            # Token dura 4h → janela sempre coberta com margem de 1h.
+            _RENEW_HOURS = (6, 9, 12, 15, 18, 21)
+            if now.hour in _RENEW_HOURS and now.minute == 0 and last_renew.get(now.hour) != today:
+                last_renew[now.hour] = today
+                app.logger.info("[cron] Renovacao tokens Tiny (%02d:00)", now.hour)
                 _verificar_saude_tokens()
             # Pre-aquece cache de contas-receber 4x/dia (8h, 12h, 16h, 20h)
             # Resultado: usuario nunca paga os ~200s da 1a chamada do dia.
