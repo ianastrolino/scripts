@@ -290,6 +290,7 @@ async function salvarCredenciais() {
   };
   if (!body.app_secret) delete body.app_secret;  // omitido = preserva atual
   try {
+    try { const cr = await fetch("/api/csrf-token", {credentials:"include"}).then(r=>r.json()); _csrfToken = cr.token || cr.csrf_token || _csrfToken; } catch {}
     const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
@@ -343,13 +344,15 @@ async function salvarConta() {
   const id = parseInt(document.getElementById("selConta").value || "0");
   if (!id) { toast("Escolha uma conta corrente", true); return; }
   try {
+    try { const cr = await fetch("/api/csrf-token", {credentials:"include"}).then(r=>r.json()); _csrfToken = cr.token || cr.csrf_token || _csrfToken; } catch {}
     const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
       credentials: "include",
       body: JSON.stringify({ id_conta_corrente: id }),
     });
-    if (!(await r.json()).success) throw new Error("falha ao salvar");
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || `HTTP ${r.status}`);
     toast("Conta corrente salva");
   } catch (e) { toast(`Erro: ${e.message}`, true); }
 }
@@ -389,13 +392,16 @@ async function salvarCategorias() {
     if (nome && cod) mapa[nome] = cod;
   });
   try {
+    // Renova CSRF antes de salvar (pode ter expirado)
+    try { const cr = await fetch("/api/csrf-token", {credentials:"include"}).then(r=>r.json()); _csrfToken = cr.token || cr.csrf_token || _csrfToken; } catch {}
     const r = await fetch(`/master/api/unidades/${_currentSlug}/omie-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": _csrfToken },
       credentials: "include",
       body: JSON.stringify({ categoria_ids: mapa }),
     });
-    if (!(await r.json()).success) throw new Error("falha ao salvar");
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || `HTTP ${r.status}`);
     toast(`Salvas ${Object.keys(mapa).length} categorias`);
   } catch (e) { toast(`Erro: ${e.message}`, true); }
 }
