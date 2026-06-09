@@ -5946,6 +5946,7 @@ def api_info(unit: str):
         "gerencial": bool(user and (user.get("gerencial") or user.get("master") or user.get("matriz"))),
         "servicos": servicos,
         "pin_configurado": bool(ud.get("master_pin") or unit in _load_pin_store()),
+        "erp": (ud.get("erp") or "tiny").lower(),
     })
 
 

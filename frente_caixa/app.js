@@ -47,6 +47,7 @@ const state = {
   records: [],
   sourceFiles: [],
   filter: "todos",
+  erp: "tiny",         // "tiny" | "omie" — carregado de /api/info
   conferencia: {},     // { recordId: { status, pdv_valor, pdv_fp, pdv_hora } }
   conferido: new Set(), // IDs confirmados manualmente apesar de divergencia/sem_pdv
   pdvBase: null,       // { dinheiro, debito, credito, pix } snapshot do PDV (base para Entradas)
@@ -424,8 +425,8 @@ function recordsForFilter() {
 
 function recordIssues(record) {
   const issues = [];
-  // "sem-vinculo" = usuario confirmou que cliente nao existe no Tiny → nao pode enviar
-  if (isFaturadoFP(record.fp) && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
+  // Omie resolve clientes automaticamente — validacao de mapeamento so se aplica ao Tiny
+  if (state.erp === "tiny" && isFaturadoFP(record.fp) && (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo")) issues.push("cliente Tiny");
   if (record.fp === "AV" && record.avPagamento === "pendente") issues.push("pagamento AV");
   if (!record.preco || record.preco <= 0) issues.push("valor");
   // Cruzamento PDV: bloqueia envio ate usuario confirmar divergencias (valor ou FP)
@@ -1180,14 +1181,13 @@ function paymentControl(record) {
 }
 
 function tinyControl(record, issues) {
-  if (isFaturadoFP(record.fp)) {
+  if (isFaturadoFP(record.fp) && state.erp === "tiny") {
     if (!record.tinyClienteId || record.tinyClienteId === "sem-vinculo") {
       const label = record.tinyClienteId === "sem-vinculo" ? "Nao encontrado" : "Mapear cliente";
       return `<button class="client-select" type="button" data-map-client="${record.id}">${label}</button>`;
     }
     return `<span class="status ok">Pronto</span>`;
   }
-  // AV
   return issues.length
     ? `<span class="status pending">A definir</span>`
     : `<span class="status ok">Pronto</span>`;
@@ -1201,8 +1201,8 @@ function renderSummary() {
   const totalFa = sum(faRecords);
   const totalDetran = sum(detranRecords);
   const totalAv = sum(avRecords);
-  const missingClients = faRecords.filter((record) => !record.tinyClienteId).length;
-  const detranMissing = detranRecords.filter((record) => !record.tinyClienteId).length;
+  const missingClients = state.erp === "tiny" ? faRecords.filter((record) => !record.tinyClienteId).length : 0;
+  const detranMissing = state.erp === "tiny" ? detranRecords.filter((record) => !record.tinyClienteId).length : 0;
   const pending = state.records.filter((record) => recordIssues(record).length > 0).length;
   const firstDate = state.records[0]?.data || "";
   const dueDate = firstDate ? lastDayOfMonth(firstDate) : "";
@@ -1291,7 +1291,8 @@ function renderSummary() {
   els.faTotalPanel.textContent = formatMoney(totalFa);
   els.faDueDate.textContent = formatDateBr(dueDate);
   els.missingClientsPanel.textContent = String(missingClients);
-  els.tinyReady.textContent = missingClients === 0 && faRecords.length > 0 ? "Pronto" : "Pendente";
+  const erpLabel = state.erp === "omie" ? "Pronto" : (missingClients === 0 && faRecords.length > 0 ? "Pronto" : "Pendente");
+  els.tinyReady.textContent = erpLabel;
   if (els.detranCard) els.detranCard.style.display = detranRecords.length ? "" : "none";
   if (els.detranCountPanel) els.detranCountPanel.textContent = String(detranRecords.length);
   if (els.detranTotalPanel) els.detranTotalPanel.textContent = formatMoney(totalDetran);
@@ -1300,7 +1301,7 @@ function renderSummary() {
   const sendableCount = state.records.filter(isTinySendable).length;
   els.sendBtn.disabled = sendableCount === 0;
   els.previewBtn.disabled = sendableCount === 0;
-  const unmappedFaturado = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId);
+  const unmappedFaturado = state.erp === "tiny" ? state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId) : [];
   els.autoMapBtn.hidden = unmappedFaturado.length === 0;
   els.mapClientesBtn.hidden = unmappedFaturado.length === 0;
   autosaveLocal();
@@ -1308,7 +1309,7 @@ function renderSummary() {
 
 function renderIssues() {
   const issues = [];
-  const faMissing = state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId);
+  const faMissing = state.erp === "tiny" ? state.records.filter((r) => isFaturadoFP(r.fp) && !r.tinyClienteId) : [];
   const avPending = state.records.filter((r) => r.fp === "AV" && r.avPagamento === "pendente");
   const pdvDivergFP = state.records.filter((r) => {
     const conf = state.conferencia[r.id];
@@ -1932,6 +1933,13 @@ fetch(`${apiBase}/api/info`)
     if (info.unidade) {
       document.querySelector("#unidadeLabel").textContent = `Unidade ${info.unidade} — Fechamento diario`;
       document.title = `Frente de Caixa — ${info.unidade}`;
+    }
+    if (info.erp) {
+      state.erp = info.erp;
+      document.querySelectorAll(".tag-tiny").forEach(el => {
+        el.textContent = info.erp === "omie" ? "Omie" : "Tiny";
+      });
+      render();
     }
     // Mostra botao de sair quando rodando no servidor (com login)
     if (apiBase) {
