@@ -1936,9 +1936,10 @@ fetch(`${apiBase}/api/info`)
     }
     if (info.erp) {
       state.erp = info.erp;
-      document.querySelectorAll(".tag-tiny").forEach(el => {
-        el.textContent = info.erp === "omie" ? "Omie" : "Tiny";
-      });
+      const erpName = info.erp === "omie" ? "Omie" : "Tiny";
+      document.querySelectorAll(".tag-tiny").forEach(el => { el.textContent = erpName; });
+      const wizHint = document.getElementById("wizErpHint");
+      if (wizHint) wizHint.textContent = `Enviado ao ${erpName}`;
       render();
     }
     // Mostra botao de sair quando rodando no servidor (com login)
