@@ -1548,7 +1548,7 @@ els.sendBtn.addEventListener("click", async () => {
     if (err.message !== "session_expired") alert(`Erro de conexao: ${err.message}`);
   } finally {
     els.sendBtn.disabled = false;
-    els.sendBtn.textContent = "Enviar para Tiny";
+    els.sendBtn.textContent = `Enviar para ${state.erp === "omie" ? "Omie" : "Tiny"}`;
   }
 });
 
