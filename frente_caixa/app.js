@@ -1940,6 +1940,10 @@ fetch(`${apiBase}/api/info`)
       document.querySelectorAll(".tag-tiny").forEach(el => { el.textContent = erpName; });
       const wizHint = document.getElementById("wizErpHint");
       if (wizHint) wizHint.textContent = `Enviado ao ${erpName}`;
+      const confirmTitle = document.getElementById("confirmModalTitle");
+      if (confirmTitle) confirmTitle.textContent = `Confirmar envio ao ${erpName}`;
+      const previewTitle = document.getElementById("previewModalTitle");
+      if (previewTitle) previewTitle.textContent = `Simulação de envio ao ${erpName}`;
       render();
     }
     // Mostra botao de sair quando rodando no servidor (com login)
