@@ -6181,12 +6181,17 @@ def api_send(unit: str):
                             "record": r,
                         })
 
-        # Processa todos os registros do lote em paralelo (5 threads concorrentes)
-        # Cada thread faz chamadas de I/O ao Tiny de forma independente
+        # Processa registros: Tiny em paralelo (5 threads), Omie sequencial
+        # com 1.5s entre chamadas (anti-flood agressivo do Omie).
         from concurrent.futures import ThreadPoolExecutor
         records = data.get("records", [])
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            list(pool.map(_process_one, records))
+        if erp_kind == "omie":
+            for rec in records:
+                _process_one(rec)
+                time.sleep(1.5)
+        else:
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                list(pool.map(_process_one, records))
 
         # Salva estado uma unica vez apos processar todos (escrita atomica)
         save_state(state_path, st)
