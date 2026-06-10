@@ -1611,7 +1611,11 @@ els.confirmSendBtn.addEventListener("click", async () => {
     refreshWizardEtapa();
 
     let msg = `Enviados com sucesso: ${total.enviados.length}`;
-    if (total.pulados.length) msg += `\nPulados (ja existiam): ${total.pulados.length}`;
+    if (total.pulados.length) {
+      msg += `\nPulados: ${total.pulados.length}`;
+      const detPulados = total.pulados.map((p) => `  • ${p.cliente}: ${p.motivo || "ja importado"}`).join("\n");
+      msg += `\n${detPulados}`;
+    }
     if (total.falhas.length) {
       msg += `\nFalhas: ${total.falhas.length}`;
       const detalhes = total.falhas.map((f) => `  • ${f.cliente}: ${f.erro}`).join("\n");

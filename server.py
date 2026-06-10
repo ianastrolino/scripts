@@ -6076,6 +6076,8 @@ def api_send(unit: str):
         state_path = state_dir / "imported.json"
         st         = load_state(state_path)
         imported   = st.setdefault("imported", {})
+        app.logger.info("[send] %s: imported.json tem %d chaves, recebendo %d registros",
+                        unit, len(imported), len(data.get("records", [])))
         # Roteador ERP — escolhe TinyImporter ou OmieImporter conforme unit.erp.
         # _build_erp_importer ja chama _seed_tokens pra unidades Tiny.
         importer, erp_kind = _build_erp_importer(unit, config, state_dir)
@@ -6311,11 +6313,13 @@ def api_clear_imported(unit: str):
     try:
         state_dir  = _unit_state_dir(unit)
         state_path = state_dir / "imported.json"
+        app.logger.info("[clear-imported] %s: path=%s exists=%s", unit, state_path, state_path.exists())
         if state_path.exists():
             st = load_state(state_path)
             count = len(st.get("imported", {}))
             st["imported"] = {}
             save_state(state_path, st)
+            app.logger.info("[clear-imported] %s: limpou %d chaves", unit, count)
         else:
             count = 0
         return _json({"success": True, "message": f"Estado limpo. {count} registro(s) removidos."})
