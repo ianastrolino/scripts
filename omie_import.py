@@ -78,7 +78,7 @@ class OmieClient:
     Sem OAuth, sem refresh token — credenciais são estáticas do app criado no
     portal Omie. Não persiste nada localmente; toda chamada vai com auth fresca.
     """
-    _MIN_INTERVAL = 2.0  # segundos entre chamadas (anti-flood Omie)
+    _MIN_INTERVAL = 4.0  # segundos entre chamadas (anti-flood Omie)
 
     def __init__(self, app_key: str, app_secret: str, timeout: int = 30) -> None:
         self.app_key = app_key

@@ -6068,6 +6068,10 @@ class _OmieMisuseBreak(Exception):
     """Sinal interno: Omie bloqueou o app_key (MISUSE). Aborta o lote inteiro."""
 
 
+_OMIE_BLOCKED_UNTIL: dict[str, float] = {}
+_OMIE_COOLDOWN_MIN = 32
+
+
 @app.route("/u/<unit>/api/send", methods=["POST"])
 @unit_access_required
 @csrf_required
@@ -6076,6 +6080,18 @@ def api_send(unit: str):
         data      = request.get_json(force=True, silent=True) or {}
         config    = _build_unit_config(unit)
         state_dir = _unit_state_dir(unit)
+
+        erp_kind_check = _unit_erp(unit)
+        if erp_kind_check == "omie":
+            blocked_until = _OMIE_BLOCKED_UNTIL.get(unit, 0)
+            remaining = blocked_until - time.time()
+            if remaining > 0:
+                mins = int(remaining // 60) + 1
+                return _json({
+                    "success": False,
+                    "enviados": [], "pulados": [], "falhas": [],
+                    "error": f"Omie bloqueado — aguarde {mins} min antes de reenviar. Cada tentativa reinicia o timer de 30 min.",
+                }, 429)
 
         state_path = state_dir / "imported.json"
         st         = load_state(state_path)
@@ -6165,10 +6181,11 @@ def api_send(unit: str):
                         results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny", "record": r})
                     elif _is_omie_misuse_error(exc):
                         app.logger.error("[send] MISUSE bloqueio 30min chave=%s — abortando lote", rec.chave_deduplicacao)
+                        _OMIE_BLOCKED_UNTIL[unit] = time.time() + _OMIE_COOLDOWN_MIN * 60
                         results["pulados"].append({
                             "chave":   rec.chave_deduplicacao,
                             "cliente": rec.cliente,
-                            "motivo":  "Omie bloqueado (30 min). NÃO reenvie agora — cada tentativa reinicia o timer.",
+                            "motivo":  f"Omie bloqueado ({_OMIE_COOLDOWN_MIN} min). Sistema vai travar envios até o desbloqueio.",
                             "record":  r,
                         })
                         raise _OmieMisuseBreak()
