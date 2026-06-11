@@ -57,18 +57,19 @@ class OmieApiError(Exception):
 
 
 def _is_omie_redundant_error(exc: Exception) -> bool:
-    """Detecta erro 'consumo redundante' do Omie (anti-flood).
-
-    Omie bloqueia chamadas identicas em curta janela (~1 minuto). Mensagem
-    tipica: 'Consumo redundante detectado. Aguarde 57 segundos para tentar
-    novamente (REDUNDANT)'.
-
-    Quando isso acontece, NAO sabemos se a chamada anterior foi sucesso ou
-    falha — Omie ja a tem. Caller deve marcar como 'pulado' e nao retentar
-    pra evitar travar mais ainda.
-    """
+    """Detecta erro 'consumo redundante' do Omie (anti-flood ~1 min)."""
     msg = str(exc).lower()
     return "redundant" in msg or "consumo redundante" in msg
+
+
+def _is_omie_misuse_error(exc: Exception) -> bool:
+    """Detecta bloqueio MISUSE_API_PROCESS do Omie (anti-flood 30 min).
+
+    Quando dispara, o app_key inteiro fica bloqueado por 30 min. Cada nova
+    chamada reinicia o timer. Caller DEVE parar de enviar imediatamente.
+    """
+    msg = str(exc).lower()
+    return "misuse" in msg or "consumo indevido" in msg or "bloqueada" in msg
 
 
 class OmieClient:

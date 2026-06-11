@@ -25,7 +25,7 @@ os.environ.setdefault("UNITS_CONFIG", "{}")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import server  # noqa: E402
-from omie_import import OmieImporter  # noqa: E402
+from omie_import import OmieImporter, _is_omie_redundant_error, _is_omie_misuse_error  # noqa: E402
 from tiny_import import TinyImporter, _is_doc_already_registered  # noqa: E402
 
 
@@ -259,3 +259,30 @@ class TestErpStats:
         r = master_client.get("/master/erp-comparativo")
         assert r.status_code == 200
         assert b"Comparativo" in r.data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# _is_omie_misuse_error / _is_omie_redundant_error
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmieErrorDetection:
+    def test_misuse_detecta_faultstring(self):
+        assert _is_omie_misuse_error(Exception("MISUSE_API_PROCESS: API bloqueada por consumo indevido"))
+
+    def test_misuse_detecta_consumo_indevido(self):
+        assert _is_omie_misuse_error(Exception("consumo indevido detectado"))
+
+    def test_misuse_detecta_bloqueada(self):
+        assert _is_omie_misuse_error(Exception("API bloqueada"))
+
+    def test_misuse_nao_dispara_em_redundant(self):
+        assert not _is_omie_misuse_error(Exception("Consumo redundante detectado"))
+
+    def test_misuse_nao_dispara_em_erro_generico(self):
+        assert not _is_omie_misuse_error(Exception("erro de rede"))
+
+    def test_redundant_detecta_msg_padrao(self):
+        assert _is_omie_redundant_error(Exception("Consumo redundante detectado. Aguarde 57 segundos (REDUNDANT)"))
+
+    def test_redundant_nao_dispara_em_misuse(self):
+        assert not _is_omie_redundant_error(Exception("MISUSE_API_PROCESS"))

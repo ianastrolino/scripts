@@ -105,7 +105,7 @@ from tiny_import import (
     save_state,
     similarity_score,
 )
-from omie_import import OmieApiError, OmieImporter, _is_omie_redundant_error
+from omie_import import OmieApiError, OmieImporter, _is_omie_redundant_error, _is_omie_misuse_error
 
 # ── Flask ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -6064,6 +6064,10 @@ def api_preview(unit: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+class _OmieMisuseBreak(Exception):
+    """Sinal interno: Omie bloqueou o app_key (MISUSE). Aborta o lote inteiro."""
+
+
 @app.route("/u/<unit>/api/send", methods=["POST"])
 @unit_access_required
 @csrf_required
@@ -6134,9 +6138,7 @@ def api_send(unit: str):
                         resp = importer.create_accounts_receivable(rec)
                         break
                     except Exception as exc:
-                        # Nao retenta duplicata (ja gravado no ERP) nem REDUNDANT
-                        # do Omie (anti-flood: ERP detectou chamada igual recente)
-                        if _is_doc_already_registered(exc) or _is_omie_redundant_error(exc):
+                        if _is_doc_already_registered(exc) or _is_omie_redundant_error(exc) or _is_omie_misuse_error(exc):
                             raise
                         last_exc = exc
                         if attempt < 2:
@@ -6161,11 +6163,16 @@ def api_send(unit: str):
                             "motivo": "ja existia no Tiny (numeroDocumento duplicado)",
                         }
                         results["pulados"].append({"chave": rec.chave_deduplicacao, "cliente": rec.cliente, "motivo": "ja existia no Tiny", "record": r})
+                    elif _is_omie_misuse_error(exc):
+                        app.logger.error("[send] MISUSE bloqueio 30min chave=%s — abortando lote", rec.chave_deduplicacao)
+                        results["pulados"].append({
+                            "chave":   rec.chave_deduplicacao,
+                            "cliente": rec.cliente,
+                            "motivo":  "Omie bloqueado (30 min). NÃO reenvie agora — cada tentativa reinicia o timer.",
+                            "record":  r,
+                        })
+                        raise _OmieMisuseBreak()
                     elif _is_omie_redundant_error(exc):
-                        # Omie detectou chamada redundante (anti-flood). Nao
-                        # sabemos se a 1a chamada foi sucesso ou falha — Omie
-                        # exige aguardar ~1min. Marca como pulado pra nao
-                        # bloquear o lote; operador reenvia depois se preciso.
                         results["pulados"].append({
                             "chave":   rec.chave_deduplicacao,
                             "cliente": rec.cliente,
@@ -6187,9 +6194,19 @@ def api_send(unit: str):
         records = data.get("records", [])
         if erp_kind == "omie":
             for i, rec in enumerate(records):
-                _process_one(rec)
+                try:
+                    _process_one(rec)
+                except _OmieMisuseBreak:
+                    for rest in records[i + 1:]:
+                        results["pulados"].append({
+                            "chave":   rest.get("id", "?"),
+                            "cliente": rest.get("cliente", "?"),
+                            "motivo":  "Omie bloqueado (30 min) — lote abortado. Aguarde e reenvie.",
+                            "record":  rest,
+                        })
+                    break
                 if i < len(records) - 1:
-                    time.sleep(5)
+                    time.sleep(8)
         else:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 list(pool.map(_process_one, records))
