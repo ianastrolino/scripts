@@ -6186,9 +6186,10 @@ def api_send(unit: str):
         from concurrent.futures import ThreadPoolExecutor
         records = data.get("records", [])
         if erp_kind == "omie":
-            for rec in records:
+            for i, rec in enumerate(records):
                 _process_one(rec)
-                time.sleep(1.5)
+                if i < len(records) - 1:
+                    time.sleep(5)
         else:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 list(pool.map(_process_one, records))

@@ -77,11 +77,14 @@ class OmieClient:
     Sem OAuth, sem refresh token — credenciais são estáticas do app criado no
     portal Omie. Não persiste nada localmente; toda chamada vai com auth fresca.
     """
+    _MIN_INTERVAL = 2.0  # segundos entre chamadas (anti-flood Omie)
+
     def __init__(self, app_key: str, app_secret: str, timeout: int = 30) -> None:
         self.app_key = app_key
         self.app_secret = app_secret
         self.timeout = timeout
         self.session = requests.Session()
+        self._last_call: float = 0.0
 
     def request(self, endpoint: str, call: str, param: dict | list[dict]) -> dict:
         """Faz POST JSON-RPC pro endpoint Omie.
@@ -99,9 +102,14 @@ class OmieClient:
             "app_secret": self.app_secret,
             "param":      [param] if isinstance(param, dict) else list(param),
         }
+        elapsed = time.time() - self._last_call
+        if elapsed < self._MIN_INTERVAL:
+            time.sleep(self._MIN_INTERVAL - elapsed)
         try:
             resp = self.session.post(url, json=payload, timeout=self.timeout)
+            self._last_call = time.time()
         except requests.RequestException as exc:
+            self._last_call = time.time()
             raise OmieApiError("REDE", f"falha de rede: {exc}") from exc
         try:
             data = resp.json()
