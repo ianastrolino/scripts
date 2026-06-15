@@ -5033,6 +5033,54 @@ def master_api_unidade_omie_categorias(slug: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/unidades/<slug>/omie/diagnostico")
+@master_only_required
+def master_api_unidade_omie_diagnostico(slug: str):
+    """Diagnóstico completo da integração Omie: config + conexão + conta corrente."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        omie_cfg = config.get("omie") or {}
+        diag: dict[str, Any] = {
+            "unit": slug,
+            "erp": _unit_erp(slug),
+            "config": {
+                "app_key": omie_cfg.get("app_key", ""),
+                "has_app_secret": bool(omie_cfg.get("app_secret")),
+                "id_conta_corrente": omie_cfg.get("id_conta_corrente", 0),
+                "categoria_ids": omie_cfg.get("categoria_ids", {}),
+            },
+            "bloqueio_misuse": None,
+        }
+        blocked_until = _OMIE_BLOCKED_UNTIL.get(slug, 0)
+        remaining = blocked_until - time.time()
+        if remaining > 0:
+            diag["bloqueio_misuse"] = f"{int(remaining // 60) + 1} min restantes"
+
+        importer = OmieImporter(config, state_dir)
+        diag["teste_conexao"] = importer.testar_conexao()
+
+        if diag["teste_conexao"].get("ok"):
+            try:
+                contas = importer.listar_contas_correntes()
+                diag["contas_correntes"] = [
+                    {"id": c.get("nCodCC", 0), "nome": c.get("descricao", ""), "ativo": c.get("cAtivar", "")}
+                    for c in contas
+                ]
+                id_cfg = int(omie_cfg.get("id_conta_corrente", 0) or 0)
+                ids_existentes = [c.get("nCodCC", 0) for c in contas]
+                diag["conta_corrente_valida"] = id_cfg in ids_existentes if id_cfg else False
+            except Exception as exc:
+                diag["contas_correntes_erro"] = str(exc)
+
+        return _json({"success": True, "diagnostico": diag})
+    except Exception as exc:
+        app.logger.exception("[omie.diagnostico] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>/formas-recebimento")
 @master_only_required
 def master_api_unidade_formas_recebimento(slug: str):
