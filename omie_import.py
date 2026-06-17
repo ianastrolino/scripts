@@ -22,7 +22,6 @@ import datetime as dt
 import json
 import logging
 import time
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +154,29 @@ class OmieImporter:
             for k, v in (omie_cfg.get("categoria_ids") or {}).items()
             if str(k).strip() and str(v).strip()
         }
-        self._contact_cache: dict[str, int] = {}
+        self._contact_cache: dict[str, int] = self._load_contact_cache()
+
+    def _contact_cache_path(self) -> Path:
+        return self.state_dir / "omie_contact_cache.json"
+
+    def _load_contact_cache(self) -> dict[str, int]:
+        p = self._contact_cache_path()
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return {str(k): int(v) for k, v in data.items() if v}
+            except Exception:
+                pass
+        return {}
+
+    def _save_contact_cache(self) -> None:
+        try:
+            self._contact_cache_path().write_text(
+                json.dumps(self._contact_cache, ensure_ascii=False), encoding="utf-8",
+            )
+        except Exception:
+            _log.warning("[omie] falha ao salvar contact cache")
 
     # ── conexao ───────────────────────────────────────────────────────────────
 
@@ -232,9 +253,9 @@ class OmieImporter:
                 cid = int(r.get("codigo_cliente_omie", 0) or 0)
                 if cid:
                     self._contact_cache[cache_key] = cid
+                    self._save_contact_cache()
                     return cid
             except OmieApiError as exc:
-                # codigo 5113 = cliente nao encontrado — segue pra busca por nome
                 if exc.code not in ("SOAP-ENV:Client-5113", "5113"):
                     _log.warning("[omie] busca por CPF falhou: %s", exc)
 
@@ -250,6 +271,7 @@ class OmieImporter:
                     cid = int(c.get("codigo_cliente_omie", 0) or 0)
                     if cid:
                         self._contact_cache[cache_key] = cid
+                        self._save_contact_cache()
                         return cid
         except OmieApiError as exc:
             _log.warning("[omie] listar por nome falhou: %s", exc)
@@ -280,12 +302,14 @@ class OmieImporter:
                     cid = int(r2.get("codigo_cliente_omie", 0) or 0)
                     if cid:
                         self._contact_cache[cache_key] = cid
+                        self._save_contact_cache()
                         return cid
             raise
         cid = int(r.get("codigo_cliente_omie", 0) or 0)
         if not cid:
             raise OmieApiError("CLIENTE", f"resposta sem codigo_cliente_omie: {r}")
         self._contact_cache[cache_key] = cid
+        self._save_contact_cache()
         return cid
 
     def resolve_categoria(self, servico: str) -> str | None:
