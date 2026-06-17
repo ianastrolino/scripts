@@ -227,6 +227,38 @@ class OmieImporter:
             page += 1
         return out
 
+    # ── prefetch (reduz chamadas API no envio) ──────────────────────────────
+
+    def prefetch_all_contacts(self, max_pages: int = 50) -> int:
+        """Busca todos os clientes do Omie e popula o cache local em disco.
+
+        Retorna quantidade de clientes carregados. Cada página = 1 chamada API.
+        Com 200 clientes/página, 50 páginas cobre até 10.000 clientes.
+        """
+        page = 1
+        total = 0
+        while page <= max_pages:
+            r = self.client.request(
+                "geral/clientes", "ListarClientes",
+                {"pagina": page, "registros_por_pagina": 200, "apenas_importado_api": "N"},
+            )
+            for c in (r.get("clientes_cadastro") or []):
+                nome = (c.get("razao_social") or "").strip()
+                cpf = (c.get("cnpj_cpf") or "").strip()
+                cid = int(c.get("codigo_cliente_omie", 0) or 0)
+                if nome and cid:
+                    cache_key = normalize_key(f"{nome}|{cpf}")
+                    self._contact_cache[cache_key] = cid
+                    if cpf:
+                        self._contact_cache[normalize_key(f"|{cpf}")] = cid
+                    total += 1
+            if page >= int(r.get("total_de_paginas", 1) or 1):
+                break
+            page += 1
+        self._save_contact_cache()
+        _log.info("[omie] prefetch: %d clientes carregados em %d paginas", total, page)
+        return total
+
     # ── resolve (cliente / categoria) ─────────────────────────────────────────
 
     def resolve_contact(self, cliente_nome: str, cpf: str = "") -> int:

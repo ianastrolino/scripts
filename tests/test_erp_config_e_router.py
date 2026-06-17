@@ -15,7 +15,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -286,3 +286,115 @@ class TestOmieErrorDetection:
 
     def test_redundant_nao_dispara_em_misuse(self):
         assert not _is_omie_redundant_error(Exception("MISUSE_API_PROCESS"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Cache persistente de clientes
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmieContactCache:
+    @pytest.fixture
+    def importer(self, tmp_path):
+        server.DATA_DIR = tmp_path
+        server.UNITS = UNITS_FIX
+        config = {"omie": {"app_key": "K", "app_secret": "S", "id_conta_corrente": 1,
+                           "categoria_ids": {"VISTORIA": "1.01.01"}}}
+        return OmieImporter(config, tmp_path)
+
+    def test_cache_vazio_no_inicio(self, importer):
+        assert importer._contact_cache == {}
+
+    def test_save_e_load_roundtrip(self, importer, tmp_path):
+        from tiny_import import normalize_key
+        key = normalize_key("JOAO|12345678901")
+        importer._contact_cache[key] = 999
+        importer._save_contact_cache()
+        cache_path = tmp_path / "omie_contact_cache.json"
+        assert cache_path.exists()
+        imp2 = OmieImporter(importer.config, tmp_path)
+        assert imp2._contact_cache[key] == 999
+
+    def test_resolve_contact_usa_cache(self, importer):
+        from tiny_import import normalize_key
+        key = normalize_key("CARLOS ALBERTO DE PINHO|")
+        importer._contact_cache[key] = 777
+        cid = importer.resolve_contact("CARLOS ALBERTO DE PINHO")
+        assert cid == 777
+
+    def test_cache_sobrevive_entre_instancias(self, importer, tmp_path):
+        from tiny_import import normalize_key
+        key = normalize_key("HLM MOTORS|")
+        importer._contact_cache[key] = 555
+        importer._save_contact_cache()
+        imp2 = OmieImporter(importer.config, tmp_path)
+        assert imp2._contact_cache.get(key) == 555
+
+    def test_cache_corrompido_retorna_vazio(self, tmp_path):
+        cache_path = tmp_path / "omie_contact_cache.json"
+        cache_path.write_text("NOT JSON", encoding="utf-8")
+        config = {"omie": {"app_key": "K", "app_secret": "S"}}
+        imp = OmieImporter(config, tmp_path)
+        assert imp._contact_cache == {}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Bloqueio server-side MISUSE (429)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmieMisuseBlock:
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path):
+        server.DATA_DIR = tmp_path
+        server.UNITS = UNITS_FIX
+        server._UNITS_CUSTOM_FILE = tmp_path / "units_custom.json"
+        server._OMIE_BLOCKED_UNTIL.clear()
+        yield
+        server._OMIE_BLOCKED_UNTIL.clear()
+
+    def test_bloqueio_retorna_429(self):
+        import time as _time
+        server._OMIE_BLOCKED_UNTIL["indianopolis"] = _time.time() + 1800
+        server.app.config["TESTING"] = True
+        with patch.object(server, "_current_user", return_value=MASTER_USER):
+            with server.app.test_client() as c:
+                r = c.post("/u/indianopolis/api/send",
+                           json={"records": []},
+                           headers={"X-CSRF-Token": "test"})
+                assert r.status_code == 429
+                body = r.get_json()
+                assert body["success"] is False
+                assert "bloqueado" in body["error"].lower()
+
+    def test_sem_bloqueio_nao_retorna_429(self):
+        server.app.config["TESTING"] = True
+        with patch.object(server, "_current_user", return_value={"email": "op@astro.com", "unit": "indianopolis"}):
+            with patch.object(server, "_build_erp_importer", return_value=(MagicMock(), "omie")):
+                with server.app.test_client() as c:
+                    r = c.post("/u/indianopolis/api/send",
+                               json={"records": []},
+                               headers={"X-CSRF-Token": "test"})
+                    assert r.status_code == 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Prefetch clientes
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmiePrefetch:
+    def test_prefetch_popula_cache(self, tmp_path):
+        config = {"omie": {"app_key": "K", "app_secret": "S"}}
+        imp = OmieImporter(config, tmp_path)
+        fake_response = {
+            "clientes_cadastro": [
+                {"razao_social": "HLM MOTORS", "cnpj_cpf": "12345678901", "codigo_cliente_omie": 111},
+                {"razao_social": "RDVS AUTO", "cnpj_cpf": "", "codigo_cliente_omie": 222},
+            ],
+            "total_de_paginas": 1,
+        }
+        with patch.object(imp.client, "request", return_value=fake_response):
+            total = imp.prefetch_all_contacts()
+        from tiny_import import normalize_key
+        assert total == 2
+        assert imp._contact_cache.get(normalize_key("HLM MOTORS|12345678901")) == 111
+        assert imp._contact_cache.get(normalize_key("RDVS AUTO|")) == 222
+        assert (tmp_path / "omie_contact_cache.json").exists()

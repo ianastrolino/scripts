@@ -5081,6 +5081,26 @@ def master_api_unidade_omie_diagnostico(slug: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/unidades/<slug>/omie/prefetch-clientes", methods=["POST"])
+@master_only_required
+@csrf_required
+def master_api_unidade_omie_prefetch_clientes(slug: str):
+    """Pré-carrega todos os clientes do Omie no cache local."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        importer = OmieImporter(config, state_dir)
+        total = importer.prefetch_all_contacts()
+        return _json({"success": True, "clientes_carregados": total})
+    except OmieApiError as exc:
+        return _json({"success": False, "error": exc.descricao, "code": exc.code}, 502)
+    except Exception as exc:
+        app.logger.exception("[omie.prefetch] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>/formas-recebimento")
 @master_only_required
 def master_api_unidade_formas_recebimento(slug: str):
