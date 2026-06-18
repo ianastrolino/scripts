@@ -155,9 +155,35 @@ class OmieImporter:
             if str(k).strip() and str(v).strip()
         }
         self._contact_cache: dict[str, int] = self._load_contact_cache()
+        self._contract_cache: dict[int, int] = self._load_contract_cache()
 
     def _contact_cache_path(self) -> Path:
         return self.state_dir / "omie_contact_cache.json"
+
+    def _contract_cache_path(self) -> Path:
+        return self.state_dir / "omie_contract_cache.json"
+
+    def _load_contract_cache(self) -> dict[int, int]:
+        """Carrega cache {nCodCli: nCodCtr} do disco."""
+        p = self._contract_cache_path()
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return {int(k): int(v) for k, v in data.items() if v}
+            except Exception:
+                pass
+        return {}
+
+    def _save_contract_cache(self) -> None:
+        try:
+            self._contract_cache_path().write_text(
+                json.dumps({str(k): v for k, v in self._contract_cache.items()},
+                           ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            _log.warning("[omie] falha ao salvar contract cache")
 
     def _load_contact_cache(self) -> dict[str, int]:
         p = self._contact_cache_path()
@@ -282,6 +308,22 @@ class OmieImporter:
         _log.info("[omie] prefetch: %d clientes carregados em %d paginas", total, page)
         return total
 
+    def prefetch_all_contracts(self, max_pages: int = 10) -> int:
+        """Busca todos os contratos ativos e popula cache {nCodCli: nCodCtr}."""
+        contratos = self.listar_contratos(max_pages=max_pages)
+        total = 0
+        for c in contratos:
+            cab = c.get("cabecalho") or {}
+            cod_cli = int(cab.get("nCodCli", 0) or 0)
+            cod_ctr = int(cab.get("nCodCtr", 0) or 0)
+            sit = cab.get("cCodSit", "")
+            if cod_cli and cod_ctr and sit == "10":
+                self._contract_cache[cod_cli] = cod_ctr
+                total += 1
+        self._save_contract_cache()
+        _log.info("[omie] prefetch: %d contratos carregados", total)
+        return total
+
     # ── resolve (cliente / categoria) ─────────────────────────────────────────
 
     def resolve_contact(self, cliente_nome: str, cpf: str = "") -> int:
@@ -382,7 +424,86 @@ class OmieImporter:
                 return cod
         return None
 
+    def resolve_contract(self, cliente_id: int) -> int | None:
+        """Retorna nCodCtr do contrato ativo do cliente, ou None se não existir."""
+        if cliente_id in self._contract_cache:
+            return self._contract_cache[cliente_id]
+        self.prefetch_all_contracts()
+        return self._contract_cache.get(cliente_id)
+
     # ── enviar ────────────────────────────────────────────────────────────────
+
+    def add_service_to_contract(self, record: NormalizedRecord) -> dict:
+        """Adiciona serviço como item num contrato existente do cliente.
+
+        Fluxo: resolve cliente → acha contrato → consulta itens atuais →
+        appenda novo item → AlterarContrato.
+        """
+        cliente_id = self.resolve_contact(record.cliente, record.cpf)
+        contrato_id = self.resolve_contract(cliente_id)
+        if not contrato_id:
+            raise OmieApiError(
+                "CONTRATO",
+                f"cliente '{record.cliente}' (cod {cliente_id}) sem contrato ativo no Omie",
+            )
+
+        categoria = self.resolve_categoria(record.servico)
+
+        contrato = self.consultar_contrato(contrato_id)
+        cab = contrato.get("cabecalho") or {}
+        itens_atuais = contrato.get("itensContrato") or []
+
+        next_seq = max((i.get("itemCabecalho", {}).get("seq", 0) for i in itens_atuais), default=0) + 1
+
+        descr_parts = [record.servico or "Serviço"]
+        if record.placa:
+            descr_parts.append(record.placa)
+        if record.data:
+            descr_parts.append(_iso_para_br(record.data))
+        descricao = "PRESTAÇÃO DE SERVIÇO " + " - ".join(descr_parts)
+
+        novo_item = {
+            "itemCabecalho": {
+                "codIntItem": record.chave_deduplicacao,
+                "seq": next_seq,
+                "natOperacao": "01",
+                "codServMunic": "01902",
+                "codLC116": "17.08",
+                "cCodCategItem": categoria or "1.01.01",
+                "quant": 1,
+                "valorUnit": money_as_float(record.preco),
+                "cNaoGerarFinanceiro": "N",
+            },
+            "itemDescrServ": {
+                "descrCompleta": descricao[:500],
+            },
+            "itemImpostos": {
+                "aliqISS": 0,
+                "retISS": "N",
+            },
+        }
+
+        todos_itens = list(itens_atuais) + [novo_item]
+
+        param = {
+            "cabecalho": {
+                "nCodCtr": contrato_id,
+                "nCodCli": cliente_id,
+                "cNumCtr": cab.get("cNumCtr", ""),
+                "dVigInicial": cab.get("dVigInicial", ""),
+                "dVigFinal": cab.get("dVigFinal", ""),
+                "nDiaFat": cab.get("nDiaFat", 10),
+                "cTipoFat": cab.get("cTipoFat", "01"),
+            },
+            "itensContrato": todos_itens,
+        }
+
+        resp = self.client.request(
+            "servicos/contrato", "AlterarContrato", param,
+        )
+        _log.info("[omie] item adicionado ao contrato %s: %s (seq %d)",
+                  cab.get("cNumCtr"), record.cliente, next_seq)
+        return resp
 
     def create_accounts_receivable(self, record: NormalizedRecord) -> dict:
         """Cria conta a receber no Omie. Retorna dict com codigo_lancamento_omie.

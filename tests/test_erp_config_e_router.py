@@ -398,3 +398,162 @@ class TestOmiePrefetch:
         assert imp._contact_cache.get(normalize_key("HLM MOTORS|12345678901")) == 111
         assert imp._contact_cache.get(normalize_key("RDVS AUTO|")) == 222
         assert (tmp_path / "omie_contact_cache.json").exists()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Cache de contratos (nCodCli → nCodCtr)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmieContractCache:
+    @pytest.fixture
+    def importer(self, tmp_path):
+        config = {"omie": {"app_key": "K", "app_secret": "S", "id_conta_corrente": 1,
+                           "categoria_ids": {"VISTORIA": "1.01.01"}}}
+        return OmieImporter(config, tmp_path)
+
+    def test_cache_vazio_no_inicio(self, importer):
+        assert importer._contract_cache == {}
+
+    def test_save_e_load_roundtrip(self, importer, tmp_path):
+        importer._contract_cache[3070506708] = 3070506860
+        importer._save_contract_cache()
+        assert (tmp_path / "omie_contract_cache.json").exists()
+        imp2 = OmieImporter(importer.config, tmp_path)
+        assert imp2._contract_cache[3070506708] == 3070506860
+
+    def test_prefetch_contratos_popula_cache(self, importer):
+        fake = {
+            "contratoCadastro": [
+                {"cabecalho": {"nCodCli": 100, "nCodCtr": 900, "cCodSit": "10"}},
+                {"cabecalho": {"nCodCli": 200, "nCodCtr": 901, "cCodSit": "10"}},
+                {"cabecalho": {"nCodCli": 300, "nCodCtr": 902, "cCodSit": "99"}},
+            ],
+            "total_de_paginas": 1,
+        }
+        with patch.object(importer.client, "request", return_value=fake):
+            total = importer.prefetch_all_contracts()
+        assert total == 2
+        assert importer._contract_cache[100] == 900
+        assert importer._contract_cache[200] == 901
+        assert 300 not in importer._contract_cache
+
+    def test_resolve_contract_usa_cache(self, importer):
+        importer._contract_cache[555] = 888
+        assert importer.resolve_contract(555) == 888
+
+    def test_resolve_contract_sem_contrato_retorna_none(self, importer):
+        fake = {"contratoCadastro": [], "total_de_paginas": 1}
+        with patch.object(importer.client, "request", return_value=fake):
+            assert importer.resolve_contract(999) is None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# add_service_to_contract
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestOmieAddServiceToContract:
+    @pytest.fixture
+    def importer(self, tmp_path):
+        config = {"omie": {"app_key": "K", "app_secret": "S", "id_conta_corrente": 1,
+                           "categoria_ids": {"VISTORIA CAUTELAR": "1.01.98", "LAUDO": "1.01.02"}}}
+        imp = OmieImporter(config, tmp_path)
+        from tiny_import import normalize_key
+        imp._contact_cache[normalize_key("KAVAK SP MARKET|")] = 3070506708
+        imp._contract_cache[3070506708] = 3070506860
+        return imp
+
+    def test_add_service_chama_alterar_contrato(self, importer):
+        from tiny_import import NormalizedRecord
+        rec = NormalizedRecord(
+            data="2026-06-15", modelo="GOL", placa="GGB1C74",
+            cliente="KAVAK SP MARKET", servico="VISTORIA CAUTELAR",
+            fp="FA", preco="150", origem_arquivo="planilha.csv",
+            linha_origem=5, chave_deduplicacao="kavak_2026_001",
+            av_pagamento="", cpf="", cv="", perito="GIOVANI",
+        )
+        contrato_existente = {
+            "cabecalho": {"nCodCtr": 3070506860, "nCodCli": 3070506708,
+                          "cNumCtr": "2026/00001", "dVigInicial": "12/05/2026",
+                          "dVigFinal": "30/04/2031", "nDiaFat": 15, "cTipoFat": "01"},
+            "itensContrato": [{
+                "itemCabecalho": {"seq": 1, "natOperacao": "01", "quant": 1,
+                                  "valorUnit": 0, "valorTotal": 0},
+                "itemDescrServ": {"descrCompleta": "Serviços prestados"},
+            }],
+        }
+        alterar_resp = {"nCodCtr": 3070506860, "cCodStatus": "0", "cDescStatus": "ok"}
+        calls = []
+        def mock_request(endpoint, call, param):
+            calls.append((endpoint, call))
+            if call == "ConsultarContrato":
+                return contrato_existente
+            if call == "AlterarContrato":
+                assert len(param.get("itensContrato", [])) == 2
+                novo = param["itensContrato"][1]
+                assert novo["itemCabecalho"]["valorUnit"] == 150.0
+                assert novo["itemCabecalho"]["seq"] == 2
+                assert novo["itemCabecalho"]["codLC116"] == "17.08"
+                assert "VISTORIA CAUTELAR" in novo["itemDescrServ"]["descrCompleta"]
+                assert "GGB1C74" in novo["itemDescrServ"]["descrCompleta"]
+                return alterar_resp
+            return {}
+
+        with patch.object(importer.client, "request", side_effect=mock_request):
+            resp = importer.add_service_to_contract(rec)
+        assert resp["cCodStatus"] == "0"
+        assert ("servicos/contrato", "ConsultarContrato") in calls
+        assert ("servicos/contrato", "AlterarContrato") in calls
+
+    def test_sem_contrato_levanta_erro(self, importer):
+        from tiny_import import NormalizedRecord
+        importer._contract_cache.clear()
+        rec = NormalizedRecord(
+            data="2026-06-15", modelo="", placa="ABC1234",
+            cliente="CLIENTE SEM CONTRATO", servico="VISTORIA",
+            fp="FA", preco="100", origem_arquivo="test.csv",
+            linha_origem=1, chave_deduplicacao="test_001",
+            av_pagamento="", cpf="", cv="", perito="",
+        )
+        from omie_import import OmieApiError
+        fake_list = {"contratoCadastro": [], "total_de_paginas": 1}
+        def mock_request(endpoint, call, param):
+            if call == "ListarContratos":
+                return fake_list
+            if call == "ConsultarCliente":
+                return {"codigo_cliente_omie": 99999}
+            if call == "ListarClientes":
+                return {"clientes_cadastro": [{"razao_social": "CLIENTE SEM CONTRATO",
+                                               "codigo_cliente_omie": 99999}],
+                        "total_de_paginas": 1}
+            return {}
+        with patch.object(importer.client, "request", side_effect=mock_request):
+            with pytest.raises(OmieApiError, match="sem contrato ativo"):
+                importer.add_service_to_contract(rec)
+
+    def test_categoria_resolvida_pelo_servico(self, importer):
+        from tiny_import import NormalizedRecord
+        rec = NormalizedRecord(
+            data="2026-06-15", modelo="", placa="FKB2E63",
+            cliente="KAVAK SP MARKET", servico="LAUDO DE TRANSFERENCIA - ECV",
+            fp="FA", preco="100", origem_arquivo="test.csv",
+            linha_origem=1, chave_deduplicacao="kavak_laudo_001",
+            av_pagamento="", cpf="", cv="", perito="",
+        )
+        contrato = {
+            "cabecalho": {"nCodCtr": 3070506860, "nCodCli": 3070506708,
+                          "cNumCtr": "2026/00001", "dVigInicial": "12/05/2026",
+                          "dVigFinal": "30/04/2031", "nDiaFat": 15, "cTipoFat": "01"},
+            "itensContrato": [{"itemCabecalho": {"seq": 1}}],
+        }
+        captured_param = {}
+        def mock_request(endpoint, call, param):
+            if call == "ConsultarContrato":
+                return contrato
+            if call == "AlterarContrato":
+                captured_param.update(param)
+                return {"nCodCtr": 3070506860, "cCodStatus": "0"}
+            return {}
+        with patch.object(importer.client, "request", side_effect=mock_request):
+            importer.add_service_to_contract(rec)
+        novo_item = captured_param["itensContrato"][1]
+        assert novo_item["itemCabecalho"]["cCodCategItem"] == "1.01.02"

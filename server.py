@@ -5092,8 +5092,10 @@ def master_api_unidade_omie_prefetch_clientes(slug: str):
         config = _build_unit_config(slug)
         state_dir = _unit_state_dir(slug)
         importer = OmieImporter(config, state_dir)
-        total = importer.prefetch_all_contacts()
-        return _json({"success": True, "clientes_carregados": total})
+        total_clientes = importer.prefetch_all_contacts()
+        total_contratos = importer.prefetch_all_contracts()
+        return _json({"success": True, "clientes_carregados": total_clientes,
+                       "contratos_carregados": total_contratos})
     except OmieApiError as exc:
         return _json({"success": False, "error": exc.descricao, "code": exc.code}, 502)
     except Exception as exc:
@@ -11783,11 +11785,18 @@ def _process_omie_queue_tick() -> None:
                 app.logger.info("[omie-queue] %s: %s ja importado, skip", slug, rec.chave_deduplicacao)
                 return
 
-            resp = importer.create_accounts_receivable(rec)
+            av = is_av_paid(rec.av_pagamento)
+            if av:
+                resp = importer.create_accounts_receivable(rec)
+                destino = "conta_receber"
+            else:
+                resp = importer.add_service_to_contract(rec)
+                destino = "contrato"
             imported[rec.chave_deduplicacao] = {
                 "arquivo": rec.origem_arquivo,
                 "linha": rec.linha_origem,
                 "enviado_em": ts,
+                "destino": destino,
                 "resposta": resp,
             }
             save_state(state_path, st)
@@ -11802,7 +11811,7 @@ def _process_omie_queue_tick() -> None:
                 "linha": int(r.get("linhaOrigem", 0) or 0),
                 "resposta_tiny": resp, "perito": (r.get("perito", "") or "").upper().strip(),
             })
-            app.logger.info("[omie-queue] %s: enviado %s (%s)", slug, rec.chave_deduplicacao, rec.cliente)
+            app.logger.info("[omie-queue] %s: enviado %s (%s) → %s", slug, rec.chave_deduplicacao, rec.cliente, destino)
         except Exception as exc:
             if _is_omie_misuse_error(exc):
                 _OMIE_BLOCKED_UNTIL[slug] = time.time() + _OMIE_COOLDOWN_MIN * 60
