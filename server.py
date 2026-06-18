@@ -5101,6 +5101,42 @@ def master_api_unidade_omie_prefetch_clientes(slug: str):
         return _json({"success": False, "error": str(exc)}, 500)
 
 
+@app.route("/master/api/unidades/<slug>/omie/contratos")
+@master_only_required
+def master_api_unidade_omie_contratos(slug: str):
+    """Lista contratos de serviço existentes no Omie — diagnóstico."""
+    if slug not in UNITS:
+        return _json({"success": False, "error": "unit invalida"}, 400)
+    try:
+        config = _build_unit_config(slug)
+        state_dir = _unit_state_dir(slug)
+        importer = OmieImporter(config, state_dir)
+        contratos = importer.listar_contratos()
+        resumo = []
+        for c in contratos:
+            cab = c.get("cabecalho") or {}
+            itens = c.get("itensContrato") or []
+            resumo.append({
+                "nCodCtr": cab.get("nCodCtr"),
+                "cNumCtr": cab.get("cNumCtr"),
+                "nCodCli": cab.get("nCodCli"),
+                "cliente": cab.get("cNomCli", ""),
+                "vigencia_ini": cab.get("dVigInicial", ""),
+                "vigencia_fim": cab.get("dVigFinal", ""),
+                "tipo_fat": cab.get("cTipoFat", ""),
+                "dia_fat": cab.get("nDiaFat", 0),
+                "situacao": cab.get("cCodSit", ""),
+                "itens_count": len(itens),
+                "itens": itens,
+            })
+        return _json({"success": True, "total": len(resumo), "contratos": resumo})
+    except OmieApiError as exc:
+        return _json({"success": False, "error": exc.descricao, "code": exc.code}, 502)
+    except Exception as exc:
+        app.logger.exception("[omie.contratos] %s", slug)
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route("/master/api/unidades/<slug>/formas-recebimento")
 @master_only_required
 def master_api_unidade_formas_recebimento(slug: str):

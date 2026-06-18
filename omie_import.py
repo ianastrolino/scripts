@@ -227,6 +227,29 @@ class OmieImporter:
             page += 1
         return out
 
+    def listar_contratos(self, max_pages: int = 10) -> list[dict]:
+        """Lista contratos de serviço ativos. Retorna dados resumidos."""
+        out: list[dict] = []
+        page = 1
+        while page <= max_pages:
+            r = self.client.request(
+                "servicos/contrato", "ListarContratos",
+                {"pagina": page, "registros_por_pagina": 50,
+                 "cExibirProdutos": "S"},
+            )
+            out.extend(r.get("contratoCadastro") or [])
+            if page >= int(r.get("total_de_paginas", 1) or 1):
+                break
+            page += 1
+        return out
+
+    def consultar_contrato(self, cod_contrato: int) -> dict:
+        """Consulta um contrato por nCodCtr. Retorna todos os campos."""
+        return self.client.request(
+            "servicos/contrato", "ConsultarContrato",
+            {"nCodCtr": cod_contrato},
+        )
+
     # ── prefetch (reduz chamadas API no envio) ──────────────────────────────
 
     def prefetch_all_contacts(self, max_pages: int = 50) -> int:
