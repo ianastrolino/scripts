@@ -148,6 +148,23 @@ CREATE INDEX IF NOT EXISTS idx_visto_unit_perito  ON vistorias_planilha(unit, pe
 CREATE INDEX IF NOT EXISTS idx_visto_unit_servico ON vistorias_planilha(unit, servico);
 """
 
+_DDL_OMIE_QUEUE = """
+CREATE TABLE IF NOT EXISTS omie_queue (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit               TEXT NOT NULL,
+    chave_deduplicacao TEXT NOT NULL,
+    record_json        TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'pending',
+    created_at         TEXT NOT NULL,
+    processed_at       TEXT,
+    attempts           INTEGER NOT NULL DEFAULT 0,
+    last_error         TEXT,
+    UNIQUE(unit, chave_deduplicacao)
+);
+CREATE INDEX IF NOT EXISTS idx_oq_status ON omie_queue(status);
+CREATE INDEX IF NOT EXISTS idx_oq_unit   ON omie_queue(unit, status);
+"""
+
 _DDL_HISTORICO_TINY = """
 CREATE TABLE IF NOT EXISTS historico_tiny (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,6 +288,7 @@ def _connect(unit_dir: Path) -> sqlite3.Connection:
     conn.executescript(_DDL_INDICE_PERITO)
     # Tabela vistorias_planilha (aba Vistoriadores). Idempotente.
     conn.executescript(_DDL_VISTORIAS_PLANILHA)
+    conn.executescript(_DDL_OMIE_QUEUE)
     conn.executescript(_DDL_HISTORICO_TINY)
     existing_hist = _table_columns(conn, "historico_tiny")
     for sql in _MIGRATE_HIST_EXTRA:
@@ -821,3 +839,105 @@ def migrate_imported_json_to_envios(unit: str, unit_dir: Path) -> dict[str, int]
         else:
             duplicados += 1
     return {"migrados": migrados, "duplicados": duplicados, "invalidos": invalidos}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Fila Omie (omie_queue) — envio assíncrono com rate-limit seguro
+# ══════════════════════════════════════════════════════════════════════════════
+
+def enqueue_omie(unit: str, unit_dir: Path, records: list[dict], now_iso: str) -> dict:
+    """Enfileira registros pra envio ao Omie. Retorna {enqueued, skipped}."""
+    conn = _connect(unit_dir)
+    enqueued = 0
+    skipped = 0
+    for r in records:
+        chave = r.get("id") or r.get("chave_deduplicacao") or ""
+        if not chave:
+            continue
+        try:
+            conn.execute(
+                "INSERT INTO omie_queue (unit, chave_deduplicacao, record_json, status, created_at)"
+                " VALUES (?, ?, ?, 'pending', ?)",
+                (unit, chave, json.dumps(r, ensure_ascii=False), now_iso),
+            )
+            enqueued += 1
+        except sqlite3.IntegrityError:
+            skipped += 1
+    conn.commit()
+    conn.close()
+    return {"enqueued": enqueued, "skipped": skipped}
+
+
+def dequeue_omie(unit: str, unit_dir: Path, limit: int = 1) -> list[dict]:
+    """Pega os próximos N registros pendentes da fila. Marca como 'processing'."""
+    conn = _connect(unit_dir)
+    rows = conn.execute(
+        "SELECT id, unit, chave_deduplicacao, record_json, attempts FROM omie_queue"
+        " WHERE unit = ? AND status = 'pending' ORDER BY id LIMIT ?",
+        (unit, limit),
+    ).fetchall()
+    result = []
+    for row in rows:
+        conn.execute("UPDATE omie_queue SET status = 'processing' WHERE id = ?", (row["id"],))
+        result.append({
+            "queue_id": row["id"],
+            "unit": row["unit"],
+            "chave": row["chave_deduplicacao"],
+            "record": json.loads(row["record_json"]),
+            "attempts": row["attempts"],
+        })
+    conn.commit()
+    conn.close()
+    return result
+
+
+def complete_omie_queue(unit_dir: Path, queue_id: int, now_iso: str) -> None:
+    """Marca item da fila como concluído."""
+    conn = _connect(unit_dir)
+    conn.execute(
+        "UPDATE omie_queue SET status = 'done', processed_at = ? WHERE id = ?",
+        (now_iso, queue_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def fail_omie_queue(unit_dir: Path, queue_id: int, error: str, now_iso: str) -> None:
+    """Marca item como falha. Incrementa attempts. Se attempts >= 3, marca 'failed'."""
+    conn = _connect(unit_dir)
+    row = conn.execute("SELECT attempts FROM omie_queue WHERE id = ?", (queue_id,)).fetchone()
+    attempts = (row["attempts"] if row else 0) + 1
+    new_status = "failed" if attempts >= 3 else "pending"
+    conn.execute(
+        "UPDATE omie_queue SET status = ?, attempts = ?, last_error = ?, processed_at = ? WHERE id = ?",
+        (new_status, attempts, error, now_iso, queue_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def omie_queue_status(unit: str, unit_dir: Path) -> dict:
+    """Retorna contagem por status da fila."""
+    conn = _connect(unit_dir)
+    rows = conn.execute(
+        "SELECT status, COUNT(*) as cnt FROM omie_queue WHERE unit = ? GROUP BY status",
+        (unit,),
+    ).fetchall()
+    conn.close()
+    counts = {r["status"]: r["cnt"] for r in rows}
+    return {
+        "pending": counts.get("pending", 0),
+        "processing": counts.get("processing", 0),
+        "done": counts.get("done", 0),
+        "failed": counts.get("failed", 0),
+        "total": sum(counts.values()),
+    }
+
+
+def omie_queue_clear_done(unit: str, unit_dir: Path) -> int:
+    """Remove itens concluídos da fila. Retorna quantidade removida."""
+    conn = _connect(unit_dir)
+    cur = conn.execute("DELETE FROM omie_queue WHERE unit = ? AND status = 'done'", (unit,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount

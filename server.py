@@ -6273,25 +6273,36 @@ def api_send(unit: str):
                             "record": r,
                         })
 
-        # Processa registros: Tiny em paralelo (5 threads), Omie sequencial
-        # com 1.5s entre chamadas (anti-flood agressivo do Omie).
         from concurrent.futures import ThreadPoolExecutor
         records = data.get("records", [])
         if erp_kind == "omie":
-            for i, rec in enumerate(records):
-                try:
-                    _process_one(rec)
-                except _OmieMisuseBreak:
-                    for rest in records[i + 1:]:
-                        results["pulados"].append({
-                            "chave":   rest.get("id", "?"),
-                            "cliente": rest.get("cliente", "?"),
-                            "motivo":  "Omie bloqueado (30 min) — lote abortado. Aguarde e reenvie.",
-                            "record":  rest,
-                        })
-                    break
-                if i < len(records) - 1:
-                    time.sleep(8)
+            from caixa_db import enqueue_omie, omie_queue_status
+            ts = dt.datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
+            to_enqueue = []
+            for r in records:
+                chave = r.get("id", "")
+                if not chave or chave == "missing_key":
+                    servico_raw = clean_text(r.get("servico", "")).upper()
+                    servico = apply_alias(config, "servico", servico_raw)
+                    r_copy = dict(r, servico=servico)
+                    chave = record_key(r_copy)
+                    r["id"] = chave
+                if chave in imported:
+                    results["pulados"].append({"chave": chave, "cliente": r.get("cliente", ""), "motivo": "ja importado", "record": r})
+                    continue
+                to_enqueue.append(r)
+            eq = enqueue_omie(unit, state_dir, to_enqueue, ts)
+            qs = omie_queue_status(unit, state_dir)
+            return _json({
+                "success": True,
+                "queued": True,
+                "summary": results,
+                "queue": {
+                    "enqueued": eq["enqueued"],
+                    "skipped": eq["skipped"],
+                    "status": qs,
+                },
+            })
         else:
             with ThreadPoolExecutor(max_workers=5) as pool:
                 list(pool.map(_process_one, records))
@@ -6411,6 +6422,19 @@ def api_send(unit: str):
             raise
         app.logger.exception("[server] %s", request.path)
         return _json({"success": False, "error": str(exc)}, 500)
+
+
+@app.route("/u/<unit>/api/omie-queue-status")
+@unit_access_required
+def api_omie_queue_status(unit: str):
+    """Status da fila Omie: pending, processing, done, failed."""
+    from caixa_db import omie_queue_status
+    state_dir = _unit_state_dir(unit)
+    qs = omie_queue_status(unit, state_dir)
+    blocked_until = _OMIE_BLOCKED_UNTIL.get(unit, 0)
+    remaining = blocked_until - time.time()
+    qs["blocked_minutes"] = max(0, int(remaining // 60) + 1) if remaining > 0 else 0
+    return _json({"success": True, "queue": qs})
 
 
 @app.route("/u/<unit>/api/clear-imported", methods=["POST"])
@@ -11669,9 +11693,91 @@ def _cron_loop() -> None:
                 last_warm_cr[now.hour] = today
                 app.logger.info("[cron] Warm contas-receber cache (%02d:00)", now.hour)
                 _warm_contas_receber_cache()
+            # Fila Omie: processa 1 registro por minuto (rate-limit seguro)
+            _process_omie_queue_tick()
         except Exception:
             app.logger.exception("[cron] Erro no loop")
         time.sleep(60)
+
+
+def _process_omie_queue_tick() -> None:
+    """Processa UM registro da fila Omie de CADA unidade Omie. Chamado 1x/min pelo cron."""
+    from caixa_db import dequeue_omie, complete_omie_queue, fail_omie_queue
+    tz = ZoneInfo("America/Sao_Paulo")
+    ts = dt.datetime.now(tz).isoformat(timespec="seconds")
+    for slug, ud in UNITS.items():
+        erp = (ud.get("erp") or "tiny").lower()
+        if erp != "omie":
+            continue
+        blocked_until = _OMIE_BLOCKED_UNTIL.get(slug, 0)
+        if time.time() < blocked_until:
+            continue
+        state_dir = _unit_state_dir(slug)
+        items = dequeue_omie(slug, state_dir, limit=1)
+        if not items:
+            continue
+        item = items[0]
+        r = item["record"]
+        try:
+            config = _build_unit_config(slug)
+            importer = OmieImporter(config, state_dir)
+            servico_raw = clean_text(r.get("servico", "")).upper()
+            servico = apply_alias(config, "servico", servico_raw)
+            rec = NormalizedRecord(
+                data=r["data"], modelo=r.get("modelo", ""),
+                placa=r.get("placa", ""), cliente=r["cliente"],
+                servico=servico, fp=r["fp"],
+                preco=str(r["preco"]),
+                origem_arquivo=r.get("origemArquivo", "manual_ui"),
+                linha_origem=r.get("linhaOrigem", 0),
+                chave_deduplicacao=r.get("id", item["chave"]),
+                av_pagamento=r.get("avPagamento", ""),
+                cpf=r.get("cpf", ""),
+                cv=r.get("cv", ""),
+                perito=r.get("perito", ""),
+            )
+            if rec.chave_deduplicacao == "missing_key" or "-" in rec.chave_deduplicacao:
+                rec.chave_deduplicacao = record_key(asdict(rec))
+
+            state_path = state_dir / "imported.json"
+            st = load_state(state_path)
+            imported = st.setdefault("imported", {})
+            if rec.chave_deduplicacao in imported:
+                complete_omie_queue(state_dir, item["queue_id"], ts)
+                app.logger.info("[omie-queue] %s: %s ja importado, skip", slug, rec.chave_deduplicacao)
+                return
+
+            resp = importer.create_accounts_receivable(rec)
+            imported[rec.chave_deduplicacao] = {
+                "arquivo": rec.origem_arquivo,
+                "linha": rec.linha_origem,
+                "enviado_em": ts,
+                "resposta": resp,
+            }
+            save_state(state_path, st)
+            complete_omie_queue(state_dir, item["queue_id"], ts)
+            _db_insert_envio(slug, state_dir, {
+                "erp": "omie", "chave_deduplicacao": rec.chave_deduplicacao,
+                "timestamp": ts, "data_lancamento": r.get("data", ""),
+                "placa": r.get("placa", ""), "cliente": r.get("cliente", ""),
+                "servico": r.get("servico", ""), "valor": float(r.get("preco", 0) or 0),
+                "fp": r.get("fp", ""), "status": "enviado",
+                "arquivo": r.get("origemArquivo", "manual_ui"),
+                "linha": int(r.get("linhaOrigem", 0) or 0),
+                "resposta_tiny": resp, "perito": (r.get("perito", "") or "").upper().strip(),
+            })
+            app.logger.info("[omie-queue] %s: enviado %s (%s)", slug, rec.chave_deduplicacao, rec.cliente)
+        except Exception as exc:
+            if _is_omie_misuse_error(exc):
+                _OMIE_BLOCKED_UNTIL[slug] = time.time() + _OMIE_COOLDOWN_MIN * 60
+                fail_omie_queue(state_dir, item["queue_id"], str(exc), ts)
+                app.logger.error("[omie-queue] %s: MISUSE — bloqueado %d min", slug, _OMIE_COOLDOWN_MIN)
+            elif _is_doc_already_registered(exc) or _is_omie_redundant_error(exc):
+                complete_omie_queue(state_dir, item["queue_id"], ts)
+                app.logger.info("[omie-queue] %s: %s ja existe/redundant, marcando done", slug, item["chave"])
+            else:
+                fail_omie_queue(state_dir, item["queue_id"], str(exc), ts)
+                app.logger.warning("[omie-queue] %s: falha %s — %s", slug, item["chave"], exc)
 
 
 threading.Thread(target=_cron_loop, daemon=True, name="cron").start()

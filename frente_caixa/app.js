@@ -1596,6 +1596,24 @@ els.confirmSendBtn.addEventListener("click", async () => {
         return;
       }
 
+      if (result.queued) {
+        closeConfirmModal();
+        _pendingToSend = [];
+        const q = result.queue;
+        const skipMsg = q.skipped ? ` (${q.skipped} ja na fila)` : "";
+        const pulados = (result.summary?.pulados || []);
+        let msg = `${q.enqueued} registros na fila de envio${skipMsg}.\n\nO sistema envia 1 por minuto em background — sem risco de bloqueio.`;
+        if (pulados.length) {
+          msg += `\n\nPulados: ${pulados.length}`;
+          msg += "\n" + pulados.map((p) => `  • ${p.cliente}: ${p.motivo}`).join("\n");
+        }
+        msg += `\n\nFila atual: ${q.status.pending} pendentes, ${q.status.done} concluidos`;
+        if (q.status.failed) msg += `, ${q.status.failed} com falha`;
+        alert(msg);
+        _startOmieQueuePolling();
+        return;
+      }
+
       const s = result.summary;
       total.enviados.push(...(s.enviados || []));
       total.pulados.push(...(s.pulados || []));
@@ -1637,6 +1655,61 @@ els.confirmSendBtn.addEventListener("click", async () => {
     els.confirmSendBtn.textContent = "Confirmar e Enviar";
   }
 });
+
+let _omieQueueInterval = null;
+function _startOmieQueuePolling() {
+  if (_omieQueueInterval) return;
+  _showQueueBanner("Verificando fila...");
+  _omieQueueInterval = setInterval(async () => {
+    try {
+      const data = await apiFetch(`${apiBase}/api/omie-queue-status`);
+      if (!data.success) return;
+      const q = data.queue;
+      if (q.pending === 0 && q.processing === 0) {
+        clearInterval(_omieQueueInterval);
+        _omieQueueInterval = null;
+        let finalMsg = `Fila concluida: ${q.done} enviados`;
+        if (q.failed) finalMsg += `, ${q.failed} com falha`;
+        _showQueueBanner(finalMsg, true);
+        setTimeout(() => _hideQueueBanner(), 15000);
+        return;
+      }
+      let msg = `Fila Omie: ${q.pending} pendente(s)`;
+      if (q.processing) msg += `, 1 enviando agora`;
+      msg += ` — ${q.done} concluido(s)`;
+      if (q.failed) msg += `, ${q.failed} falha(s)`;
+      if (q.blocked_minutes) msg += ` | Bloqueado ${q.blocked_minutes} min`;
+      _showQueueBanner(msg);
+    } catch {}
+  }, 15000);
+}
+
+function _showQueueBanner(text, done) {
+  let el = document.getElementById("omieQueueBanner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "omieQueueBanner";
+    el.style.cssText = "position:fixed;top:0;left:0;right:0;padding:10px 16px;z-index:9999;font-size:14px;text-align:center;font-weight:500;transition:background .3s";
+    document.body.prepend(el);
+  }
+  el.style.background = done ? "#059669" : "#2563eb";
+  el.style.color = "#fff";
+  el.textContent = text;
+  el.style.display = "block";
+}
+
+function _hideQueueBanner() {
+  const el = document.getElementById("omieQueueBanner");
+  if (el) el.style.display = "none";
+}
+
+if (typeof state !== "undefined" && state.erp === "omie") {
+  apiFetch(`${apiBase}/api/omie-queue-status`).then((data) => {
+    if (data.success && data.queue && (data.queue.pending > 0 || data.queue.processing > 0)) {
+      _startOmieQueuePolling();
+    }
+  }).catch(() => {});
+}
 
 document.querySelector("#clearImportedBtn").addEventListener("click", async () => {
   if (!confirm("Limpar o historico local de envios?\n\nIsso permite reenviar registros que ja foram enviados anteriormente (por exemplo, apos excluir manualmente do Tiny).\n\nNao remove nada do Tiny, apenas reinicia o controle local.")) return;
