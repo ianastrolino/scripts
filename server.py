@@ -6043,7 +6043,7 @@ def api_info(unit: str):
                 "PESQUISA AVULSA",
                 "VISTORIA ESTRUTURAL SEM EMISSAO DE LAUDO",
             ]
-    return _json({
+    resp = _json({
         "unidade": ud.get("nome", unit),
         "usuario": session.get("name", ""),
         "email": session.get("email", ""),
@@ -6054,6 +6054,11 @@ def api_info(unit: str):
         "pin_configurado": bool(ud.get("master_pin") or unit in _load_pin_store()),
         "erp": (ud.get("erp") or "tiny").lower(),
     })
+    # Lista de servicos do PDV vem deste endpoint e muda quando o master edita
+    # categorias. Sem no-store, o navegador pode servir uma versao antiga e o
+    # dropdown fica preso numa lista desatualizada.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 # Mapeamento de IDs de forma de recebimento → nome legivel
