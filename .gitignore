@@ -16,6 +16,11 @@ data/
 logs/
 logs_*/
 
+# Planilhas de producao (dados reais de cliente/valores — nunca sobem)
+*.xls
+*.xlsx
+*.csv
+
 # Arquivos de entrada/saida locais
 entrada/*
 !entrada/.gitkeep
